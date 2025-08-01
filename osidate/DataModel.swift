@@ -2,10 +2,11 @@
 //  DataModel.swift
 //  osidate
 //
-//  Created by Apple on 2025/08/01.
+//  Updated for Firebase integration
 //
 
 import SwiftUI
+import Foundation
 
 // MARK: - データモデル
 struct Character: Codable, Identifiable {
@@ -31,11 +32,27 @@ struct Character: Codable, Identifiable {
 }
 
 struct Message: Identifiable, Codable {
-    let id = UUID()
+    let id: UUID
     let text: String
     let isFromUser: Bool
     let timestamp: Date
     let dateLocation: String?
+    
+    init(text: String, isFromUser: Bool, timestamp: Date, dateLocation: String?) {
+        self.id = UUID()
+        self.text = text
+        self.isFromUser = isFromUser
+        self.timestamp = timestamp
+        self.dateLocation = dateLocation
+    }
+    
+    init(id: UUID, text: String, isFromUser: Bool, timestamp: Date, dateLocation: String?) {
+        self.id = id
+        self.text = text
+        self.isFromUser = isFromUser
+        self.timestamp = timestamp
+        self.dateLocation = dateLocation
+    }
 }
 
 struct DateLocation: Identifiable {

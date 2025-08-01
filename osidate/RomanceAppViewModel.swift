@@ -2,10 +2,12 @@
 //  RomanceAppViewModel.swift
 //  osidate
 //
-//  Created by Apple on 2025/08/01.
+//  Updated for Firebase Realtime Database integration
 //
 
 import SwiftUI
+import FirebaseCore
+import FirebaseDatabase
 
 class RomanceAppViewModel: ObservableObject {
     @Published var character: Character
@@ -14,6 +16,9 @@ class RomanceAppViewModel: ObservableObject {
     @Published var availableLocations: [DateLocation] = []
     @Published var showingDateView = false
     @Published var showingSettings = false
+    
+    private let database = Database.database().reference()
+    private let userId = "user_\(UUID().uuidString)" // 実際のアプリでは認証されたユーザーIDを使用
     
     private let dateLocations = [
         DateLocation(name: "カフェ", backgroundImage: "cafe", requiredIntimacy: 0, description: "落ち着いたカフェでお話しましょう"),
@@ -31,9 +36,136 @@ class RomanceAppViewModel: ObservableObject {
             iconName: "person.circle.fill",
             backgroundName: "defaultBG"
         )
+        
+        loadCharacterData()
+        loadMessages()
         updateAvailableLocations()
         scheduleTimeBasedEvents()
+        observeMessages()
     }
+    
+    // MARK: - Firebase Data Operations
+    
+    private func loadCharacterData() {
+        database.child("users").child(userId).child("character").observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            if let data = snapshot.value as? [String: Any] {
+                DispatchQueue.main.async {
+                    if let name = data["name"] as? String {
+                        self.character.name = name
+                    }
+                    if let personality = data["personality"] as? String {
+                        self.character.personality = personality
+                    }
+                    if let speakingStyle = data["speakingStyle"] as? String {
+                        self.character.speakingStyle = speakingStyle
+                    }
+                    if let intimacyLevel = data["intimacyLevel"] as? Int {
+                        self.character.intimacyLevel = intimacyLevel
+                    }
+                    if let birthdayTimestamp = data["birthday"] as? TimeInterval {
+                        self.character.birthday = Date(timeIntervalSince1970: birthdayTimestamp)
+                    }
+                    if let anniversaryTimestamp = data["anniversaryDate"] as? TimeInterval {
+                        self.character.anniversaryDate = Date(timeIntervalSince1970: anniversaryTimestamp)
+                    }
+                    self.updateAvailableLocations()
+                }
+            }
+        }
+    }
+    
+    private func saveCharacterData() {
+        var characterData: [String: Any] = [
+            "name": character.name,
+            "personality": character.personality,
+            "speakingStyle": character.speakingStyle,
+            "iconName": character.iconName,
+            "backgroundName": character.backgroundName,
+            "intimacyLevel": character.intimacyLevel
+        ]
+        
+        if let birthday = character.birthday {
+            characterData["birthday"] = birthday.timeIntervalSince1970
+        }
+        
+        if let anniversary = character.anniversaryDate {
+            characterData["anniversaryDate"] = anniversary.timeIntervalSince1970
+        }
+        
+        database.child("users").child(userId).child("character").setValue(characterData)
+    }
+    
+    private func loadMessages() {
+        database.child("users").child(userId).child("messages").observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            var loadedMessages: [Message] = []
+            
+            if let messagesData = snapshot.value as? [String: [String: Any]] {
+                for (_, messageData) in messagesData {
+                    if let message = self.messageFromFirebaseData(messageData) {
+                        loadedMessages.append(message)
+                    }
+                }
+                
+                // メッセージを時系列順にソート
+                loadedMessages.sort { $0.timestamp < $1.timestamp }
+                
+                DispatchQueue.main.async {
+                    self.messages = loadedMessages
+                }
+            }
+        }
+    }
+    
+    private func observeMessages() {
+        database.child("users").child(userId).child("messages").observe(.childAdded) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            if let messageData = snapshot.value as? [String: Any],
+               let message = self.messageFromFirebaseData(messageData) {
+                
+                DispatchQueue.main.async {
+                    // 既存のメッセージと重複しないかチェック
+                    if !self.messages.contains(where: { $0.id == message.id }) {
+                        self.messages.append(message)
+                        self.messages.sort { $0.timestamp < $1.timestamp }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func saveMessage(_ message: Message) {
+        let messageData: [String: Any] = [
+            "id": message.id.uuidString,
+            "text": message.text,
+            "isFromUser": message.isFromUser,
+            "timestamp": message.timestamp.timeIntervalSince1970,
+            "dateLocation": message.dateLocation ?? NSNull()
+        ]
+        
+        database.child("users").child(userId).child("messages").child(message.id.uuidString).setValue(messageData)
+    }
+    
+    private func messageFromFirebaseData(_ data: [String: Any]) -> Message? {
+        guard let idString = data["id"] as? String,
+              let id = UUID(uuidString: idString),
+              let text = data["text"] as? String,
+              let isFromUser = data["isFromUser"] as? Bool,
+              let timestampDouble = data["timestamp"] as? TimeInterval else {
+            return nil
+        }
+        
+        let timestamp = Date(timeIntervalSince1970: timestampDouble)
+        let dateLocation = data["dateLocation"] as? String
+        
+        return Message(id: id, text: text, isFromUser: isFromUser, timestamp: timestamp, dateLocation: dateLocation)
+    }
+    
+    // MARK: - Public Methods
     
     func updateAvailableLocations() {
         availableLocations = dateLocations.filter { $0.requiredIntimacy <= character.intimacyLevel }
@@ -41,18 +173,33 @@ class RomanceAppViewModel: ObservableObject {
     
     func sendMessage(_ text: String) {
         let userMessage = Message(text: text, isFromUser: true, timestamp: Date(), dateLocation: currentDateLocation?.name)
+        
+        // ローカルに追加
         messages.append(userMessage)
+        
+        // Firebaseに保存
+        saveMessage(userMessage)
         
         // 親密度を上げる
         character.intimacyLevel += 1
         updateAvailableLocations()
+        saveCharacterData()
         
         // AI応答をシミュレート
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             let response = self.generateAIResponse(to: text)
             let aiMessage = Message(text: response, isFromUser: false, timestamp: Date(), dateLocation: self.currentDateLocation?.name)
+            
+            // ローカルに追加
             self.messages.append(aiMessage)
+            
+            // Firebaseに保存
+            self.saveMessage(aiMessage)
         }
+    }
+    
+    func updateCharacterSettings() {
+        saveCharacterData()
     }
     
     private func generateAIResponse(to input: String) -> String {
@@ -84,6 +231,7 @@ class RomanceAppViewModel: ObservableObject {
         showingDateView = true
         character.intimacyLevel += 5
         updateAvailableLocations()
+        saveCharacterData()
         
         let dateMessage = Message(
             text: "\(location.name)でのデートが始まりました！\(location.description)",
@@ -91,7 +239,9 @@ class RomanceAppViewModel: ObservableObject {
             timestamp: Date(),
             dateLocation: location.name
         )
+        
         messages.append(dateMessage)
+        saveMessage(dateMessage)
     }
     
     func endDate() {
@@ -104,7 +254,9 @@ class RomanceAppViewModel: ObservableObject {
             timestamp: Date(),
             dateLocation: nil
         )
+        
         messages.append(endMessage)
+        saveMessage(endMessage)
     }
     
     private func scheduleTimeBasedEvents() {
@@ -128,6 +280,7 @@ class RomanceAppViewModel: ObservableObject {
                 dateLocation: nil
             )
             messages.append(birthdayMessage)
+            saveMessage(birthdayMessage)
         }
         
         // 記念日チェック
@@ -140,6 +293,7 @@ class RomanceAppViewModel: ObservableObject {
                 dateLocation: nil
             )
             messages.append(anniversaryMessage)
+            saveMessage(anniversaryMessage)
         }
     }
 }

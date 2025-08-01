@@ -1,8 +1,8 @@
 //
-//  TestView.swift
+//  SettingsView.swift
 //  osidate
 //
-//  Created by Apple on 2025/08/01.
+//  Updated for Firebase integration
 //
 
 import SwiftUI
@@ -18,19 +18,36 @@ struct SettingsView: View {
             Form {
                 Section("キャラクター設定") {
                     TextField("名前", text: $viewModel.character.name)
+                        .onChange(of: viewModel.character.name) { _ in
+                            viewModel.updateCharacterSettings()
+                        }
+                    
                     TextField("性格", text: $viewModel.character.personality)
+                        .onChange(of: viewModel.character.personality) { _ in
+                            viewModel.updateCharacterSettings()
+                        }
+                    
                     TextField("話し方", text: $viewModel.character.speakingStyle)
+                        .onChange(of: viewModel.character.speakingStyle) { _ in
+                            viewModel.updateCharacterSettings()
+                        }
                 }
                 
                 Section("記念日設定") {
                     DatePicker("誕生日", selection: Binding(
                         get: { viewModel.character.birthday ?? Date() },
-                        set: { viewModel.character.birthday = $0 }
+                        set: { newValue in
+                            viewModel.character.birthday = newValue
+                            viewModel.updateCharacterSettings()
+                        }
                     ), displayedComponents: [.date])
                     
                     DatePicker("記念日", selection: Binding(
                         get: { viewModel.character.anniversaryDate ?? Date() },
-                        set: { viewModel.character.anniversaryDate = $0 }
+                        set: { newValue in
+                            viewModel.character.anniversaryDate = newValue
+                            viewModel.updateCharacterSettings()
+                        }
                     ), displayedComponents: [.date])
                 }
                 
@@ -43,6 +60,14 @@ struct SettingsView: View {
                     
                     Text("レベル: \(viewModel.character.intimacyTitle)")
                         .foregroundColor(.secondary)
+                }
+                
+                Section("データ管理") {
+                    Button("データを同期") {
+                        // 手動同期機能（必要に応じて）
+                        viewModel.updateCharacterSettings()
+                    }
+                    .foregroundColor(.blue)
                 }
             }
             .navigationTitle("設定")
