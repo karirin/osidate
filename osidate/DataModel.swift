@@ -2,7 +2,7 @@
 //  DataModel.swift
 //  osidate
 //
-//  Updated for Firebase integration
+//  Updated for Firebase integration with image support
 //
 
 import SwiftUI
@@ -15,6 +15,7 @@ struct Character: Codable, Identifiable {
     var personality: String
     var speakingStyle: String
     var iconName: String
+    var iconURL: String? // 新規追加：アップロードされた画像のURL
     var backgroundName: String
     var intimacyLevel: Int = 0
     var birthday: Date?
@@ -28,6 +29,11 @@ struct Character: Codable, Identifiable {
         case 61...100: return "恋人"
         default: return "運命の人"
         }
+    }
+    
+    // アイコンが設定されているかどうか
+    var hasCustomIcon: Bool {
+        return iconURL != nil && !iconURL!.isEmpty
     }
 }
 
@@ -61,4 +67,72 @@ struct DateLocation: Identifiable {
     let backgroundImage: String
     let requiredIntimacy: Int
     let description: String
+}
+
+// MARK: - カスタムアイコン表示用のView
+
+struct CharacterIconView: View {
+    let character: Character
+    let size: CGFloat
+    @State private var loadedImage: UIImage?
+    @State private var isLoading = false
+    
+    var body: some View {
+        Group {
+            if let image = loadedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+            } else if isLoading {
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: size, height: size)
+                    .overlay(
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    )
+            } else {
+                // デフォルトアイコン
+                Circle()
+                    .fill(Color.brown)
+                    .frame(width: size, height: size)
+                    .overlay(
+                        Image(systemName: character.iconName)
+                            .font(.system(size: size * 0.4))
+                            .foregroundColor(.white)
+                    )
+            }
+        }
+        .onAppear {
+            loadImageIfNeeded()
+        }
+        .onChange(of: character.iconURL) { _ in
+            loadImageIfNeeded()
+        }
+    }
+    
+    private func loadImageIfNeeded() {
+        guard let iconURL = character.iconURL,
+              !iconURL.isEmpty,
+              loadedImage == nil else { return }
+        
+        isLoading = true
+        
+        guard let url = URL(string: iconURL) else {
+            isLoading = false
+            return
+        }
+        
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            DispatchQueue.main.async {
+                isLoading = false
+                
+                if let data = data, let image = UIImage(data: data) {
+                    loadedImage = image
+                }
+            }
+        }.resume()
+    }
 }

@@ -136,38 +136,50 @@ struct SettingsView: View {
     }
     
     private var characterSettingsSection: some View {
-        Section("キャラクター設定") {
-            HStack {
-                Text("名前")
-                Spacer()
-                TextField("キャラクター名", text: $viewModel.character.name)
-                    .multilineTextAlignment(.trailing)
-                    .onChange(of: viewModel.character.name) { _ in
-                        viewModel.updateCharacterSettings()
+            Section("キャラクター設定") {
+                // アイコン設定
+                NavigationLink(destination: CharacterIconEditorView(viewModel: viewModel)) {
+                    HStack {
+                        Text("アイコン")
+                        Spacer()
+                        CharacterIconView(character: viewModel.character, size: 40)
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("性格")
-                    .font(.headline)
-                TextEditor(text: $viewModel.character.personality)
-                    .frame(minHeight: 60)
-                    .onChange(of: viewModel.character.personality) { _ in
-                        viewModel.updateCharacterSettings()
-                    }
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                Text("話し方")
-                    .font(.headline)
-                TextEditor(text: $viewModel.character.speakingStyle)
-                    .frame(minHeight: 60)
-                    .onChange(of: viewModel.character.speakingStyle) { _ in
-                        viewModel.updateCharacterSettings()
-                    }
+                }
+                
+                HStack {
+                    Text("名前")
+                    Spacer()
+                    TextField("キャラクター名", text: $viewModel.character.name)
+                        .multilineTextAlignment(.trailing)
+                        .onChange(of: viewModel.character.name) { _ in
+                            viewModel.updateCharacterSettings()
+                        }
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("性格")
+                        .font(.headline)
+                    TextEditor(text: $viewModel.character.personality)
+                        .frame(minHeight: 60)
+                        .onChange(of: viewModel.character.personality) { _ in
+                            viewModel.updateCharacterSettings()
+                        }
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("話し方")
+                        .font(.headline)
+                    TextEditor(text: $viewModel.character.speakingStyle)
+                        .frame(minHeight: 60)
+                        .onChange(of: viewModel.character.speakingStyle) { _ in
+                            viewModel.updateCharacterSettings()
+                        }
+                }
             }
         }
-    }
     
     private var anniversarySettingsSection: some View {
         Section("記念日設定") {
