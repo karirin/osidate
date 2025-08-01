@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  osidate
 //
-//  Updated for separated Firebase tables
+//  Updated for Firebase Auth integration
 //
 
 import SwiftUI
@@ -13,11 +13,16 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showingDeleteAlert = false
     @State private var showingResetIntimacyAlert = false
+    @State private var showingSignOutAlert = false
+    @State private var showingResetUserDefaultsAlert = false
     @State private var isDataSyncing = false
     
     var body: some View {
         NavigationView {
             Form {
+                // アカウント情報セクション
+                accountInfoSection
+                
                 // キャラクター設定セクション
                 characterSettingsSection
                 
@@ -52,7 +57,7 @@ struct SettingsView: View {
                 }
                 Button("キャンセル", role: .cancel) { }
             } message: {
-                Text("すべての会話データが削除されます。この操作は取り消せません。")
+                Text("すべての会話データとローカルデータが削除されます。この操作は取り消せません。")
             }
             .alert("親密度をリセット", isPresented: $showingResetIntimacyAlert) {
                 Button("リセット", role: .destructive) {
@@ -61,6 +66,71 @@ struct SettingsView: View {
                 Button("キャンセル", role: .cancel) { }
             } message: {
                 Text("親密度が0にリセットされます。メッセージは保持されます。")
+            }
+            .alert("ログアウト", isPresented: $showingSignOutAlert) {
+                Button("ログアウト", role: .destructive) {
+                    viewModel.signOut()
+                    dismiss()
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("ログアウトしますか？再度ログインが必要になります。")
+            }
+            .alert("UserDefaultsをリセット", isPresented: $showingResetUserDefaultsAlert) {
+                Button("リセット", role: .destructive) {
+                    viewModel.resetUserDefaults()
+                    dismiss()
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("保存されたキャラクターIDがリセットされます。次回起動時に新しいキャラクターが作成されます。")
+            }
+        }
+    }
+    
+    private var accountInfoSection: some View {
+        Section("アカウント情報") {
+            if let userID = viewModel.currentUserID {
+                HStack {
+                    Text("ユーザーID")
+                    Spacer()
+                    Text("\(String(userID.prefix(8)))...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                HStack {
+                    Text("アカウントタイプ")
+                    Spacer()
+                    HStack {
+                        if viewModel.isAnonymousUser {
+                            Image(systemName: "person.crop.circle.dashed")
+                                .foregroundColor(.orange)
+                            Text("ゲスト")
+                                .foregroundColor(.orange)
+                        } else {
+                            Image(systemName: "person.crop.circle.fill")
+                                .foregroundColor(.green)
+                            Text("登録済み")
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .font(.caption)
+                }
+                
+                if viewModel.isAnonymousUser {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ゲストアカウントについて")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                        
+                        Text("• データは自動保存されます\n• アプリ削除時にデータが失われる可能性があります")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
     }
@@ -244,6 +314,20 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
             }
+            
+            HStack {
+                Text("会話継続日数")
+                Spacer()
+                Text("\(viewModel.getTotalConversationDays())日")
+                    .foregroundColor(.secondary)
+            }
+            
+            HStack {
+                Text("1日平均メッセージ数")
+                Spacer()
+                Text(String(format: "%.1f", viewModel.getAverageMessagesPerDay()))
+                    .foregroundColor(.secondary)
+            }
         }
     }
     
@@ -274,11 +358,28 @@ struct SettingsView: View {
                 showingResetIntimacyAlert = true
             }
             .foregroundColor(.orange)
+            
+            Button("キャラクター設定をリセット") {
+                showingResetUserDefaultsAlert = true
+            }
+            .foregroundColor(.orange)
         }
     }
     
     private var dangerZoneSection: some View {
         Section("危険な操作") {
+            if viewModel.isAnonymousUser {
+                Button("ログアウト（ゲスト終了）") {
+                    showingSignOutAlert = true
+                }
+                .foregroundColor(.orange)
+            } else {
+                Button("ログアウト") {
+                    showingSignOutAlert = true
+                }
+                .foregroundColor(.orange)
+            }
+            
             Button("すべてのデータを削除") {
                 showingDeleteAlert = true
             }

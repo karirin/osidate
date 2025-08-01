@@ -2,7 +2,7 @@
 //  ContentView.swift
 //  osidate
 //
-//  Created by Apple on 2025/08/01.
+//  Updated with Firebase Auth integration
 //
 
 import SwiftUI
@@ -15,6 +15,111 @@ struct ContentView: View {
     @State private var iconOffset: CGFloat = 0
     
     var body: some View {
+        Group {
+            if viewModel.isLoading {
+                LoadingView()
+            } else if viewModel.isAuthenticated {
+                MainAppView()
+            } else {
+                AuthenticationView()
+            }
+        }
+        .sheet(isPresented: $viewModel.showingDateView) {
+            DateView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.showingSettings) {
+            SettingsView(viewModel: viewModel)
+        }
+    }
+    
+    // MARK: - Loading View
+    private func LoadingView() -> some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+            
+            Text("アプリを初期化中...")
+                .font(.headline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+    
+    // MARK: - Authentication View
+    private func AuthenticationView() -> some View {
+        VStack(spacing: 30) {
+            VStack(spacing: 10) {
+                Image(systemName: "heart.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(.pink)
+                
+                Text("おかえりなさい")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Text("あなたの特別なパートナーが待っています")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            VStack(spacing: 15) {
+                Button(action: {
+                    viewModel.signInAnonymously()
+                }) {
+                    HStack {
+                        Image(systemName: "person.circle")
+                        Text("ゲストとして始める")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(10)
+                }
+                .disabled(viewModel.isLoading)
+                
+                if viewModel.isLoading {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("認証中...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            
+            VStack(spacing: 8) {
+                Text("ゲストアカウントについて")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.secondary)
+                
+                Text("• データは自動的に保存されます\n• アプリを削除するとデータは失われます\n• 将来的にアカウント移行機能を提供予定")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+        }
+        .padding(30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [Color.pink.opacity(0.1), Color.blue.opacity(0.1)]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+    }
+    
+    // MARK: - Main App View
+    private func MainAppView() -> some View {
         NavigationView {
             ZStack {
                 // Background
@@ -41,12 +146,6 @@ struct ContentView: View {
                 }
             }
         }
-        .sheet(isPresented: $viewModel.showingDateView) {
-            DateView(viewModel: viewModel)
-        }
-        .sheet(isPresented: $viewModel.showingSettings) {
-            SettingsView(viewModel: viewModel)
-        }
     }
     
     private var headerView: some View {
@@ -56,9 +155,17 @@ struct ContentView: View {
                     .font(.title2)
                     .fontWeight(.bold)
                 
-                Text(viewModel.character.intimacyTitle)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack {
+                    Text(viewModel.character.intimacyTitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    if viewModel.isAnonymousUser {
+                        Image(systemName: "person.crop.circle.dashed")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                    }
+                }
                 
                 ProgressView(value: Double(viewModel.character.intimacyLevel), total: 100)
                     .progressViewStyle(LinearProgressViewStyle())
@@ -143,13 +250,14 @@ struct ContentView: View {
         HStack {
             TextField("メッセージを入力...", text: $messageText)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
+                .disabled(!viewModel.isAuthenticated)
             
             Button(action: sendMessage) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.title2)
-                    .foregroundColor(messageText.isEmpty ? .gray : .green)
+                    .foregroundColor(messageText.isEmpty || !viewModel.isAuthenticated ? .gray : .green)
             }
-            .disabled(messageText.isEmpty)
+            .disabled(messageText.isEmpty || !viewModel.isAuthenticated)
         }
         .padding()
         .background(Color.white.opacity(0.9))
@@ -161,16 +269,12 @@ struct ContentView: View {
                 viewModel.showingDateView = true
             }
             .padding()
-            .background(Color.pink)
+            .background(viewModel.isAuthenticated ? Color.pink : Color.gray)
             .foregroundColor(.white)
             .cornerRadius(10)
+            .disabled(!viewModel.isAuthenticated)
             
             Spacer()
-            
-            Text("親密度: \(viewModel.character.intimacyLevel)")
-                .padding()
-                .background(Color.blue.opacity(0.2))
-                .cornerRadius(10)
         }
         .padding()
     }

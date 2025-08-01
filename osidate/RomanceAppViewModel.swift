@@ -2,12 +2,13 @@
 //  RomanceAppViewModel.swift
 //  osidate
 //
-//  Updated for Firebase Realtime Database with separated tables
+//  Updated for Firebase Realtime Database with Firebase Auth
 //
 
 import SwiftUI
 import FirebaseCore
 import FirebaseDatabase
+import FirebaseAuth
 
 class RomanceAppViewModel: ObservableObject {
     @Published var character: Character
@@ -16,10 +17,13 @@ class RomanceAppViewModel: ObservableObject {
     @Published var availableLocations: [DateLocation] = []
     @Published var showingDateView = false
     @Published var showingSettings = false
+    @Published var isAuthenticated = false
+    @Published var isLoading = true
     
     private let database = Database.database().reference()
-    private let userId: String
+    private var userId: String?
     private var characterId: String
+    private var authStateListener: AuthStateDidChangeListenerHandle?
     
     private let dateLocations = [
         DateLocation(name: "カフェ", backgroundImage: "cafe", requiredIntimacy: 0, description: "落ち着いたカフェでお話しましょう"),
@@ -30,19 +34,11 @@ class RomanceAppViewModel: ObservableObject {
     ]
     
     init() {
-        // 一意のユーザーIDを生成（実際のアプリでは認証システムを使用）
-        if let storedUserId = UserDefaults.standard.string(forKey: "userId") {
-            self.userId = storedUserId
-        } else {
-            self.userId = "\(UUID().uuidString)"
-            UserDefaults.standard.set(self.userId, forKey: "userId")
-        }
-        
         // キャラクターIDを生成または取得
         if let storedCharacterId = UserDefaults.standard.string(forKey: "characterId") {
             self.characterId = storedCharacterId
         } else {
-            self.characterId = "\(UUID().uuidString)"
+            self.characterId = UUID().uuidString
             UserDefaults.standard.set(self.characterId, forKey: "characterId")
         }
         
@@ -54,17 +50,86 @@ class RomanceAppViewModel: ObservableObject {
             backgroundName: "defaultBG"
         )
         
-        setupInitialData()
-        loadUserData()
-        loadCharacterData()
-        loadMessages()
-        updateAvailableLocations()
-        scheduleTimeBasedEvents()
+        setupAuthStateListener()
+    }
+    
+    deinit {
+        if let listener = authStateListener {
+            Auth.auth().removeStateDidChangeListener(listener)
+        }
+    }
+    
+    // MARK: - Firebase Auth
+    
+    private func setupAuthStateListener() {
+        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            DispatchQueue.main.async {
+                self?.handleAuthStateChange(user: user)
+            }
+        }
+    }
+    
+    private func handleAuthStateChange(user: User?) {
+        if let user = user {
+            // ユーザーがログインしている
+            self.userId = user.uid
+            self.isAuthenticated = true
+            self.isLoading = false
+            
+            // データの初期化
+            setupInitialData()
+            loadUserData()
+            loadCharacterData()
+            loadMessages()
+            updateAvailableLocations()
+            scheduleTimeBasedEvents()
+            
+            print("ユーザーがログインしました: \(user.uid)")
+        } else {
+            // ユーザーがログアウトしている
+            self.userId = nil
+            self.isAuthenticated = false
+            self.isLoading = false
+            
+            // データをクリア
+            self.messages.removeAll()
+            self.character.intimacyLevel = 0
+            self.updateAvailableLocations()
+            
+            // 匿名ログインを試行
+            signInAnonymously()
+        }
+    }
+    
+    func signInAnonymously() {
+        isLoading = true
+        Auth.auth().signInAnonymously { [weak self] result, error in
+            DispatchQueue.main.async {
+                self?.isLoading = false
+                
+                if let error = error {
+                    print("匿名ログインでエラーが発生しました: \(error.localizedDescription)")
+                } else if let user = result?.user {
+                    print("匿名ログインが成功しました: \(user.uid)")
+                }
+            }
+        }
+    }
+    
+    func signOut() {
+        do {
+            try Auth.auth().signOut()
+            print("ログアウトしました")
+        } catch let error {
+            print("ログアウトでエラーが発生しました: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Initial Setup
     
     private func setupInitialData() {
+        guard let userId = self.userId else { return }
+        
         // ユーザーが存在しない場合は作成
         database.child("users").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
             guard let self = self else { return }
@@ -85,6 +150,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func createInitialUserData() {
+        guard let userId = self.userId else { return }
+        
         let userData: [String: Any] = [
             "id": userId,
             "characterId": characterId,
@@ -97,7 +164,7 @@ class RomanceAppViewModel: ObservableObject {
             if let error = error {
                 print("初期ユーザーデータの作成でエラーが発生しました: \(error.localizedDescription)")
             } else {
-                print("初期ユーザーデータが作成されました")
+                print("初期ユーザーデータが作成されました - UserID: \(userId)")
             }
         }
     }
@@ -117,7 +184,7 @@ class RomanceAppViewModel: ObservableObject {
             if let error = error {
                 print("初期キャラクターデータの作成でエラーが発生しました: \(error.localizedDescription)")
             } else {
-                print("初期キャラクターデータが作成されました")
+                print("初期キャラクターデータが作成されました - CharacterID: \(self.characterId)")
             }
         }
     }
@@ -125,6 +192,8 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - Firebase Data Operations
     
     private func loadUserData() {
+        guard let userId = self.userId else { return }
+        
         database.child("users").child(userId).observe(.value) { [weak self] snapshot in
             guard let self = self else { return }
             
@@ -172,6 +241,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func saveUserData() {
+        guard let userId = self.userId else { return }
+        
         let userData: [String: Any] = [
             "intimacyLevel": character.intimacyLevel,
             "birthday": character.birthday?.timeIntervalSince1970 as Any,
@@ -208,10 +279,12 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func loadMessages() {
+        guard let conversationId = getConversationId() else { return }
+        
         // メッセージをタイムスタンプ順で取得
         database.child("messages")
             .queryOrdered(byChild: "conversationId")
-            .queryEqual(toValue: getConversationId())
+            .queryEqual(toValue: conversationId)
             .observe(.value) { [weak self] snapshot in
                 guard let self = self else { return }
                 
@@ -235,9 +308,12 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func saveMessage(_ message: Message) {
+        guard let userId = self.userId,
+              let conversationId = getConversationId() else { return }
+        
         let messageData: [String: Any] = [
             "id": message.id.uuidString,
-            "conversationId": getConversationId(),
+            "conversationId": conversationId,
             "senderId": message.isFromUser ? userId : characterId,
             "receiverId": message.isFromUser ? characterId : userId,
             "text": message.text,
@@ -272,7 +348,8 @@ class RomanceAppViewModel: ObservableObject {
         return Message(id: id, text: text, isFromUser: isFromUser, timestamp: timestamp, dateLocation: dateLocation)
     }
     
-    private func getConversationId() -> String {
+    private func getConversationId() -> String? {
+        guard let userId = self.userId else { return nil }
         // ユーザーIDとキャラクターIDから一意の会話IDを生成
         return "\(userId)_\(characterId)"
     }
@@ -284,6 +361,11 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func sendMessage(_ text: String) {
+        guard isAuthenticated else {
+            print("未認証のため、メッセージを送信できません")
+            return
+        }
+        
         let userMessage = Message(text: text, isFromUser: true, timestamp: Date(), dateLocation: currentDateLocation?.name)
         
         // メッセージをFirebaseに保存
@@ -354,6 +436,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func startDate(at location: DateLocation) {
+        guard isAuthenticated else { return }
+        
         currentDateLocation = location
         character.intimacyLevel += 5
         updateAvailableLocations()
@@ -370,7 +454,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func endDate() {
-        guard let location = currentDateLocation else { return }
+        guard let location = currentDateLocation, isAuthenticated else { return }
         
         currentDateLocation = nil
         
@@ -391,6 +475,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func checkForTimeBasedEvents() {
+        guard isAuthenticated else { return }
+        
         let now = Date()
         let calendar = Calendar.current
         
@@ -421,6 +507,9 @@ class RomanceAppViewModel: ObservableObject {
     
     // MARK: - データ削除（テスト用）
     func clearAllData() {
+        guard let userId = self.userId,
+              let conversationId = getConversationId() else { return }
+        
         // ユーザーデータ削除
         database.child("users").child(userId).removeValue()
         
@@ -430,7 +519,7 @@ class RomanceAppViewModel: ObservableObject {
         // メッセージ削除
         database.child("messages")
             .queryOrdered(byChild: "conversationId")
-            .queryEqual(toValue: getConversationId())
+            .queryEqual(toValue: conversationId)
             .observeSingleEvent(of: .value) { snapshot in
                 if let messagesData = snapshot.value as? [String: Any] {
                     for (messageId, _) in messagesData {
@@ -439,10 +528,32 @@ class RomanceAppViewModel: ObservableObject {
                 }
             }
         
+        // UserDefaultsからキャラクターIDを削除
+        UserDefaults.standard.removeObject(forKey: "characterId")
+        UserDefaults.standard.synchronize()
+        
         DispatchQueue.main.async {
             self.messages.removeAll()
             self.character.intimacyLevel = 0
             self.updateAvailableLocations()
+        }
+    }
+    
+    // MARK: - UserDefaults リセット機能
+    func resetUserDefaults() {
+        // キャラクターIDのみを削除（UserIDはFirebase Authが管理）
+        UserDefaults.standard.removeObject(forKey: "characterId")
+        UserDefaults.standard.synchronize()
+        
+        print("UserDefaultsがリセットされました")
+    }
+    
+    func resetAllUserDefaults() {
+        // アプリの全てのUserDefaultsを削除
+        if let bundleID = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: bundleID)
+            UserDefaults.standard.synchronize()
+            print("全てのUserDefaultsがリセットされました")
         }
     }
     
@@ -460,6 +571,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func resetIntimacyLevel() {
+        guard isAuthenticated else { return }
+        
         character.intimacyLevel = 0
         updateAvailableLocations()
         saveUserData()
@@ -482,5 +595,14 @@ class RomanceAppViewModel: ObservableObject {
     func getAverageMessagesPerDay() -> Double {
         let totalDays = getTotalConversationDays()
         return totalDays > 0 ? Double(messages.count) / Double(totalDays) : 0
+    }
+    
+    // MARK: - Auth State Helpers
+    var currentUserID: String? {
+        return userId
+    }
+    
+    var isAnonymousUser: Bool {
+        return Auth.auth().currentUser?.isAnonymous ?? false
     }
 }
