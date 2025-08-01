@@ -2,7 +2,7 @@
 //  RomanceAppViewModel.swift
 //  osidate
 //
-//  Updated for Firebase Realtime Database integration
+//  Updated for Firebase Realtime Database with separated tables
 //
 
 import SwiftUI
@@ -18,7 +18,8 @@ class RomanceAppViewModel: ObservableObject {
     @Published var showingSettings = false
     
     private let database = Database.database().reference()
-    private let userId = "user_\(UUID().uuidString)" // 実際のアプリでは認証されたユーザーIDを使用
+    private let userId: String
+    private var characterId: String
     
     private let dateLocations = [
         DateLocation(name: "カフェ", backgroundImage: "cafe", requiredIntimacy: 0, description: "落ち着いたカフェでお話しましょう"),
@@ -29,6 +30,22 @@ class RomanceAppViewModel: ObservableObject {
     ]
     
     init() {
+        // 一意のユーザーIDを生成（実際のアプリでは認証システムを使用）
+        if let storedUserId = UserDefaults.standard.string(forKey: "userId") {
+            self.userId = storedUserId
+        } else {
+            self.userId = "\(UUID().uuidString)"
+            UserDefaults.standard.set(self.userId, forKey: "userId")
+        }
+        
+        // キャラクターIDを生成または取得
+        if let storedCharacterId = UserDefaults.standard.string(forKey: "characterId") {
+            self.characterId = storedCharacterId
+        } else {
+            self.characterId = "\(UUID().uuidString)"
+            UserDefaults.standard.set(self.characterId, forKey: "characterId")
+        }
+        
         self.character = Character(
             name: "あい",
             personality: "優しくて思いやりがある",
@@ -37,30 +54,82 @@ class RomanceAppViewModel: ObservableObject {
             backgroundName: "defaultBG"
         )
         
+        setupInitialData()
+        loadUserData()
         loadCharacterData()
         loadMessages()
         updateAvailableLocations()
         scheduleTimeBasedEvents()
-        observeMessages()
+    }
+    
+    // MARK: - Initial Setup
+    
+    private func setupInitialData() {
+        // ユーザーが存在しない場合は作成
+        database.child("users").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            if !snapshot.exists() {
+                self.createInitialUserData()
+            }
+        }
+        
+        // キャラクターが存在しない場合は作成
+        database.child("characters").child(characterId).observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            if !snapshot.exists() {
+                self.createInitialCharacterData()
+            }
+        }
+    }
+    
+    private func createInitialUserData() {
+        let userData: [String: Any] = [
+            "id": userId,
+            "characterId": characterId,
+            "intimacyLevel": 0,
+            "createdAt": Date().timeIntervalSince1970,
+            "lastActiveAt": Date().timeIntervalSince1970
+        ]
+        
+        database.child("users").child(userId).setValue(userData) { error, _ in
+            if let error = error {
+                print("初期ユーザーデータの作成でエラーが発生しました: \(error.localizedDescription)")
+            } else {
+                print("初期ユーザーデータが作成されました")
+            }
+        }
+    }
+    
+    private func createInitialCharacterData() {
+        let characterData: [String: Any] = [
+            "id": characterId,
+            "name": character.name,
+            "personality": character.personality,
+            "speakingStyle": character.speakingStyle,
+            "iconName": character.iconName,
+            "backgroundName": character.backgroundName,
+            "createdAt": Date().timeIntervalSince1970
+        ]
+        
+        database.child("characters").child(characterId).setValue(characterData) { error, _ in
+            if let error = error {
+                print("初期キャラクターデータの作成でエラーが発生しました: \(error.localizedDescription)")
+            } else {
+                print("初期キャラクターデータが作成されました")
+            }
+        }
     }
     
     // MARK: - Firebase Data Operations
     
-    private func loadCharacterData() {
-        database.child("users").child(userId).child("character").observeSingleEvent(of: .value) { [weak self] snapshot in
+    private func loadUserData() {
+        database.child("users").child(userId).observe(.value) { [weak self] snapshot in
             guard let self = self else { return }
             
             if let data = snapshot.value as? [String: Any] {
                 DispatchQueue.main.async {
-                    if let name = data["name"] as? String {
-                        self.character.name = name
-                    }
-                    if let personality = data["personality"] as? String {
-                        self.character.personality = personality
-                    }
-                    if let speakingStyle = data["speakingStyle"] as? String {
-                        self.character.speakingStyle = speakingStyle
-                    }
                     if let intimacyLevel = data["intimacyLevel"] as? Int {
                         self.character.intimacyLevel = intimacyLevel
                     }
@@ -76,78 +145,115 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
+    private func loadCharacterData() {
+        database.child("characters").child(characterId).observe(.value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            if let data = snapshot.value as? [String: Any] {
+                DispatchQueue.main.async {
+                    if let name = data["name"] as? String {
+                        self.character.name = name
+                    }
+                    if let personality = data["personality"] as? String {
+                        self.character.personality = personality
+                    }
+                    if let speakingStyle = data["speakingStyle"] as? String {
+                        self.character.speakingStyle = speakingStyle
+                    }
+                    if let iconName = data["iconName"] as? String {
+                        self.character.iconName = iconName
+                    }
+                    if let backgroundName = data["backgroundName"] as? String {
+                        self.character.backgroundName = backgroundName
+                    }
+                }
+            }
+        }
+    }
+    
+    private func saveUserData() {
+        let userData: [String: Any] = [
+            "intimacyLevel": character.intimacyLevel,
+            "birthday": character.birthday?.timeIntervalSince1970 as Any,
+            "anniversaryDate": character.anniversaryDate?.timeIntervalSince1970 as Any,
+            "lastActiveAt": Date().timeIntervalSince1970
+        ]
+        
+        database.child("users").child(userId).updateChildValues(userData) { error, _ in
+            if let error = error {
+                print("ユーザーデータの保存でエラーが発生しました: \(error.localizedDescription)")
+            } else {
+                print("ユーザーデータが正常に保存されました")
+            }
+        }
+    }
+    
     private func saveCharacterData() {
-        var characterData: [String: Any] = [
+        let characterData: [String: Any] = [
             "name": character.name,
             "personality": character.personality,
             "speakingStyle": character.speakingStyle,
             "iconName": character.iconName,
             "backgroundName": character.backgroundName,
-            "intimacyLevel": character.intimacyLevel
+            "updatedAt": Date().timeIntervalSince1970
         ]
         
-        if let birthday = character.birthday {
-            characterData["birthday"] = birthday.timeIntervalSince1970
+        database.child("characters").child(characterId).updateChildValues(characterData) { error, _ in
+            if let error = error {
+                print("キャラクターデータの保存でエラーが発生しました: \(error.localizedDescription)")
+            } else {
+                print("キャラクターデータが正常に保存されました")
+            }
         }
-        
-        if let anniversary = character.anniversaryDate {
-            characterData["anniversaryDate"] = anniversary.timeIntervalSince1970
-        }
-        
-        database.child("users").child(userId).child("character").setValue(characterData)
     }
     
     private func loadMessages() {
-        database.child("users").child(userId).child("messages").observeSingleEvent(of: .value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            var loadedMessages: [Message] = []
-            
-            if let messagesData = snapshot.value as? [String: [String: Any]] {
-                for (_, messageData) in messagesData {
-                    if let message = self.messageFromFirebaseData(messageData) {
-                        loadedMessages.append(message)
+        // メッセージをタイムスタンプ順で取得
+        database.child("messages")
+            .queryOrdered(byChild: "conversationId")
+            .queryEqual(toValue: getConversationId())
+            .observe(.value) { [weak self] snapshot in
+                guard let self = self else { return }
+                
+                var loadedMessages: [Message] = []
+                
+                if let messagesData = snapshot.value as? [String: [String: Any]] {
+                    for (_, messageData) in messagesData {
+                        if let message = self.messageFromFirebaseData(messageData) {
+                            loadedMessages.append(message)
+                        }
                     }
-                }
-                
-                // メッセージを時系列順にソート
-                loadedMessages.sort { $0.timestamp < $1.timestamp }
-                
-                DispatchQueue.main.async {
-                    self.messages = loadedMessages
-                }
-            }
-        }
-    }
-    
-    private func observeMessages() {
-        database.child("users").child(userId).child("messages").observe(.childAdded) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            if let messageData = snapshot.value as? [String: Any],
-               let message = self.messageFromFirebaseData(messageData) {
-                
-                DispatchQueue.main.async {
-                    // 既存のメッセージと重複しないかチェック
-                    if !self.messages.contains(where: { $0.id == message.id }) {
-                        self.messages.append(message)
-                        self.messages.sort { $0.timestamp < $1.timestamp }
+                    
+                    // メッセージを時系列順にソート
+                    loadedMessages.sort { $0.timestamp < $1.timestamp }
+                    
+                    DispatchQueue.main.async {
+                        self.messages = loadedMessages
                     }
                 }
             }
-        }
     }
     
     private func saveMessage(_ message: Message) {
         let messageData: [String: Any] = [
             "id": message.id.uuidString,
+            "conversationId": getConversationId(),
+            "senderId": message.isFromUser ? userId : characterId,
+            "receiverId": message.isFromUser ? characterId : userId,
             "text": message.text,
             "isFromUser": message.isFromUser,
             "timestamp": message.timestamp.timeIntervalSince1970,
-            "dateLocation": message.dateLocation ?? NSNull()
+            "dateLocation": message.dateLocation as Any,
+            "messageType": "text" // 将来的に画像やスタンプなどに対応
         ]
         
-        database.child("users").child(userId).child("messages").child(message.id.uuidString).setValue(messageData)
+        database.child("messages").child(message.id.uuidString).setValue(messageData) { error, _ in
+            if let error = error {
+                print("メッセージの保存でエラーが発生しました: \(error.localizedDescription)")
+            } else {
+                print("メッセージが正常に保存されました: \(message.text)")
+            }
+        }
     }
     
     private func messageFromFirebaseData(_ data: [String: Any]) -> Message? {
@@ -156,6 +262,7 @@ class RomanceAppViewModel: ObservableObject {
               let text = data["text"] as? String,
               let isFromUser = data["isFromUser"] as? Bool,
               let timestampDouble = data["timestamp"] as? TimeInterval else {
+            print("メッセージデータの解析でエラーが発生しました: \(data)")
             return nil
         }
         
@@ -163,6 +270,11 @@ class RomanceAppViewModel: ObservableObject {
         let dateLocation = data["dateLocation"] as? String
         
         return Message(id: id, text: text, isFromUser: isFromUser, timestamp: timestamp, dateLocation: dateLocation)
+    }
+    
+    private func getConversationId() -> String {
+        // ユーザーIDとキャラクターIDから一意の会話IDを生成
+        return "\(userId)_\(characterId)"
     }
     
     // MARK: - Public Methods
@@ -174,64 +286,78 @@ class RomanceAppViewModel: ObservableObject {
     func sendMessage(_ text: String) {
         let userMessage = Message(text: text, isFromUser: true, timestamp: Date(), dateLocation: currentDateLocation?.name)
         
-        // ローカルに追加
-        messages.append(userMessage)
-        
-        // Firebaseに保存
+        // メッセージをFirebaseに保存
         saveMessage(userMessage)
         
         // 親密度を上げる
         character.intimacyLevel += 1
         updateAvailableLocations()
-        saveCharacterData()
+        saveUserData()
         
         // AI応答をシミュレート
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1.0...3.0)) {
             let response = self.generateAIResponse(to: text)
             let aiMessage = Message(text: response, isFromUser: false, timestamp: Date(), dateLocation: self.currentDateLocation?.name)
             
-            // ローカルに追加
-            self.messages.append(aiMessage)
-            
-            // Firebaseに保存
+            // AI応答をFirebaseに保存
             self.saveMessage(aiMessage)
         }
     }
     
     func updateCharacterSettings() {
         saveCharacterData()
+        saveUserData()
     }
     
     private func generateAIResponse(to input: String) -> String {
-        // 簡単なAI応答シミュレーション（実際のアプリでは外部AIサービスを使用）
-        let responses = [
-            "それは素敵ですね！\(character.name)も同じように思います💕",
-            "あなたと話していると、とても楽しい気持ちになります😊",
-            "もっとあなたのことを知りたいです！",
-            "一緒にいる時間が一番幸せです✨",
-            "\(character.name)はあなたのことをもっと理解したいと思っています"
-        ]
+        // キーワードベースの応答
+        let inputLower = input.lowercased()
         
-        // 時間帯に応じた応答
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 6...11:
-            return "おはようございます！今日も素敵な一日になりそうですね🌅"
-        case 12...17:
-            return "こんにちは！お疲れ様です。少し休憩しませんか？☀️"
-        case 18...23:
-            return "こんばんは！今日はどんな一日でしたか？🌙"
-        default:
+        if inputLower.contains("おはよう") || inputLower.contains("朝") {
+            return "おはようございます！\(character.name)も今日という新しい日を一緒に過ごせて嬉しいです🌅"
+        } else if inputLower.contains("こんにちは") {
+            return "こんにちは！お疲れ様です。あなたと話せて幸せです☀️"
+        } else if inputLower.contains("こんばんは") || inputLower.contains("夜") {
+            return "こんばんは！今日はどんな一日でしたか？一緒にお話ししましょう🌙"
+        } else if inputLower.contains("好き") || inputLower.contains("愛") {
+            return "私もあなたのことが大好きです💕一緒にいる時間が一番幸せです✨"
+        } else if inputLower.contains("疲れ") || inputLower.contains("つらい") {
+            return "お疲れ様です。少し休んでくださいね。私がそばにいますから大丈夫ですよ😊"
+        } else if inputLower.contains("楽しい") || inputLower.contains("嬉しい") {
+            return "私も同じ気持ちです！あなたの笑顔を見ているととても幸せになります😄"
+        }
+        
+        // 親密度に応じた応答
+        if character.intimacyLevel < 20 {
+            let responses = [
+                "もっとあなたのことを知りたいです！",
+                "一緒にお話しできて楽しいです😊",
+                "あなたはどんなことが好きですか？"
+            ]
             return responses.randomElement() ?? "ありがとうございます💕"
+        } else if character.intimacyLevel < 50 {
+            let responses = [
+                "あなたと話していると、とても楽しい気持ちになります😊",
+                "今度はどこかにお出かけしませんか？",
+                "あなたの考えていることをもっと聞かせてください"
+            ]
+            return responses.randomElement() ?? "素敵ですね✨"
+        } else {
+            let responses = [
+                "一緒にいる時間が一番幸せです✨",
+                "あなたといると心が穏やかになります💕",
+                "ずっと一緒にいたいです",
+                "あなたは私にとって特別な存在です"
+            ]
+            return responses.randomElement() ?? "愛しています💖"
         }
     }
     
     func startDate(at location: DateLocation) {
         currentDateLocation = location
-        showingDateView = true
         character.intimacyLevel += 5
         updateAvailableLocations()
-        saveCharacterData()
+        saveUserData()
         
         let dateMessage = Message(
             text: "\(location.name)でのデートが始まりました！\(location.description)",
@@ -240,27 +366,25 @@ class RomanceAppViewModel: ObservableObject {
             dateLocation: location.name
         )
         
-        messages.append(dateMessage)
         saveMessage(dateMessage)
     }
     
     func endDate() {
+        guard let location = currentDateLocation else { return }
+        
         currentDateLocation = nil
-        showingDateView = false
         
         let endMessage = Message(
-            text: "素敵な時間をありがとうございました！また一緒に過ごしましょうね💕",
+            text: "\(location.name)でのデート、素敵な時間をありがとうございました！また一緒に過ごしましょうね💕",
             isFromUser: false,
             timestamp: Date(),
             dateLocation: nil
         )
         
-        messages.append(endMessage)
         saveMessage(endMessage)
     }
     
     private func scheduleTimeBasedEvents() {
-        // 実際のアプリでは、バックグラウンド処理やプッシュ通知を使用
         Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
             self.checkForTimeBasedEvents()
         }
@@ -279,7 +403,6 @@ class RomanceAppViewModel: ObservableObject {
                 timestamp: now,
                 dateLocation: nil
             )
-            messages.append(birthdayMessage)
             saveMessage(birthdayMessage)
         }
         
@@ -292,8 +415,72 @@ class RomanceAppViewModel: ObservableObject {
                 timestamp: now,
                 dateLocation: nil
             )
-            messages.append(anniversaryMessage)
             saveMessage(anniversaryMessage)
         }
+    }
+    
+    // MARK: - データ削除（テスト用）
+    func clearAllData() {
+        // ユーザーデータ削除
+        database.child("users").child(userId).removeValue()
+        
+        // キャラクターデータ削除
+        database.child("characters").child(characterId).removeValue()
+        
+        // メッセージ削除
+        database.child("messages")
+            .queryOrdered(byChild: "conversationId")
+            .queryEqual(toValue: getConversationId())
+            .observeSingleEvent(of: .value) { snapshot in
+                if let messagesData = snapshot.value as? [String: Any] {
+                    for (messageId, _) in messagesData {
+                        self.database.child("messages").child(messageId).removeValue()
+                    }
+                }
+            }
+        
+        DispatchQueue.main.async {
+            self.messages.removeAll()
+            self.character.intimacyLevel = 0
+            self.updateAvailableLocations()
+        }
+    }
+    
+    // MARK: - Analytics and Statistics
+    func getMessageCount() -> Int {
+        return messages.count
+    }
+    
+    func getUserMessageCount() -> Int {
+        return messages.filter { $0.isFromUser }.count
+    }
+    
+    func getAIMessageCount() -> Int {
+        return messages.filter { !$0.isFromUser }.count
+    }
+    
+    func resetIntimacyLevel() {
+        character.intimacyLevel = 0
+        updateAvailableLocations()
+        saveUserData()
+        
+        let resetMessage = Message(
+            text: "親密度がリセットされました。また一から関係を築いていきましょう！",
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil
+        )
+        saveMessage(resetMessage)
+    }
+    
+    func getTotalConversationDays() -> Int {
+        guard let firstMessage = messages.first else { return 0 }
+        let daysBetween = Calendar.current.dateComponents([.day], from: firstMessage.timestamp, to: Date()).day ?? 0
+        return max(daysBetween, 1)
+    }
+    
+    func getAverageMessagesPerDay() -> Double {
+        let totalDays = getTotalConversationDays()
+        return totalDays > 0 ? Double(messages.count) / Double(totalDays) : 0
     }
 }
