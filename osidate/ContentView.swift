@@ -184,33 +184,21 @@ struct ContentView: View {
     }
     
     private var floatingIconView: some View {
-            ZStack {
-                // Pulse rings for character icon
-                if pulseAnimation {
-                    ForEach(0..<3) { index in
-                        Circle()
-                            .stroke(Color.red.opacity(0.6), lineWidth: 2)
-                            .scaleEffect(pulseAnimation ? 2.0 + Double(index) * 0.5 : 1.0)
-                            .animation(
-                                Animation.easeInOut(duration: 1.5)
-                                    .delay(Double(index) * 0.2)
-                                    .repeatCount(3, autoreverses: false),
-                                value: pulseAnimation
-                            )
+        ZStack {
+            // Floating Character Icon - カスタムアイコンに対応
+            CharacterIconView(character: viewModel.character, size: 150)
+                .padding(.top)
+                .offset(y: iconOffset)
+                .onAppear {
+                    withAnimation(Animation.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
+                        iconOffset = -10
                     }
                 }
-                // Floating Character Icon - カスタムアイコンに対応
-                CharacterIconView(character: viewModel.character, size: 150)
-                    .padding(.top)
-                    .offset(y: iconOffset)
-                    .onAppear {
-                        withAnimation(Animation.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                            iconOffset = -10
-                        }
-                    }
-            }
-            .transition(.opacity.combined(with: .scale))
+                // アイコンURLの変更を強制的に監視
+                .id("character_icon_\(viewModel.character.iconURL ?? "default")")
         }
+        .transition(.opacity.combined(with: .scale))
+    }
     
     private var chatView: some View {
         ScrollViewReader { proxy in

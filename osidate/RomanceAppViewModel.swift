@@ -176,6 +176,7 @@ class RomanceAppViewModel: ObservableObject {
             "personality": character.personality,
             "speakingStyle": character.speakingStyle,
             "iconName": character.iconName,
+            "iconURL": character.iconURL as Any, // この行を追加
             "backgroundName": character.backgroundName,
             "createdAt": Date().timeIntervalSince1970
         ]
@@ -188,7 +189,7 @@ class RomanceAppViewModel: ObservableObject {
             }
         }
     }
-    
+
     // MARK: - Firebase Data Operations
     
     private func loadUserData() {
@@ -219,6 +220,8 @@ class RomanceAppViewModel: ObservableObject {
             guard let self = self else { return }
             
             if let data = snapshot.value as? [String: Any] {
+                print("Firebaseからキャラクターデータを読み込み: \(data)")
+                
                 DispatchQueue.main.async {
                     if let name = data["name"] as? String {
                         self.character.name = name
@@ -232,10 +235,21 @@ class RomanceAppViewModel: ObservableObject {
                     if let iconName = data["iconName"] as? String {
                         self.character.iconName = iconName
                     }
+                    if let iconURL = data["iconURL"] as? String {
+                        print("アイコンURLが更新されました: \(iconURL)")
+                        self.character.iconURL = iconURL
+                    } else {
+                        print("アイコンURLが見つかりません")
+                        if data["iconURL"] != nil {
+                            print("iconURLフィールドは存在しますが、文字列ではありません: \(data["iconURL"] ?? "nil")")
+                        }
+                    }
                     if let backgroundName = data["backgroundName"] as? String {
                         self.character.backgroundName = backgroundName
                     }
                 }
+            } else {
+                print("キャラクターデータが見つかりません")
             }
         }
     }
@@ -265,6 +279,7 @@ class RomanceAppViewModel: ObservableObject {
             "personality": character.personality,
             "speakingStyle": character.speakingStyle,
             "iconName": character.iconName,
+            "iconURL": character.iconURL as Any, // この行を追加
             "backgroundName": character.backgroundName,
             "updatedAt": Date().timeIntervalSince1970
         ]
