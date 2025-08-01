@@ -11,7 +11,7 @@ import SwiftUI
 struct osidateApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(viewModel: RomanceAppViewModel())
         }
     }
 }
