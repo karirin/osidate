@@ -46,7 +46,6 @@ struct SettingsView: View {
                 }
             }
             .background(Color(.systemGroupedBackground))
-            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -386,6 +385,131 @@ struct SettingsView: View {
                     viewModel.updateCharacterSettings()
                 }
                 .buttonStyle(ModernButtonStyle(color: .pink))
+            }
+        }
+    }
+    
+    // MARK: - Intimacy Section
+    private var intimacySection: some View {
+        ModernSectionView(title: "親密度", icon: "heart.fill") {
+            VStack(spacing: 16) {
+                // Intimacy level display
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("現在の親密度")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                        HStack(spacing: 8) {
+                            Text("\(viewModel.character.intimacyLevel)")
+                                .font(.title)
+                                .fontWeight(.bold)
+                                .foregroundColor(intimacyColor)
+                            Text("/ 100")
+                                .font(.title3)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Progress ring
+                    ZStack {
+                        Circle()
+                            .stroke(intimacyColor.opacity(0.2), lineWidth: 8)
+                            .frame(width: 60, height: 60)
+                        
+                        Circle()
+                            .trim(from: 0, to: CGFloat(viewModel.character.intimacyLevel) / 100)
+                            .stroke(intimacyColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                            .frame(width: 60, height: 60)
+                            .rotationEffect(.degrees(-90))
+                        
+                        Text("\(viewModel.character.intimacyLevel)")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(intimacyColor)
+                    }
+                }
+                
+                Divider()
+                
+                Button {
+                    showingResetIntimacyAlert = true
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise")
+                            .foregroundColor(.orange)
+                        Text("親密度をリセット")
+                            .foregroundColor(.orange)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Data Management
+    private var dataManagementSection: some View {
+        ModernSectionView(title: "データ管理", icon: "externaldrive") {
+            VStack(spacing: 16) {
+                ModernSettingRow(
+                    icon: "icloud.and.arrow.up",
+                    title: "データ同期",
+                    subtitle: isDataSyncing ? "同期中..." : "クラウドとの同期状態"
+                ) {
+                    if isDataSyncing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.green)
+                    }
+                }
+                
+                Divider()
+                
+                Button {
+                    showingResetUserDefaultsAlert = true
+                } label: {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.blue)
+                        Text("UserDefaultsをリセット")
+                            .foregroundColor(.blue)
+                        Spacer()
+                    }
+                }
+                
+                Divider()
+                
+                Button {
+                    showingDeleteAlert = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trash.fill")
+                            .foregroundColor(.red)
+                        Text("すべてのデータを削除")
+                            .foregroundColor(.red)
+                        Spacer()
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Account Section
+    private var accountSection: some View {
+        ModernSectionView(title: "アカウント", icon: "person.crop.circle") {
+            Button {
+                showingSignOutAlert = true
+            } label: {
+                HStack {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .foregroundColor(.red)
+                    Text("ログアウト")
+                        .foregroundColor(.red)
+                    Spacer()
+                }
             }
         }
     }

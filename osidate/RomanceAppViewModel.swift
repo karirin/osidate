@@ -19,6 +19,7 @@ class RomanceAppViewModel: ObservableObject {
     @Published var showingSettings = false
     @Published var isAuthenticated = false
     @Published var isLoading = true
+    @Published var openAIService = OpenAIService()
     
     private let database = Database.database().reference()
     private var userId: String?
@@ -374,32 +375,171 @@ class RomanceAppViewModel: ObservableObject {
     func updateAvailableLocations() {
         availableLocations = dateLocations.filter { $0.requiredIntimacy <= character.intimacyLevel }
     }
-    
+
     func sendMessage(_ text: String) {
+        print("\n💬 ==================== メッセージ送信開始 ====================")
+        print("📤 送信メッセージ: \(text)")
+        print("👤 現在のユーザー: \(currentUserID ?? "未設定")")
+        print("🎭 キャラクター: \(character.name)")
+        print("📊 現在の親密度: \(character.intimacyLevel)")
+        print("💬 現在の会話数: \(messages.count)")
+        
         guard isAuthenticated else {
-            print("未認証のため、メッセージを送信できません")
+            print("❌ 認証されていません")
             return
         }
         
-        let userMessage = Message(text: text, isFromUser: true, timestamp: Date(), dateLocation: currentDateLocation?.name)
+        // ユーザーメッセージを追加
+        let userMessage = Message(
+            text: text,
+            isFromUser: true,
+            timestamp: Date(),
+            dateLocation: nil
+        )
         
-        // メッセージをFirebaseに保存
+        print("✅ ユーザーメッセージ作成: \(userMessage.id)")
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.messages.append(userMessage)
+            print("✅ ユーザーメッセージをUIに追加")
+        }
+        
+        // Firebase に保存
         saveMessage(userMessage)
         
-        // 親密度を上げる
-        character.intimacyLevel += 1
-        updateAvailableLocations()
+        // 親密度を増加
+        character.intimacyLevel = min(character.intimacyLevel + 1, 100)
+        print("📈 親密度更新: \(character.intimacyLevel)")
+        
+        // 親密度をFirebaseに保存
         saveUserData()
         
-        // AI応答をシミュレート
-        DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 1.0...3.0)) {
-            let response = self.generateAIResponse(to: text)
-            let aiMessage = Message(text: response, isFromUser: false, timestamp: Date(), dateLocation: self.currentDateLocation?.name)
-            
-            // AI応答をFirebaseに保存
-            self.saveMessage(aiMessage)
+        // OpenAI Service を使用してAI応答を生成
+        print("🤖 OpenAI Service に応答生成を依頼...")
+        
+        openAIService.generateResponse(
+            for: text,
+            character: character,
+            conversationHistory: messages
+        ) { [weak self] result in
+            DispatchQueue.main.async {
+                print("\n🔄 AI応答受信処理開始")
+                
+                switch result {
+                case .success(let aiResponse):
+                    print("🎉 AI応答成功!")
+                    print("📝 応答内容: \(aiResponse)")
+                    
+                    let aiMessage = Message(
+                        text: aiResponse,
+                        isFromUser: false,
+                        timestamp: Date(),
+                        dateLocation: nil
+                    )
+                    
+                    print("✅ AIメッセージ作成: \(aiMessage.id)")
+                    
+                    self?.messages.append(aiMessage)
+                    print("✅ AIメッセージをUIに追加")
+                    print("💬 現在の総メッセージ数: \(self?.messages.count ?? 0)")
+                    
+                    // Firebase に保存
+                    self?.saveMessage(aiMessage)
+                    
+                case .failure(let error):
+                    print("❌ AI応答エラー: \(error.localizedDescription)")
+                    
+                    // エラーメッセージを表示
+                    let errorMessage = Message(
+                        text: "申し訳ありません。現在応答できません。設定でAPIキーを確認してください。エラー: \(error.localizedDescription)",
+                        isFromUser: false,
+                        timestamp: Date(),
+                        dateLocation: nil
+                    )
+                    
+                    self?.messages.append(errorMessage)
+                    print("⚠️ エラーメッセージをUIに追加")
+                    
+                    // Firebase に保存
+                    self?.saveMessage(errorMessage)
+                    
+                    // エラーの詳細をログ出力
+                    if let openAIError = error as? OpenAIError {
+                        switch openAIError {
+                        case .missingAPIKey:
+                            print("🔑 APIキーが設定されていません")
+                        case .invalidURL:
+                            print("🌐 無効なURL")
+                        case .noData:
+                            print("📭 データなし")
+                        case .noResponse:
+                            print("📪 応答なし")
+                        case .apiError(let message):
+                            print("🚨 API エラー: \(message)")
+                        }
+                    }
+                }
+                
+                print("==================== メッセージ送信完了 ====================\n")
+            }
         }
     }
+
+    // MARK: - デバッグ用ヘルパーメソッド
+
+    func debugCurrentState() {
+        print("\n🔍 ==================== 現在の状態 ====================")
+        print("👤 認証状態: \(isAuthenticated ? "✅ 認証済み" : "❌ 未認証")")
+        print("🆔 ユーザーID: \(currentUserID ?? "未設定")")
+        print("🎭 キャラクター名: \(character.name)")
+        print("📊 親密度: \(character.intimacyLevel)")
+        print("💬 メッセージ数: \(messages.count)")
+        print("🔑 OpenAI API状態: \(openAIService.hasValidAPIKey ? "✅ 設定済み" : "❌ 未設定")")
+        
+        if messages.count > 0 {
+            print("📝 最新のメッセージ:")
+            for (index, message) in messages.suffix(3).enumerated() {
+                let sender = message.isFromUser ? "👤 ユーザー" : "🤖 AI"
+                let time = DateFormatter.localizedString(from: message.timestamp, dateStyle: .none, timeStyle: .short)
+                print("   \(index + 1). [\(time)] \(sender): \(message.text.prefix(50))...")
+            }
+        }
+        print("==================== 状態確認完了 ====================\n")
+    }
+
+    func testAIConnection() {
+        print("\n🧪 ==================== AI接続テスト ====================")
+        
+        guard isAuthenticated else {
+            print("❌ 認証が必要です")
+            return
+        }
+        
+        guard openAIService.hasValidAPIKey else {
+            print("❌ APIキーが設定されていません")
+            return
+        }
+        
+        let testMessage = "こんにちは、テストメッセージです"
+        print("📤 テストメッセージ送信: \(testMessage)")
+        
+        openAIService.generateResponse(
+            for: testMessage,
+            character: character,
+            conversationHistory: []
+        ) { result in
+            switch result {
+            case .success(let response):
+                print("🎉 AI接続テスト成功!")
+                print("📝 AI応答: \(response)")
+            case .failure(let error):
+                print("❌ AI接続テスト失敗: \(error.localizedDescription)")
+            }
+        }
+        
+        print("==================== AI接続テスト完了 ====================\n")
+    }
+
     
     func updateCharacterSettings() {
         saveCharacterData()
