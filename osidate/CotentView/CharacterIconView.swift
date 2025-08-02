@@ -47,18 +47,20 @@ struct CharacterIconView: View {
         }
         .onChange(of: character.iconURL) { newIconURL in
             // URLが変更された場合、古い画像をクリアして新しい画像を読み込む
-            if newIconURL != currentIconURL {
-                currentIconURL = newIconURL
-                loadedImage = nil
-                loadImageIfNeeded()
-            }
+            print("CharacterIconView: アイコンURL変更検知 - \(newIconURL ?? "nil")")
+            currentIconURL = newIconURL
+            loadedImage = nil
+            loadImageIfNeeded()
         }
+        // 追加: idを使用して強制的に再描画
+        .id(character.iconURL ?? "default")
     }
     
     private func loadImageIfNeeded() {
         // iconURLがない場合は何もしない
         guard let iconURL = character.iconURL,
               !iconURL.isEmpty else {
+            print("CharacterIconView: アイコンURLが空 - デフォルトアイコンを表示")
             isLoading = false
             loadedImage = nil
             return
@@ -66,6 +68,7 @@ struct CharacterIconView: View {
         
         // 既に同じURLの画像を読み込んでいる場合はスキップ
         if currentIconURL == iconURL && loadedImage != nil {
+            print("CharacterIconView: 同じURL - スキップ")
             return
         }
         
@@ -74,26 +77,30 @@ struct CharacterIconView: View {
         loadedImage = nil
         
         guard let url = URL(string: iconURL) else {
+            print("CharacterIconView: 無効なURL - \(iconURL)")
             isLoading = false
             return
         }
         
-        print("アイコン画像を読み込み中: \(iconURL)")
+        print("CharacterIconView: アイコン画像を読み込み中 - \(iconURL)")
         
         URLSession.shared.dataTask(with: url) { data, response, error in
             DispatchQueue.main.async {
                 isLoading = false
                 
                 if let error = error {
-                    print("アイコン画像の読み込みエラー: \(error.localizedDescription)")
+                    print("CharacterIconView: アイコン画像の読み込みエラー - \(error.localizedDescription)")
                     return
                 }
                 
                 if let data = data, let image = UIImage(data: data) {
-                    print("アイコン画像の読み込み成功")
-                    loadedImage = image
+                    print("CharacterIconView: アイコン画像の読み込み成功")
+                    // 現在のURLと一致する場合のみ更新
+                    if iconURL == currentIconURL {
+                        loadedImage = image
+                    }
                 } else {
-                    print("アイコン画像データの変換に失敗")
+                    print("CharacterIconView: アイコン画像データの変換に失敗")
                 }
             }
         }.resume()

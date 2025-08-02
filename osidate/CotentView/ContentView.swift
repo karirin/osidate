@@ -150,12 +150,12 @@ struct ContentView: View {
     
     private var headerView: some View {
         HStack {
-            VStack(alignment: .leading) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(viewModel.character.name)
                     .font(.title2)
                     .fontWeight(.bold)
                 
-                HStack {
+                HStack(spacing: 8) {
                     Text(viewModel.character.intimacyTitle)
                         .font(.caption)
                         .foregroundColor(.secondary)
@@ -167,9 +167,31 @@ struct ContentView: View {
                     }
                 }
                 
-                ProgressView(value: Double(viewModel.character.intimacyLevel), total: 100)
-                    .progressViewStyle(LinearProgressViewStyle())
-                    .frame(width: 150)
+                // プログレスバーを修正
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack {
+                        Text("親密度")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(viewModel.character.intimacyLevel)/100")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    ZStack(alignment: .leading) {
+                        // 背景バー
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 150, height: 4)
+                        
+                        // プログレスバー
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(intimacyColor)
+                            .frame(width: 150 * CGFloat(viewModel.character.intimacyLevel) / 100, height: 4)
+                            .animation(.easeInOut(duration: 0.3), value: viewModel.character.intimacyLevel)
+                    }
+                }
             }
             
             Spacer()
@@ -177,10 +199,22 @@ struct ContentView: View {
             Button(action: { viewModel.showingSettings = true }) {
                 Image(systemName: "gearshape")
                     .font(.title2)
+                    .foregroundColor(.blue)
             }
         }
         .padding()
         .background(Color.white.opacity(0.9))
+    }
+
+    // 親密度の色を決定するプロパティを追加
+    private var intimacyColor: Color {
+        switch viewModel.character.intimacyLevel {
+        case 0...10: return .gray
+        case 11...30: return .blue
+        case 31...60: return .green
+        case 61...100: return .pink
+        default: return .red
+        }
     }
     
     private var floatingIconView: some View {
@@ -189,13 +223,8 @@ struct ContentView: View {
             CharacterIconView(character: viewModel.character, size: 150)
                 .padding(.top)
                 .offset(y: iconOffset)
-                .onAppear {
-                    withAnimation(Animation.easeInOut(duration: 2.0).repeatForever(autoreverses: true)) {
-                        iconOffset = -10
-                    }
-                }
-                // アイコンURLの変更を強制的に監視
-                .id("character_icon_\(viewModel.character.iconURL ?? "default")")
+                // 強制的にビューを更新するためのID
+                .id("character_icon_\(viewModel.character.iconURL ?? "default")_\(Date().timeIntervalSince1970)")
         }
         .transition(.opacity.combined(with: .scale))
     }

@@ -216,6 +216,7 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
+    // loadCharacterData()メソッドも以下のように修正
     private func loadCharacterData() {
         database.child("characters").child(characterId).observe(.value) { [weak self] snapshot in
             guard let self = self else { return }
@@ -224,29 +225,42 @@ class RomanceAppViewModel: ObservableObject {
                 print("Firebaseからキャラクターデータを読み込み: \(data)")
                 
                 DispatchQueue.main.async {
-                    if let name = data["name"] as? String {
+                    var hasChanges = false
+                    
+                    if let name = data["name"] as? String, self.character.name != name {
                         self.character.name = name
+                        hasChanges = true
                     }
-                    if let personality = data["personality"] as? String {
+                    if let personality = data["personality"] as? String, self.character.personality != personality {
                         self.character.personality = personality
+                        hasChanges = true
                     }
-                    if let speakingStyle = data["speakingStyle"] as? String {
+                    if let speakingStyle = data["speakingStyle"] as? String, self.character.speakingStyle != speakingStyle {
                         self.character.speakingStyle = speakingStyle
+                        hasChanges = true
                     }
-                    if let iconName = data["iconName"] as? String {
+                    if let iconName = data["iconName"] as? String, self.character.iconName != iconName {
                         self.character.iconName = iconName
+                        hasChanges = true
                     }
-                    if let iconURL = data["iconURL"] as? String {
+                    if let iconURL = data["iconURL"] as? String, self.character.iconURL != iconURL {
                         print("アイコンURLが更新されました: \(iconURL)")
                         self.character.iconURL = iconURL
-                    } else {
-                        print("アイコンURLが見つかりません")
-                        if data["iconURL"] != nil {
-                            print("iconURLフィールドは存在しますが、文字列ではありません: \(data["iconURL"] ?? "nil")")
-                        }
+                        hasChanges = true
+                    } else if data["iconURL"] == nil && self.character.iconURL != nil {
+                        print("アイコンURLが削除されました")
+                        self.character.iconURL = nil
+                        hasChanges = true
                     }
-                    if let backgroundName = data["backgroundName"] as? String {
+                    if let backgroundName = data["backgroundName"] as? String, self.character.backgroundName != backgroundName {
                         self.character.backgroundName = backgroundName
+                        hasChanges = true
+                    }
+                    
+                    // 変更があった場合のみ通知を送信
+                    if hasChanges {
+                        print("キャラクターデータに変更があったため、通知を送信")
+                        self.objectWillChange.send()
                     }
                 }
             } else {
@@ -542,8 +556,24 @@ class RomanceAppViewModel: ObservableObject {
 
     
     func updateCharacterSettings() {
+        print("updateCharacterSettings() 呼び出し")
+        print("現在のアイコンURL: \(character.iconURL ?? "nil")")
+        
         saveCharacterData()
         saveUserData()
+        
+        // 強制的にオブザーバーに変更を通知
+        DispatchQueue.main.async { [weak self] in
+            self?.objectWillChange.send()
+            print("RomanceAppViewModel: 強制的に変更通知を送信")
+        }
+    }
+
+    func forceRefreshCharacterIcon() {
+        DispatchQueue.main.async { [weak self] in
+            self?.objectWillChange.send()
+            print("RomanceAppViewModel: アイコン強制リフレッシュ")
+        }
     }
     
     private func generateAIResponse(to input: String) -> String {
