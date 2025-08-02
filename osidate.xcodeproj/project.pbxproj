@@ -12,6 +12,7 @@
 		18E66EA42E3C73A4002E8F66 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA32E3C73A4002E8F66 /* FirebaseCore */; };
 		18E66EA62E3C73A4002E8F66 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA52E3C73A4002E8F66 /* FirebaseDatabase */; };
 		18E66EA82E3C73A4002E8F66 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA72E3C73A4002E8F66 /* FirebaseStorage */; };
+		18E671072E3CE1C1002E8F66 /* SwiftyCrop in Frameworks */ = {isa = PBXBuildFile; productRef = 18E671062E3CE1C1002E8F66 /* SwiftyCrop */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 			files = (
 				18E66EA02E3C73A4002E8F66 /* FirebaseAnalytics in Frameworks */,
 				18E66EA42E3C73A4002E8F66 /* FirebaseCore in Frameworks */,
+				18E671072E3CE1C1002E8F66 /* SwiftyCrop in Frameworks */,
 				18E66EA62E3C73A4002E8F66 /* FirebaseDatabase in Frameworks */,
 				18E66EA82E3C73A4002E8F66 /* FirebaseStorage in Frameworks */,
 				18E66EA22E3C73A4002E8F66 /* FirebaseAuth in Frameworks */,
@@ -130,6 +132,7 @@
 				18E66EA32E3C73A4002E8F66 /* FirebaseCore */,
 				18E66EA52E3C73A4002E8F66 /* FirebaseDatabase */,
 				18E66EA72E3C73A4002E8F66 /* FirebaseStorage */,
+				18E671062E3CE1C1002E8F66 /* SwiftyCrop */,
 			);
 			productName = osidate;
 			productReference = 18E66E472E3C5A38002E8F66 /* osidate.app */;
@@ -215,6 +218,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				18E66E9E2E3C73A4002E8F66 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				18E671052E3CE1C1002E8F66 /* XCRemoteSwiftPackageReference "SwiftyCrop" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 18E66E482E3C5A38002E8F66 /* Products */;
@@ -591,6 +595,14 @@
 				minimumVersion = 12.0.0;
 			};
 		};
+		18E671052E3CE1C1002E8F66 /* XCRemoteSwiftPackageReference "SwiftyCrop" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/benedom/SwiftyCrop";
+			requirement = {
+				branch = master;
+				kind = branch;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -618,6 +630,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 18E66E9E2E3C73A4002E8F66 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		18E671062E3CE1C1002E8F66 /* SwiftyCrop */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 18E671052E3CE1C1002E8F66 /* XCRemoteSwiftPackageReference "SwiftyCrop" */;
+			productName = SwiftyCrop;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

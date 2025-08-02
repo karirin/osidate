@@ -10,7 +10,7 @@ import PhotosUI
 import FirebaseStorage
 
 struct ImagePickerView: UIViewControllerRepresentable {
-    @Binding var selectedImage: UIImage?
+    let completion: (UIImage) -> Void
     @Environment(\.dismiss) private var dismiss
     
     func makeUIViewController(context: Context) -> PHPickerViewController {
@@ -35,6 +35,54 @@ struct ImagePickerView: UIViewControllerRepresentable {
         let parent: ImagePickerView
         
         init(_ parent: ImagePickerView) {
+            self.parent = parent
+        }
+        
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            picker.dismiss(animated: true)
+            
+            guard let provider = results.first?.itemProvider else { return }
+            
+            if provider.canLoadObject(ofClass: UIImage.self) {
+                provider.loadObject(ofClass: UIImage.self) { image, _ in
+                    DispatchQueue.main.async {
+                        if let image = image as? UIImage {
+                            self.parent.completion(image)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Binding版のImagePickerView（既存コードとの互換性のため）
+struct ImagePickerViewBinding: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.filter = .images
+        config.selectionLimit = 1
+        
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {
+        // 更新処理は不要
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let parent: ImagePickerViewBinding
+        
+        init(_ parent: ImagePickerViewBinding) {
             self.parent = parent
         }
         

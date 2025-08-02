@@ -2,11 +2,12 @@
 //  SettingsView.swift
 //  osidate
 //
-//  Updated for Firebase Auth integration
+//  Modern redesigned version with improved UI/UX
 //
 
 import SwiftUI
 import Foundation
+import SwiftyCrop
 
 struct SettingsView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
@@ -17,388 +18,379 @@ struct SettingsView: View {
     @State private var showingResetUserDefaultsAlert = false
     @State private var isDataSyncing = false
     
+    // Image picker and cropping states
+    @StateObject private var imageManager = ImageStorageManager()
+    @State private var showingImagePicker = false
+    @State private var selectedImage: UIImage?
+    @State private var selectedImageForCropping: UIImage?
+    @State private var croppingImage: UIImage?
+    @State private var characterIcon: UIImage?
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    @State private var iconScale: CGFloat = 1.0
+    
     var body: some View {
         NavigationView {
-            Form {
-                // アカウント情報セクション
-                accountInfoSection
-                
-                // キャラクター設定セクション
-                characterSettingsSection
-                
-                // 記念日設定セクション
-                anniversarySettingsSection
-                
-                // 親密度情報セクション
-                intimacyInfoSection
-                
-                // 統計情報セクション
-                statisticsSection
-                
-                // データ管理セクション
-                dataManagementSection
-                
-                // 危険な操作セクション
-                dangerZoneSection
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header with character preview
+                    characterHeaderView
+                    
+                    // Main settings sections
+                    VStack(spacing: 16) {
+                        characterSettingsSection
+                        anniversarySettingsSection
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 32)
+                }
             }
-            .navigationTitle("設定")
-            .navigationBarTitleDisplayMode(.inline)
+            .background(Color(.systemGroupedBackground))
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完了") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
-            .alert("データを削除", isPresented: $showingDeleteAlert) {
-                Button("削除", role: .destructive) {
-                    viewModel.clearAllData()
-                    dismiss()
+            .setupAlerts()
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePickerView { pickedImage in
+                    self.selectedImageForCropping = pickedImage
                 }
-                Button("キャンセル", role: .cancel) { }
-            } message: {
-                Text("すべての会話データとローカルデータが削除されます。この操作は取り消せません。")
             }
-            .alert("親密度をリセット", isPresented: $showingResetIntimacyAlert) {
-                Button("リセット", role: .destructive) {
-                    viewModel.resetIntimacyLevel()
-                }
-                Button("キャンセル", role: .cancel) { }
-            } message: {
-                Text("親密度が0にリセットされます。メッセージは保持されます。")
+            .onChange(of: selectedImageForCropping) { img in
+                guard let img else { return }
+                croppingImage = img
             }
-            .alert("ログアウト", isPresented: $showingSignOutAlert) {
-                Button("ログアウト", role: .destructive) {
-                    viewModel.signOut()
-                    dismiss()
+            .fullScreenCover(item: $croppingImage) { img in
+                NavigationView {
+                    SwiftyCropView(
+                        imageToCrop: img,
+                        maskShape: .circle,
+                        configuration: cropConfig
+                    ) { cropped in
+                        if let cropped {
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                                selectedImage = cropped
+                                characterIcon = cropped
+                            }
+                            uploadImage()
+                        }
+                        croppingImage = nil
+                    }
+                    .drawingGroup()
                 }
-                Button("キャンセル", role: .cancel) { }
-            } message: {
-                Text("ログアウトしますか？再度ログインが必要になります。")
+                .navigationBarHidden(true)
             }
-            .alert("UserDefaultsをリセット", isPresented: $showingResetUserDefaultsAlert) {
-                Button("リセット", role: .destructive) {
-                    viewModel.resetUserDefaults()
-                    dismiss()
-                }
-                Button("キャンセル", role: .cancel) { }
+            .alert("通知", isPresented: $showingAlert) {
+                Button("OK", role: .cancel) { }
             } message: {
-                Text("保存されたキャラクターIDがリセットされます。次回起動時に新しいキャラクターが作成されます。")
+                Text(alertMessage)
+            }
+            .onAppear {
+                loadCurrentIcon()
             }
         }
     }
     
-    private var accountInfoSection: some View {
-        Section("アカウント情報") {
-            if let userID = viewModel.currentUserID {
-                HStack {
-                    Text("ユーザーID")
-                    Spacer()
-                    Text("\(String(userID.prefix(8)))...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+    // MARK: - Header
+    private var characterHeaderView: some View {
+        VStack(spacing: 16) {
+            // Character icon with glow effect - clickable for editing
+            Button(action: {
+                generateHapticFeedback()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    iconScale = 0.95
                 }
-                
-                HStack {
-                    Text("アカウントタイプ")
-                    Spacer()
-                    HStack {
-                        if viewModel.isAnonymousUser {
-                            Image(systemName: "person.crop.circle.dashed")
-                                .foregroundColor(.orange)
-                            Text("ゲスト")
-                                .foregroundColor(.orange)
-                        } else {
-                            Image(systemName: "person.crop.circle.fill")
-                                .foregroundColor(.green)
-                            Text("登録済み")
-                                .foregroundColor(.green)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                        iconScale = 1.0
+                    }
+                }
+                showingImagePicker = true
+            }) {
+                ZStack {
+                    Circle()
+                        .fill(intimacyColor.opacity(0.2))
+                        .frame(width: 120, height: 120)
+                        .blur(radius: 8)
+                    
+                    if let icon = characterIcon {
+                        Image(uiImage: icon)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 100, height: 100)
+                            .clipShape(Circle())
+                            .overlay(
+                                Circle()
+                                    .stroke(intimacyColor, lineWidth: 3)
+                            )
+                            .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    } else {
+                        ZStack {
+                            CharacterIconView(character: viewModel.character, size: 100)
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(intimacyColor, lineWidth: 3)
+                                )
+                                .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                            
+                            // Edit overlay
+                            Circle()
+                                .fill(.black.opacity(0.3))
+                                .frame(width: 100, height: 100)
+                                .overlay(
+                                    VStack(spacing: 4) {
+                                        Image(systemName: "camera.fill")
+                                            .font(.title2)
+                                            .foregroundColor(.white)
+                                        Text("編集")
+                                            .font(.caption)
+                                            .foregroundColor(.white)
+                                    }
+                                )
                         }
                     }
-                    .font(.caption)
+                    
+                    // Upload overlay
+                    if imageManager.isUploading {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 100, height: 100)
+                            .overlay(
+                                VStack(spacing: 8) {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: intimacyColor))
+                                        .scaleEffect(1.2)
+                                    Text("\(Int(imageManager.uploadProgress * 100))%")
+                                        .font(.caption)
+                                        .foregroundColor(intimacyColor)
+                                        .fontWeight(.medium)
+                                }
+                            )
+                    }
                 }
+            }
+            .scaleEffect(iconScale)
+            .disabled(imageManager.isUploading)
+            
+            VStack(spacing: 4) {
+                Text(viewModel.character.name.isEmpty ? "未設定" : viewModel.character.name)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
                 
-                if viewModel.isAnonymousUser {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("ゲストアカウントについて")
+                HStack(spacing: 4) {
+                    Text("親密度 \(viewModel.character.intimacyLevel)")
+                        .font(.subheadline)
+                        .foregroundColor(intimacyColor)
+                        .fontWeight(.medium)
+                    
+                    if imageManager.isUploading {
+                        Text("• アップロード中...")
                             .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.orange)
-                        
-                        Text("• データは自動保存されます\n• アプリ削除時にデータが失われる可能性があります")
-                            .font(.caption2)
                             .foregroundColor(.secondary)
                     }
-                    .padding(.vertical, 4)
                 }
             }
         }
+        .padding(.top, 20)
+        .padding(.bottom, 8)
     }
     
+    // MARK: - Character Settings
     private var characterSettingsSection: some View {
-            Section("キャラクター設定") {
-                // アイコン設定
-                NavigationLink(destination: CharacterIconEditorView(viewModel: viewModel)) {
-                    HStack {
-                        Text("アイコン")
-                        Spacer()
-                        CharacterIconView(character: viewModel.character, size: 40)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                HStack {
-                    Text("名前")
-                    Spacer()
-                    TextField("キャラクター名", text: $viewModel.character.name)
-                        .multilineTextAlignment(.trailing)
+        ModernSectionView(title: "キャラクター設定", icon: "person.circle") {
+            VStack(spacing: 16) {
+                // Name field
+                ModernSettingRow(
+                    icon: "textformat",
+                    title: "名前",
+                    subtitle: "キャラクターの呼び名"
+                ) {
+                    TextField("名前を入力", text: $viewModel.character.name)
+                        .textFieldStyle(ModernTextFieldStyle())
                         .onChange(of: viewModel.character.name) { _ in
                             viewModel.updateCharacterSettings()
                         }
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("性格")
-                        .font(.headline)
+                Divider()
+                
+                // Personality editor
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "heart.text.square")
+                            .foregroundColor(.pink)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("性格")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            Text("キャラクターの個性を設定")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
                     TextEditor(text: $viewModel.character.personality)
-                        .frame(minHeight: 60)
+                        .frame(minHeight: 80)
+                        .padding(12)
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
                         .onChange(of: viewModel.character.personality) { _ in
                             viewModel.updateCharacterSettings()
                         }
                 }
                 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("話し方")
-                        .font(.headline)
+                Divider()
+                
+                // Speaking style editor
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right")
+                            .foregroundColor(.blue)
+                            .frame(width: 24)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("話し方")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            Text("会話のスタイルを設定")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
                     TextEditor(text: $viewModel.character.speakingStyle)
-                        .frame(minHeight: 60)
+                        .frame(minHeight: 80)
+                        .padding(12)
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
                         .onChange(of: viewModel.character.speakingStyle) { _ in
                             viewModel.updateCharacterSettings()
                         }
                 }
             }
         }
+    }
     
+    // MARK: - Anniversary Settings
     private var anniversarySettingsSection: some View {
-        Section("記念日設定") {
-            HStack {
-                Text("誕生日")
-                Spacer()
+        ModernSectionView(title: "記念日設定", icon: "calendar.badge.plus") {
+            VStack(spacing: 16) {
+                // Birthday setting
+                birthdaySettingRow
+                
                 if viewModel.character.birthday != nil {
-                    DatePicker("", selection: Binding(
-                        get: { viewModel.character.birthday ?? Date() },
-                        set: { newValue in
-                            viewModel.character.birthday = newValue
-                            viewModel.updateCharacterSettings()
-                        }
-                    ), displayedComponents: [.date])
-                    .labelsHidden()
-                } else {
-                    Button("設定") {
-                        viewModel.character.birthday = Date()
+                    Divider()
+                    
+                    Button {
+                        viewModel.character.birthday = nil
                         viewModel.updateCharacterSettings()
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                            Text("誕生日を削除")
+                                .foregroundColor(.red)
+                            Spacer()
+                        }
                     }
                 }
-            }
-            
-            if viewModel.character.birthday != nil {
-                Button("誕生日を削除", role: .destructive) {
-                    viewModel.character.birthday = nil
-                    viewModel.updateCharacterSettings()
-                }
-            }
-            
-            HStack {
-                Text("記念日")
-                Spacer()
+                
+                Divider()
+                
+                // Anniversary setting
+                anniversarySettingRow
+                
                 if viewModel.character.anniversaryDate != nil {
-                    DatePicker("", selection: Binding(
-                        get: { viewModel.character.anniversaryDate ?? Date() },
-                        set: { newValue in
-                            viewModel.character.anniversaryDate = newValue
-                            viewModel.updateCharacterSettings()
+                    Divider()
+                    
+                    Button {
+                        viewModel.character.anniversaryDate = nil
+                        viewModel.updateCharacterSettings()
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash")
+                                .foregroundColor(.red)
+                            Text("記念日を削除")
+                                .foregroundColor(.red)
+                            Spacer()
                         }
-                    ), displayedComponents: [.date])
-                    .labelsHidden()
-                } else {
-                    Button("設定") {
-                        viewModel.character.anniversaryDate = Date()
+                    }
+                }
+            }
+        }
+    }
+    
+    private var birthdaySettingRow: some View {
+        ModernSettingRow(
+            icon: "gift",
+            title: "誕生日",
+            subtitle: viewModel.character.birthday != nil ? dateFormatter.string(from: viewModel.character.birthday!) : "未設定"
+        ) {
+            if viewModel.character.birthday != nil {
+                DatePicker("", selection: Binding(
+                    get: { viewModel.character.birthday ?? Date() },
+                    set: { newValue in
+                        viewModel.character.birthday = newValue
                         viewModel.updateCharacterSettings()
                     }
-                }
-            }
-            
-            if viewModel.character.anniversaryDate != nil {
-                Button("記念日を削除", role: .destructive) {
-                    viewModel.character.anniversaryDate = nil
+                ), displayedComponents: [.date])
+                .labelsHidden()
+                .datePickerStyle(.compact)
+            } else {
+                Button("設定") {
+                    viewModel.character.birthday = Date()
                     viewModel.updateCharacterSettings()
                 }
+                .buttonStyle(ModernButtonStyle(color: .blue))
             }
         }
     }
     
-    private var intimacyInfoSection: some View {
-        Section("親密度情報") {
-            HStack {
-                Text("現在の親密度")
-                Spacer()
-                Text("\(viewModel.character.intimacyLevel)")
-                    .fontWeight(.bold)
-            }
-            
-            HStack {
-                Text("関係レベル")
-                Spacer()
-                Text(viewModel.character.intimacyTitle)
-                    .foregroundColor(.secondary)
-            }
-            
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("進捗")
-                    Spacer()
-                    Text("\(viewModel.character.intimacyLevel)/100")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                ProgressView(value: Double(min(viewModel.character.intimacyLevel, 100)), total: 100)
-                    .progressViewStyle(LinearProgressViewStyle(tint: intimacyColor))
-            }
-            
-            VStack(alignment: .leading, spacing: 4) {
-                Text("解放されたデート場所")
-                    .font(.headline)
-                ForEach(viewModel.availableLocations, id: \.id) { location in
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text(location.name)
-                        Spacer()
-                        Text("必要親密度: \(location.requiredIntimacy)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+    private var anniversarySettingRow: some View {
+        ModernSettingRow(
+            icon: "heart.circle",
+            title: "記念日",
+            subtitle: viewModel.character.anniversaryDate != nil ? dateFormatter.string(from: viewModel.character.anniversaryDate!) : "未設定"
+        ) {
+            if viewModel.character.anniversaryDate != nil {
+                DatePicker("", selection: Binding(
+                    get: { viewModel.character.anniversaryDate ?? Date() },
+                    set: { newValue in
+                        viewModel.character.anniversaryDate = newValue
+                        viewModel.updateCharacterSettings()
                     }
-                }
-            }
-        }
-    }
-    
-    private var statisticsSection: some View {
-        Section("統計情報") {
-            HStack {
-                Text("総メッセージ数")
-                Spacer()
-                Text("\(viewModel.getMessageCount())")
-                    .fontWeight(.bold)
-            }
-            
-            HStack {
-                Text("あなたのメッセージ")
-                Spacer()
-                Text("\(viewModel.getUserMessageCount())")
-                    .foregroundColor(.blue)
-            }
-            
-            HStack {
-                Text("\(viewModel.character.name)のメッセージ")
-                Spacer()
-                Text("\(viewModel.getAIMessageCount())")
-                    .foregroundColor(.pink)
-            }
-            
-            if let firstMessage = viewModel.messages.first {
-                HStack {
-                    Text("会話開始日")
-                    Spacer()
-                    Text(dateFormatter.string(from: firstMessage.timestamp))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            if let lastMessage = viewModel.messages.last {
-                HStack {
-                    Text("最後のメッセージ")
-                    Spacer()
-                    Text(relativeDateFormatter.localizedString(for: lastMessage.timestamp, relativeTo: Date()))
-                        .foregroundColor(.secondary)
-                }
-            }
-            
-            HStack {
-                Text("会話継続日数")
-                Spacer()
-                Text("\(viewModel.getTotalConversationDays())日")
-                    .foregroundColor(.secondary)
-            }
-            
-            HStack {
-                Text("1日平均メッセージ数")
-                Spacer()
-                Text(String(format: "%.1f", viewModel.getAverageMessagesPerDay()))
-                    .foregroundColor(.secondary)
-            }
-        }
-    }
-    
-    private var dataManagementSection: some View {
-        Section("データ管理") {
-            Button(action: {
-                isDataSyncing = true
-                viewModel.updateCharacterSettings()
-                
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    isDataSyncing = false
-                }
-            }) {
-                HStack {
-                    if isDataSyncing {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "icloud.and.arrow.up")
-                    }
-                    Text("データを同期")
-                }
-            }
-            .foregroundColor(.blue)
-            .disabled(isDataSyncing)
-            
-            Button("親密度をリセット") {
-                showingResetIntimacyAlert = true
-            }
-            .foregroundColor(.orange)
-            
-            Button("キャラクター設定をリセット") {
-                showingResetUserDefaultsAlert = true
-            }
-            .foregroundColor(.orange)
-        }
-    }
-    
-    private var dangerZoneSection: some View {
-        Section("危険な操作") {
-            if viewModel.isAnonymousUser {
-                Button("ログアウト（ゲスト終了）") {
-                    showingSignOutAlert = true
-                }
-                .foregroundColor(.orange)
+                ), displayedComponents: [.date])
+                .labelsHidden()
+                .datePickerStyle(.compact)
             } else {
-                Button("ログアウト") {
-                    showingSignOutAlert = true
+                Button("設定") {
+                    viewModel.character.anniversaryDate = Date()
+                    viewModel.updateCharacterSettings()
                 }
-                .foregroundColor(.orange)
+                .buttonStyle(ModernButtonStyle(color: .pink))
             }
-            
-            Button("すべてのデータを削除") {
-                showingDeleteAlert = true
-            }
-            .foregroundColor(.red)
         }
     }
     
+    // MARK: - Helper Properties
     private var intimacyColor: Color {
         switch viewModel.character.intimacyLevel {
         case 0...10: return .gray
@@ -417,11 +409,204 @@ struct SettingsView: View {
         return formatter
     }
     
-    private var relativeDateFormatter: RelativeDateTimeFormatter {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: "ja_JP")
-        formatter.dateTimeStyle = .named
-        return formatter
+    // SwiftyCrop configuration
+    private var cropConfig: SwiftyCropConfiguration {
+        var cfg = SwiftyCropConfiguration(
+            texts: .init(
+                cancelButton: "キャンセル",
+                interactionInstructions: "",
+                saveButton: "適用"
+            )
+        )
+        return cfg
+    }
+    
+    // MARK: - Image Management Functions
+    private func loadCurrentIcon() {
+        if let iconURL = viewModel.character.iconURL, !iconURL.isEmpty {
+            imageManager.loadImage(from: iconURL) { result in
+                switch result {
+                case .success(let image):
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                        characterIcon = image
+                    }
+                case .failure(let error):
+                    print("アイコンの読み込みエラー: \(error.localizedDescription)")
+                }
+            }
+        }
+    }
+    
+    private func uploadImage() {
+        guard let image = selectedImage,
+              let userId = viewModel.currentUserID else {
+            alertMessage = "画像のアップロードに失敗しました"
+            showingAlert = true
+            return
+        }
+        
+        let imagePath = "character_icons/\(userId)_\(viewModel.character.id)_\(Date().timeIntervalSince1970).jpg"
+        
+        imageManager.uploadImage(image, path: imagePath) { [weak viewModel] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let downloadURL):
+                    if let oldIconURL = viewModel?.character.iconURL,
+                       !oldIconURL.isEmpty,
+                       let oldPath = extractPathFromURL(oldIconURL) {
+                        imageManager.deleteImage(at: oldPath) { _ in }
+                    }
+                    
+                    viewModel?.character.iconURL = downloadURL
+                    viewModel?.updateCharacterSettings()
+                    
+                    characterIcon = image
+                    selectedImage = nil
+                    
+                    alertMessage = "アイコンが正常にアップロードされました"
+                    showingAlert = true
+                    
+                case .failure(let error):
+                    alertMessage = "アップロードエラー: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+    
+    private func extractPathFromURL(_ url: String) -> String? {
+        guard let urlComponents = URLComponents(string: url),
+              let path = urlComponents.path.components(separatedBy: "/o/").last?.components(separatedBy: "?").first else {
+            return nil
+        }
+        return path.removingPercentEncoding
+    }
+    
+    private func generateHapticFeedback() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
+}
+
+// MARK: - Modern UI Components
+
+struct ModernSectionView<Content: View>: View {
+    let title: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .foregroundColor(.accentColor)
+                    .font(.title3)
+                Text(title)
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            
+            content
+        }
+        .padding(20)
+        .background(Color(.systemBackground))
+        .cornerRadius(16)
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+    }
+}
+
+struct ModernSettingRow<Content: View>: View {
+    let icon: String
+    let title: String
+    let subtitle: String?
+    let content: Content
+    
+    init(icon: String, title: String, subtitle: String? = nil, @ViewBuilder content: () -> Content) {
+        self.icon = icon
+        self.title = title
+        self.subtitle = subtitle
+        self.content = content()
+    }
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon)
+                .foregroundColor(.accentColor)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                if let subtitle = subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+            
+            content
+        }
+    }
+}
+
+struct ModernTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(12)
+            .background(Color(.systemGray6))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color(.systemGray4), lineWidth: 1)
+            )
+    }
+}
+
+struct ModernButtonStyle: ButtonStyle {
+    let color: Color
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(color.opacity(0.1))
+            .foregroundColor(color)
+            .cornerRadius(8)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Alert Extension
+extension View {
+    func setupAlerts() -> some View {
+        self
+            .alert("データを削除", isPresented: Binding.constant(false)) {
+                Button("削除", role: .destructive) {
+                    // Handle delete
+                }
+                Button("キャンセル", role: .cancel) { }
+            } message: {
+                Text("すべての会話データとローカルデータが削除されます。この操作は取り消せません。")
+            }
+    }
+}
+
+// MARK: - UIImage extension for Identifiable protocol
+extension UIImage: Identifiable {
+    public var id: String {
+        return UUID().uuidString
     }
 }
 
