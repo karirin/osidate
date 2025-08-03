@@ -152,7 +152,7 @@ struct ContentView: View {
                     inputView
                     
                     // Bottom Buttons
-                    bottomButtonsView
+//                    bottomButtonsView
                 }
             }
         }
@@ -228,15 +228,10 @@ struct ContentView: View {
     }
     
     private var floatingIconView: some View {
-        ZStack {
-            // Floating Character Icon - カスタムアイコンに対応
-            CharacterIconView(character: viewModel.character, size: 150)
-                .padding(.top)
-                .offset(y: iconOffset)
-                // 強制的にビューを更新するためのID
-                .id("character_icon_\(viewModel.character.iconURL ?? "default")_\(Date().timeIntervalSince1970)")
-        }
-        .transition(.opacity.combined(with: .scale))
+        CharacterIconView(character: viewModel.character, size: 150)
+            .id(viewModel.character.iconURL ?? "default")   // ← ★これを追加
+            .padding(.top)
+            .offset(y: iconOffset)
     }
     
     private var chatView: some View {
@@ -267,21 +262,87 @@ struct ContentView: View {
     }
     
     private var inputView: some View {
-        HStack {
-            TextField("メッセージを入力...", text: $messageText)
-                .textFieldStyle(RoundedBorderTextFieldStyle())
-                .disabled(!viewModel.isAuthenticated)
-                .focused($isInputFocused)
-            
-            Button(action: sendMessage) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(messageText.isEmpty || !viewModel.isAuthenticated ? .gray : .green)
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                // メッセージ入力フィールド
+                HStack(spacing: 8) {
+                    TextField("", text: $messageText, prompt: Text("メッセージを入力...").foregroundColor(.gray.opacity(0.6)))
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .disabled(!viewModel.isAuthenticated)
+                        .focused($isInputFocused)
+                        .font(.body)
+                        .foregroundColor(.primary)
+                        .onSubmit {
+                            sendMessage()
+                        }
+                    
+                    // 文字数カウンター（長いメッセージの場合のみ表示）
+                    if messageText.count > 50 {
+                        Text("\(messageText.count)")
+                            .font(.caption2)
+                            .foregroundColor(messageText.count > 200 ? .red : .gray)
+                            .animation(.easeInOut(duration: 0.2), value: messageText.count)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 24)
+                        .fill(Color(.systemGray6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 24)
+                                .stroke(isInputFocused ? Color.gray.opacity(0.5) : Color.clear, lineWidth: 1)
+                                .animation(.easeInOut(duration: 0.2), value: isInputFocused)
+                        )
+                )
+                
+                // 送信ボタン
+                Button(action: sendMessage) {
+                    ZStack {
+                        Circle()
+                            .fill(
+                                messageText.isEmpty || !viewModel.isAuthenticated
+                                ? Color.gray.opacity(0.3)
+                                : Color.green
+                            )
+                            .frame(width: 44, height: 44)
+                        
+                        Image(systemName: messageText.isEmpty ? "arrow.up" : "arrow.up")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                            .rotationEffect(.degrees(pulseAnimation ? 5 : 0))
+                            .scaleEffect(pulseAnimation ? 1.1 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: pulseAnimation)
+                    }
+                }
+                .disabled(messageText.isEmpty || !viewModel.isAuthenticated)
+                .scaleEffect(messageText.isEmpty ? 0.9 : 1.0)
+                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: messageText.isEmpty)
             }
-            .disabled(messageText.isEmpty || !viewModel.isAuthenticated)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+//            .background(
+//                // グラスモーフィズム効果
+//                Rectangle()
+//                    .fill(.ultraThinMaterial)
+//                    .overlay(
+//                        LinearGradient(
+//                            gradient: Gradient(colors: [
+//                                Color.white.opacity(0.1),
+//                                Color.clear
+//                            ]),
+//                            startPoint: .top,
+//                            endPoint: .bottom
+//                        )
+//                    )
+//            )
         }
-        .padding()
-        .background(Color.white.opacity(0.9))
+//        .background(
+//            // 背景のぼかし効果
+//            Rectangle()
+//                .fill(.ultraThinMaterial)
+//                .ignoresSafeArea(.container, edges: .bottom)
+//        )
     }
     
     private var bottomButtonsView: some View {

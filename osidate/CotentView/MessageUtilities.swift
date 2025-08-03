@@ -268,10 +268,5 @@ struct MessageStatistics {
             self.averageMessagesPerDay = 0
         }
     }
-}//
-//  MessageUtilities.swift
-//  osidate
-//
-//  Created by Apple on 2025/08/01.
-//
+}
 
