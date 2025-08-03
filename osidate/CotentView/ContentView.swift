@@ -13,17 +13,27 @@ struct ContentView: View {
     @State private var pulseAnimation = false
     @State private var messageText = ""
     @State private var iconOffset: CGFloat = 0
+    @FocusState private var isInputFocused: Bool
     
     var body: some View {
-        Group {
-            if viewModel.isLoading {
-                LoadingView()
-            } else if viewModel.isAuthenticated {
-                MainAppView()
-            } else {
-                AuthenticationView()
+        ZStack{
+            Group {
+                if viewModel.isLoading {
+                    LoadingView()
+                } else if viewModel.isAuthenticated {
+                    MainAppView()
+                } else {
+                    AuthenticationView()
+                }
             }
         }
+        .simultaneousGesture(
+            TapGesture().onEnded { _ in
+                if isInputFocused {
+                    isInputFocused = false
+                }
+            }
+        )
         .sheet(isPresented: $viewModel.showingDateView) {
             DateView(viewModel: viewModel)
         }
@@ -261,6 +271,7 @@ struct ContentView: View {
             TextField("メッセージを入力...", text: $messageText)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .disabled(!viewModel.isAuthenticated)
+                .focused($isInputFocused)
             
             Button(action: sendMessage) {
                 Image(systemName: "arrow.up.circle.fill")
