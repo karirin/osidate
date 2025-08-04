@@ -10,9 +10,8 @@ import SwiftUI
 struct CharacterIconView: View {
     let character: Character
     let size: CGFloat
-//    @State private var loadedImage: UIImage?
-//    @State private var isLoading = false
-//    @State private var currentIconURL: String? = nil
+
+    @State private var isFloating = false
     
     var body: some View {
         ZStack{
@@ -28,7 +27,21 @@ struct CharacterIconView: View {
                             .aspectRatio(contentMode: .fill)
                             .frame(width: size, height: size)
                             .clipShape(Circle())
+                            .offset(y: isFloating ? -8 : 8)
+                            .animation(
+                                .easeInOut(duration: 2.5)
+                                    .repeatForever(autoreverses: true),
+                                value: isFloating
+                            )
                         
+                        
+                        .onAppear {                              // ← 変更：既存 onAppear を置き換え
+                            print("character.iconURL : \(character.iconURL ?? "nil")")
+                            withAnimation(.easeInOut(duration: 2.5)        // 振幅・速度はお好みで
+                                            .repeatForever(autoreverses: true)) {
+                                isFloating = true
+                            }
+                        }
                     case .failure(_):
                         defaultIcon   // 読み込み失敗時
                         
@@ -48,9 +61,6 @@ struct CharacterIconView: View {
                 defaultIcon           // iconURL が無いとき
             }
         }
-        .onAppear{
-            print("character.iconURL    :\(character.iconURL ?? "nil")")
-        }
     }
     
     private var defaultIcon: some View {
@@ -65,8 +75,6 @@ struct CharacterIconView: View {
     }
     
     private func loadImageIfNeeded() {
-        // iconURLがない場合は何もしない
-        print("character.iconURL: \(character.iconURL)")
         guard let iconURL = character.iconURL,
               !iconURL.isEmpty else {
             print("CharacterIconView: アイコンURLが空 - デフォルトアイコンを表示")
@@ -75,4 +83,8 @@ struct CharacterIconView: View {
         
         print("CharacterIconView: アイコン画像を読み込み中 - \(iconURL)")
     }
+}
+
+#Preview {
+    ContentView(viewModel: RomanceAppViewModel())
 }
