@@ -19,6 +19,7 @@ class Character: ObservableObject, Codable {
     @Published var iconURL: String?
     @Published var iconName: String
     @Published var backgroundName: String
+    @Published var backgroundURL: String?
     
     var intimacyTitle: String {
         switch intimacyLevel {
@@ -42,10 +43,12 @@ class Character: ObservableObject, Codable {
         self.iconURL = nil
         self.iconName = "person.circle.fill"
         self.backgroundName = "defaultBG"
+        self.backgroundURL = nil
     }
     
     // カスタムイニシャライザー
-    init(name: String, personality: String, speakingStyle: String, iconName: String, backgroundName: String) {
+    init(name: String, personality: String, speakingStyle: String, iconName: String, backgroundName: String,
+         backgroundURL: String? = nil) {
         self.id = UUID().uuidString
         self.name = name
         self.personality = personality
@@ -56,11 +59,12 @@ class Character: ObservableObject, Codable {
         self.iconURL = nil
         self.iconName = iconName
         self.backgroundName = backgroundName
+        self.backgroundURL = backgroundURL
     }
     
     // Codable用のCodingKeys
     enum CodingKeys: String, CodingKey {
-        case id, name, personality, speakingStyle, intimacyLevel, birthday, anniversaryDate, iconURL, iconName, backgroundName
+        case id, name, personality, speakingStyle, intimacyLevel, birthday, anniversaryDate, iconURL, iconName, backgroundName, backgroundURL
     }
     
     required init(from decoder: Decoder) throws {
@@ -75,6 +79,8 @@ class Character: ObservableObject, Codable {
         iconURL = try container.decodeIfPresent(String.self, forKey: .iconURL)
         iconName = try container.decodeIfPresent(String.self, forKey: .iconName) ?? "person.circle.fill"
         backgroundName = try container.decodeIfPresent(String.self, forKey: .backgroundName) ?? "defaultBG"
+        backgroundURL = try container.decodeIfPresent(String.self,
+                                                      forKey: .backgroundURL)
     }
     
     func encode(to encoder: Encoder) throws {
@@ -89,6 +95,8 @@ class Character: ObservableObject, Codable {
         try container.encodeIfPresent(iconURL, forKey: .iconURL)
         try container.encode(iconName, forKey: .iconName)
         try container.encode(backgroundName, forKey: .backgroundName)
+        try container.encodeIfPresent(backgroundURL,
+                                      forKey: .backgroundURL) 
     }
 }
 

@@ -34,6 +34,9 @@ struct ContentView: View {
                 }
             }
         )
+        .sheet(isPresented: $viewModel.showingBackgroundSelector) {
+            BackgroundSelectorView(viewModel: viewModel)
+        }
         .sheet(isPresented: $viewModel.showingDateView) {
             DateView(viewModel: viewModel)
         }
@@ -132,11 +135,21 @@ struct ContentView: View {
     private func MainAppView() -> some View {
         NavigationView {
             ZStack {
-                // Background
-                Image(viewModel.character.backgroundName)
-                    .resizable()
-                    .ignoresSafeArea()
-                    .opacity(0.3)
+                Group {
+                    if let urlStr = viewModel.character.backgroundURL,
+                       let url = URL(string: urlStr) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image): image.resizable()
+                            default: Image(viewModel.character.backgroundName).resizable()
+                            }
+                        }
+                    } else {
+                        Image(viewModel.character.backgroundName).resizable()
+                    }
+                }
+                .ignoresSafeArea()
+                .opacity(0.8)
                 
                 VStack {
                     // Header
@@ -211,9 +224,15 @@ struct ContentView: View {
                     .font(.title2)
                     .foregroundColor(.blue)
             }
+            
+            Button(action: { viewModel.showingBackgroundSelector = true }) {
+                Image(systemName: "photo.on.rectangle")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+            }
         }
         .padding()
-        .background(Color.white.opacity(0.9))
+        .background(Color.white.opacity(0.5))
     }
 
     // 親密度の色を決定するプロパティを追加

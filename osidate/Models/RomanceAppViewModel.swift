@@ -11,301 +11,205 @@ import FirebaseDatabase
 import FirebaseAuth
 
 class RomanceAppViewModel: ObservableObject {
+
+    // MARK: - Published State
     @Published var character: Character
     @Published var messages: [Message] = []
+
     @Published var currentDateLocation: DateLocation?
     @Published var availableLocations: [DateLocation] = []
-    @Published var showingDateView = false
-    @Published var showingSettings = false
+
+    @Published var showingDateView            = false
+    @Published var showingSettings            = false
+    @Published var showingBackgroundSelector  = false
+
     @Published var isAuthenticated = false
-    @Published var isLoading = true
+    @Published var isLoading       = true
+
     @Published var openAIService = OpenAIService()
-    
+
+    // MARK: - Private Properties
     private let database = Database.database().reference()
     private var userId: String?
-    private var characterId: String
+    private let characterId: String
     private var authStateListener: AuthStateDidChangeListenerHandle?
-    
+
     private let dateLocations = [
-        DateLocation(name: "カフェ", backgroundImage: "cafe", requiredIntimacy: 0, description: "落ち着いたカフェでお話しましょう"),
-        DateLocation(name: "公園", backgroundImage: "park", requiredIntimacy: 10, description: "緑豊かな公園を一緒に散歩"),
-        DateLocation(name: "映画館", backgroundImage: "cinema", requiredIntimacy: 25, description: "映画を一緒に楽しみましょう"),
-        DateLocation(name: "遊園地", backgroundImage: "amusement", requiredIntimacy: 50, description: "楽しいアトラクションで盛り上がろう"),
-        DateLocation(name: "海辺", backgroundImage: "beach", requiredIntimacy: 70, description: "ロマンチックな海辺での特別な時間")
+        DateLocation(name: "カフェ",   backgroundImage: "cafe",      requiredIntimacy: 0,  description: "落ち着いたカフェでお話しましょう"),
+        DateLocation(name: "公園",     backgroundImage: "park",      requiredIntimacy: 10, description: "緑豊かな公園を一緒に散歩"),
+        DateLocation(name: "映画館",   backgroundImage: "cinema",    requiredIntimacy: 25, description: "映画を一緒に楽しみましょう"),
+        DateLocation(name: "遊園地",   backgroundImage: "amusement", requiredIntimacy: 50, description: "楽しいアトラクションで盛り上がろう"),
+        DateLocation(name: "海辺",     backgroundImage: "beach",     requiredIntimacy: 70, description: "ロマンチックな海辺での特別な時間")
     ]
-    
+
+    // MARK: - Init / Deinit
     init() {
         // キャラクターIDを生成または取得
-        if let storedCharacterId = UserDefaults.standard.string(forKey: "characterId") {
-            self.characterId = storedCharacterId
+        if let storedId = UserDefaults.standard.string(forKey: "characterId") {
+            characterId = storedId
         } else {
-            self.characterId = UUID().uuidString
-            UserDefaults.standard.set(self.characterId, forKey: "characterId")
+            characterId = UUID().uuidString
+            UserDefaults.standard.set(characterId, forKey: "characterId")
         }
-        
-        self.character = Character(
-            name: "あい",
-            personality: "優しくて思いやりがある",
-            speakingStyle: "丁寧で温かい",
-            iconName: "person.circle.fill",
-            backgroundName: "defaultBG"
+
+        character = Character(
+            name:         "あい",
+            personality:  "優しくて思いやりがある",
+            speakingStyle:"丁寧で温かい",
+            iconName:     "person.circle.fill",
+            backgroundName:"defaultBG",
+            backgroundURL: nil
         )
-        
+
         setupAuthStateListener()
     }
-    
+
     deinit {
-        if let listener = authStateListener {
-            Auth.auth().removeStateDidChangeListener(listener)
+        if let h = authStateListener {
+            Auth.auth().removeStateDidChangeListener(h)
         }
     }
-    
-    // MARK: - Firebase Auth
-    
+
+    // MARK: - Auth
     private func setupAuthStateListener() {
         authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            DispatchQueue.main.async {
-                self?.handleAuthStateChange(user: user)
+            self?.handleAuthStateChange(user: user)
+        }
+    }
+
+    private func handleAuthStateChange(user: User?) {
+        DispatchQueue.main.async {
+            if let u = user {
+                self.userId         = u.uid
+                self.isAuthenticated = true
+                self.isLoading       = false
+
+                self.setupInitialData()
+                self.loadUserData()
+                self.loadCharacterData()
+                self.loadMessages()
+                self.updateAvailableLocations()
+                self.scheduleTimeBasedEvents()
+            } else {
+                self.userId          = nil
+                self.isAuthenticated = false
+                self.isLoading       = false
+
+                self.messages.removeAll()
+                self.character.intimacyLevel = 0
+                self.updateAvailableLocations()
+
+                self.signInAnonymously()
             }
         }
     }
-    
-    private func handleAuthStateChange(user: User?) {
-        if let user = user {
-            // ユーザーがログインしている
-            self.userId = user.uid
-            self.isAuthenticated = true
-            self.isLoading = false
-            
-            // データの初期化
-            setupInitialData()
-            loadUserData()
-            loadCharacterData()
-            loadMessages()
-            updateAvailableLocations()
-            scheduleTimeBasedEvents()
-            
-            print("ユーザーがログインしました: \(user.uid)")
-        } else {
-            // ユーザーがログアウトしている
-            self.userId = nil
-            self.isAuthenticated = false
-            self.isLoading = false
-            
-            // データをクリア
-            self.messages.removeAll()
-            self.character.intimacyLevel = 0
-            self.updateAvailableLocations()
-            
-            // 匿名ログインを試行
-            signInAnonymously()
-        }
-    }
-    
+
     func signInAnonymously() {
         isLoading = true
-        Auth.auth().signInAnonymously { [weak self] result, error in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                
-                if let error = error {
-                    print("匿名ログインでエラーが発生しました: \(error.localizedDescription)")
-                } else if let user = result?.user {
-                    print("匿名ログインが成功しました: \(user.uid)")
-                }
-            }
+        Auth.auth().signInAnonymously { [weak self] _, error in
+            DispatchQueue.main.async { self?.isLoading = false }
+            if let e = error { print("匿名ログイン失敗: \(e)") }
         }
     }
-    
+
     func signOut() {
-        do {
-            try Auth.auth().signOut()
-            print("ログアウトしました")
-        } catch let error {
-            print("ログアウトでエラーが発生しました: \(error.localizedDescription)")
-        }
+        try? Auth.auth().signOut()
     }
-    
-    // MARK: - Initial Setup
-    
+
+    // MARK: - Initial Data
     private func setupInitialData() {
-        guard let userId = self.userId else { return }
-        
-        // ユーザーが存在しない場合は作成
-        database.child("users").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            if !snapshot.exists() {
-                self.createInitialUserData()
-            }
+        guard let uid = userId else { return }
+
+        // Users
+        database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
+            if !(snap.exists()) { self?.createInitialUserData() }
         }
-        
-        // キャラクターが存在しない場合は作成
-        database.child("characters").child(characterId).observeSingleEvent(of: .value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            if !snapshot.exists() {
-                self.createInitialCharacterData()
-            }
+
+        // Characters
+        database.child("characters").child(characterId).observeSingleEvent(of: .value) { [weak self] snap in
+            if !(snap.exists()) { self?.createInitialCharacterData() }
         }
     }
-    
+
     private func createInitialUserData() {
-        guard let userId = self.userId else { return }
-        
-        let userData: [String: Any] = [
-            "id": userId,
+        guard let uid = userId else { return }
+        let data: [String:Any] = [
+            "id": uid,
             "characterId": characterId,
             "intimacyLevel": 0,
             "createdAt": Date().timeIntervalSince1970,
             "lastActiveAt": Date().timeIntervalSince1970
         ]
-        
-        database.child("users").child(userId).setValue(userData) { error, _ in
-            if let error = error {
-                print("初期ユーザーデータの作成でエラーが発生しました: \(error.localizedDescription)")
-            } else {
-                print("初期ユーザーデータが作成されました - UserID: \(userId)")
-            }
-        }
+        database.child("users").child(uid).setValue(data)
     }
-    
+
     private func createInitialCharacterData() {
-        let characterData: [String: Any] = [
+        let data: [String:Any] = [
             "id": characterId,
             "name": character.name,
             "personality": character.personality,
             "speakingStyle": character.speakingStyle,
             "iconName": character.iconName,
-            "iconURL": character.iconURL as Any, // この行を追加
+            "iconURL": character.iconURL as Any,
             "backgroundName": character.backgroundName,
+            "backgroundURL": character.backgroundURL as Any,
             "createdAt": Date().timeIntervalSince1970
         ]
-        
-        database.child("characters").child(characterId).setValue(characterData) { error, _ in
-            if let error = error {
-                print("初期キャラクターデータの作成でエラーが発生しました: \(error.localizedDescription)")
-            } else {
-                print("初期キャラクターデータが作成されました - CharacterID: \(self.characterId)")
-            }
+        database.child("characters").child(characterId).setValue(data)
+    }
+
+    // MARK: - Load / Save
+    private func loadUserData() {
+        guard let uid = userId else { return }
+        database.child("users").child(uid).observe(.value) { [weak self] snap in
+            guard let self = self, let dict = snap.value as? [String:Any] else { return }
+            if let level = dict["intimacyLevel"] as? Int { self.character.intimacyLevel = level }
+            if let bday  = dict["birthday"]       as? TimeInterval { self.character.birthday = Date(timeIntervalSince1970: bday) }
+            if let ann   = dict["anniversaryDate"]as? TimeInterval { self.character.anniversaryDate = Date(timeIntervalSince1970: ann) }
+            self.updateAvailableLocations()
         }
     }
 
-    // MARK: - Firebase Data Operations
-    
-    private func loadUserData() {
-        guard let userId = self.userId else { return }
-        
-        database.child("users").child(userId).observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            if let data = snapshot.value as? [String: Any] {
-                DispatchQueue.main.async {
-                    if let intimacyLevel = data["intimacyLevel"] as? Int {
-                        self.character.intimacyLevel = intimacyLevel
-                    }
-                    if let birthdayTimestamp = data["birthday"] as? TimeInterval {
-                        self.character.birthday = Date(timeIntervalSince1970: birthdayTimestamp)
-                    }
-                    if let anniversaryTimestamp = data["anniversaryDate"] as? TimeInterval {
-                        self.character.anniversaryDate = Date(timeIntervalSince1970: anniversaryTimestamp)
-                    }
-                    self.updateAvailableLocations()
-                }
-            }
-        }
-    }
-    
-    // loadCharacterData()メソッドも以下のように修正
     private func loadCharacterData() {
-        database.child("characters").child(characterId).observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            if let data = snapshot.value as? [String: Any] {
-                print("Firebaseからキャラクターデータを読み込み: \(data)")
-                
-                DispatchQueue.main.async {
-                    var hasChanges = false
-                    
-                    if let name = data["name"] as? String, self.character.name != name {
-                        self.character.name = name
-                        hasChanges = true
-                    }
-                    if let personality = data["personality"] as? String, self.character.personality != personality {
-                        self.character.personality = personality
-                        hasChanges = true
-                    }
-                    if let speakingStyle = data["speakingStyle"] as? String, self.character.speakingStyle != speakingStyle {
-                        self.character.speakingStyle = speakingStyle
-                        hasChanges = true
-                    }
-                    if let iconName = data["iconName"] as? String, self.character.iconName != iconName {
-                        self.character.iconName = iconName
-                        hasChanges = true
-                    }
-                    if let iconURL = data["iconURL"] as? String, self.character.iconURL != iconURL {
-                        print("アイコンURLが更新されました: \(iconURL)")
-                        self.character.iconURL = iconURL
-                        hasChanges = true
-                    } else if data["iconURL"] == nil && self.character.iconURL != nil {
-                        print("アイコンURLが削除されました")
-                        self.character.iconURL = nil
-                        hasChanges = true
-                    }
-                    if let backgroundName = data["backgroundName"] as? String, self.character.backgroundName != backgroundName {
-                        self.character.backgroundName = backgroundName
-                        hasChanges = true
-                    }
-                    
-                    // 変更があった場合のみ通知を送信
-                    if hasChanges {
-                        print("キャラクターデータに変更があったため、通知を送信")
-                        self.objectWillChange.send()
-                    }
-                }
-            } else {
-                print("キャラクターデータが見つかりません")
-            }
+        database.child("characters").child(characterId).observe(.value) { [weak self] snap in
+            guard let self = self, let dict = snap.value as? [String:Any] else { return }
+            var changed = false
+
+            if let v = dict["name"]            as? String, v != character.name            { character.name            = v; changed = true }
+            if let v = dict["personality"]     as? String, v != character.personality     { character.personality     = v; changed = true }
+            if let v = dict["speakingStyle"]   as? String, v != character.speakingStyle   { character.speakingStyle   = v; changed = true }
+            if let v = dict["iconName"]        as? String, v != character.iconName        { character.iconName        = v; changed = true }
+            if let v = dict["iconURL"]         as? String, v != character.iconURL         { character.iconURL         = v; changed = true }
+            if let v = dict["backgroundName"]  as? String, v != character.backgroundName  { character.backgroundName  = v; changed = true }
+            if let v = dict["backgroundURL"]   as? String, v != character.backgroundURL   { character.backgroundURL   = v; changed = true }
+
+            if changed { self.objectWillChange.send() }
         }
     }
-    
+
     private func saveUserData() {
-        guard let userId = self.userId else { return }
-        
-        let userData: [String: Any] = [
+        guard let uid = userId else { return }
+        let data: [String:Any] = [
             "intimacyLevel": character.intimacyLevel,
             "birthday": character.birthday?.timeIntervalSince1970 as Any,
             "anniversaryDate": character.anniversaryDate?.timeIntervalSince1970 as Any,
             "lastActiveAt": Date().timeIntervalSince1970
         ]
-        
-        database.child("users").child(userId).updateChildValues(userData) { error, _ in
-            if let error = error {
-                print("ユーザーデータの保存でエラーが発生しました: \(error.localizedDescription)")
-            } else {
-                print("ユーザーデータが正常に保存されました")
-            }
-        }
+        database.child("users").child(uid).updateChildValues(data)
     }
-    
+
     private func saveCharacterData() {
-        let characterData: [String: Any] = [
-            "name": character.name,
-            "personality": character.personality,
-            "speakingStyle": character.speakingStyle,
-            "iconName": character.iconName,
-            "iconURL": character.iconURL as Any, // この行を追加
+        let data: [String:Any] = [
+            "name":           character.name,
+            "personality":    character.personality,
+            "speakingStyle":  character.speakingStyle,
+            "iconName":       character.iconName,
+            "iconURL":        character.iconURL as Any,
             "backgroundName": character.backgroundName,
-            "updatedAt": Date().timeIntervalSince1970
+            "backgroundURL":  character.backgroundURL as Any,
+            "updatedAt":      Date().timeIntervalSince1970
         ]
-        
-        database.child("characters").child(characterId).updateChildValues(characterData) { error, _ in
-            if let error = error {
-                print("キャラクターデータの保存でエラーが発生しました: \(error.localizedDescription)")
-            } else {
-                print("キャラクターデータが正常に保存されました")
-            }
-        }
+        database.child("characters").child(characterId).updateChildValues(data)
     }
     
     private func loadMessages() {
@@ -651,6 +555,12 @@ class RomanceAppViewModel: ObservableObject {
         )
         
         saveMessage(endMessage)
+    }
+    
+    func updateBackgroundURL(_ url: String?) {
+        character.backgroundURL = url
+        saveCharacterData()
+        objectWillChange.send()
     }
     
     private func scheduleTimeBasedEvents() {
