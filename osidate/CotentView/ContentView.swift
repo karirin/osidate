@@ -37,9 +37,6 @@ struct ContentView: View {
         .sheet(isPresented: $viewModel.showingBackgroundSelector) {
             BackgroundSelectorView(viewModel: viewModel)
         }
-        .sheet(isPresented: $viewModel.showingDateView) {
-            DateView(viewModel: viewModel)
-        }
         .sheet(isPresented: $viewModel.showingSettings) {
             SettingsView(viewModel: viewModel)
         }
