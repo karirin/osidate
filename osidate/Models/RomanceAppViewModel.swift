@@ -2,7 +2,7 @@
 //  RomanceAppViewModel.swift
 //  osidate
 //
-//  Updated for Firebase Realtime Database with Firebase Auth
+//  Complete version with Date functionality integration - Fixed dateLocations
 //
 
 import SwiftUI
@@ -22,11 +22,16 @@ class RomanceAppViewModel: ObservableObject {
     @Published var showingDateView            = false
     @Published var showingSettings            = false
     @Published var showingBackgroundSelector  = false
+    @Published var showingDateSelector        = false
 
     @Published var isAuthenticated = false
     @Published var isLoading       = true
 
     @Published var openAIService = OpenAIService()
+
+    // MARK: - Date System Properties
+    @Published var currentDateSession: DateSession? = nil
+    @Published var dateHistory: [CompletedDate] = []
 
     // MARK: - Private Properties
     private let database = Database.database().reference()
@@ -34,12 +39,68 @@ class RomanceAppViewModel: ObservableObject {
     private let characterId: String
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
-    private let dateLocations = [
-        DateLocation(name: "カフェ",   backgroundImage: "cafe",      requiredIntimacy: 0,  description: "落ち着いたカフェでお話しましょう"),
-        DateLocation(name: "公園",     backgroundImage: "park",      requiredIntimacy: 10, description: "緑豊かな公園を一緒に散歩"),
-        DateLocation(name: "映画館",   backgroundImage: "cinema",    requiredIntimacy: 25, description: "映画を一緒に楽しみましょう"),
-        DateLocation(name: "遊園地",   backgroundImage: "amusement", requiredIntimacy: 50, description: "楽しいアトラクションで盛り上がろう"),
-        DateLocation(name: "海辺",     backgroundImage: "beach",     requiredIntimacy: 70, description: "ロマンチックな海辺での特別な時間")
+    // 修正: 新しいDateLocation構造に合わせて更新
+    private let dateLocations: [DateLocation] = [
+        DateLocation(
+            name: "おしゃれなカフェ",
+            type: .restaurant,
+            backgroundImage: "stylish_cafe",
+            requiredIntimacy: 0,
+            description: "落ち着いたカフェでお話しましょう",
+            prompt: "おしゃれなカフェの落ち着いた雰囲気の中で、コーヒーの香りや美味しさについて話したり、日常の話を楽しくしてください。リラックスした会話を心がけてください。",
+            duration: 90,
+            specialEffects: ["coffee_aroma", "cozy_atmosphere"],
+            availableSeasons: [.all],
+            timeOfDay: .anytime
+        ),
+        DateLocation(
+            name: "緑豊かな公園",
+            type: .sightseeing,
+            backgroundImage: "park",
+            requiredIntimacy: 10,
+            description: "緑豊かな公園を一緒に散歩",
+            prompt: "公園の自然豊かな雰囲気の中で、季節の花や緑について話したり、のんびりとした散歩を楽しんでください。穏やかで心地よい会話を心がけてください。",
+            duration: 120,
+            specialEffects: ["natural_breeze", "peaceful_atmosphere"],
+            availableSeasons: [.all],
+            timeOfDay: .anytime
+        ),
+        DateLocation(
+            name: "映画館",
+            type: .entertainment,
+            backgroundImage: "cinema",
+            requiredIntimacy: 25,
+            description: "映画を一緒に楽しみましょう",
+            prompt: "映画館の特別な雰囲気の中で、映画の感想や好きなジャンルについて話してください。一緒に映画を楽しむ時間の特別感を表現してください。",
+            duration: 180,
+            specialEffects: ["dim_lighting", "cinematic_atmosphere"],
+            availableSeasons: [.all],
+            timeOfDay: .anytime
+        ),
+        DateLocation(
+            name: "遊園地",
+            type: .themepark,
+            backgroundImage: "amusement_park",
+            requiredIntimacy: 50,
+            description: "楽しいアトラクションで盛り上がろう",
+            prompt: "遊園地の楽しい雰囲気の中で、元気で明るい会話をしてください。アトラクションの感想や楽しい思い出を話し、ワクワクする気持ちを表現してください。",
+            duration: 300,
+            specialEffects: ["carnival_lights", "excitement"],
+            availableSeasons: [.all],
+            timeOfDay: .anytime
+        ),
+        DateLocation(
+            name: "ロマンチックな海辺",
+            type: .seasonal,
+            backgroundImage: "beach_sunset",
+            requiredIntimacy: 70,
+            description: "ロマンチックな海辺での特別な時間",
+            prompt: "美しい海辺の雰囲気の中で、波の音や海の匂いを感じながらロマンチックな会話をしてください。夕日や海の美しさについて詩的に表現してください。",
+            duration: 150,
+            specialEffects: ["wave_sounds", "romantic_atmosphere", "sunset_glow"],
+            availableSeasons: [.summer],
+            timeOfDay: .evening
+        )
     ]
 
     // MARK: - Init / Deinit
@@ -88,6 +149,7 @@ class RomanceAppViewModel: ObservableObject {
                 self.loadUserData()
                 self.loadCharacterData()
                 self.loadMessages()
+                self.loadDateHistory()
                 self.updateAvailableLocations()
                 self.scheduleTimeBasedEvents()
             } else {
@@ -96,6 +158,8 @@ class RomanceAppViewModel: ObservableObject {
                 self.isLoading       = false
 
                 self.messages.removeAll()
+                self.dateHistory.removeAll()
+                self.currentDateSession = nil
                 self.character.intimacyLevel = 0
                 self.updateAvailableLocations()
 
@@ -287,11 +351,313 @@ class RomanceAppViewModel: ObservableObject {
         // ユーザーIDとキャラクターIDから一意の会話IDを生成
         return "\(userId)_\(characterId)"
     }
+
+    // MARK: - Date System Implementation
+
+    /// デートを開始する
+    func startDate(at location: DateLocation) {
+        guard isAuthenticated else { return }
+        
+        // 現在のデートセッションを作成
+        let session = DateSession(
+            location: location,
+            startTime: Date(),
+            characterName: character.name
+        )
+        
+        currentDateSession = session
+        
+        // 背景を変更
+        if !location.backgroundImage.isEmpty {
+            character.backgroundName = location.backgroundImage
+            updateCharacterSettings()
+        }
+        
+        // デート開始メッセージを送信
+        let startMessage = Message(
+            text: location.getStartMessage(characterName: character.name),
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: location.name
+        )
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.messages.append(startMessage)
+        }
+        
+        saveMessage(startMessage)
+        
+        // 親密度を増加
+        character.intimacyLevel = min(character.intimacyLevel + 3, 100)
+        saveUserData()
+        
+        // デートセッションをFirebaseに保存
+        saveDateSession(session)
+        
+        print("🏖️ デート開始: \(location.name)")
+    }
+    
+    /// デートを終了する
+    func endDate() {
+        guard let session = currentDateSession, isAuthenticated else { return }
+        
+        let endTime = Date()
+        let duration = Int(endTime.timeIntervalSince(session.startTime))
+        
+        // 完了したデートを作成
+        let completedDate = CompletedDate(
+            location: session.location,
+            startTime: session.startTime,
+            endTime: endTime,
+            duration: duration,
+            messagesExchanged: session.messagesExchanged,
+            intimacyGained: session.intimacyGained
+        )
+        
+        // デート履歴に追加
+        dateHistory.append(completedDate)
+        
+        // デート終了メッセージを送信
+        let endMessage = Message(
+            text: session.location.getEndMessage(
+                characterName: character.name,
+                duration: duration
+            ),
+            isFromUser: false,
+            timestamp: endTime,
+            dateLocation: session.location.name
+        )
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.messages.append(endMessage)
+        }
+        
+        saveMessage(endMessage)
+        
+        // 親密度を増加（デート時間に応じて）
+        let intimacyBonus = calculateIntimacyBonus(duration: duration)
+        character.intimacyLevel = min(character.intimacyLevel + intimacyBonus, 100)
+        saveUserData()
+        
+        // 完了したデートをFirebaseに保存
+        saveCompletedDate(completedDate)
+        
+        // デート完了イベントをチェック
+        checkDateCompletionEvents(completedDate)
+        
+        // 現在のセッションをクリア
+        currentDateSession = nil
+        
+        print("🏁 デート終了: \(session.location.name), 時間: \(duration)秒")
+    }
+
+    /// メッセージ送信時のデートセッション更新
+    func updateDateSessionOnMessage(_ message: Message) {
+        guard var session = currentDateSession else { return }
+        
+        session.messagesExchanged += 1
+        
+        if !message.isFromUser {
+            session.intimacyGained += 1
+        }
+        
+        currentDateSession = session
+        saveDateSession(session)
+    }
+
+    /// デート時間に応じた親密度ボーナスを計算
+    private func calculateIntimacyBonus(duration: Int) -> Int {
+        switch duration {
+        case 0..<300: return 1      // 5分未満
+        case 300..<900: return 2    // 5-15分
+        case 900..<1800: return 3   // 15-30分
+        case 1800..<3600: return 4  // 30分-1時間
+        default: return 5           // 1時間以上
+        }
+    }
+
+    /// デートセッションをFirebaseに保存
+    private func saveDateSession(_ session: DateSession) {
+        guard let userId = currentUserID else { return }
+        
+        let sessionData: [String: Any] = [
+            "locationName": session.location.name,
+            "locationType": session.location.type.rawValue,
+            "startTime": session.startTime.timeIntervalSince1970,
+            "messagesExchanged": session.messagesExchanged,
+            "intimacyGained": session.intimacyGained,
+            "characterName": session.characterName
+        ]
+        
+        database.child("dateSessions").child(userId).setValue(sessionData)
+    }
+    
+    /// 完了したデートをFirebaseに保存
+    private func saveCompletedDate(_ completedDate: CompletedDate) {
+        guard let userId = currentUserID else { return }
+        
+        let completedDateData: [String: Any] = [
+            "id": completedDate.id.uuidString,
+            "locationName": completedDate.location.name,
+            "locationType": completedDate.location.type.rawValue,
+            "startTime": completedDate.startTime.timeIntervalSince1970,
+            "endTime": completedDate.endTime.timeIntervalSince1970,
+            "duration": completedDate.duration,
+            "messagesExchanged": completedDate.messagesExchanged,
+            "intimacyGained": completedDate.intimacyGained
+        ]
+        
+        database.child("dateHistory").child(userId).child(completedDate.id.uuidString).setValue(completedDateData)
+    }
+    
+    /// デート履歴を読み込み
+    func loadDateHistory() {
+        guard let userId = currentUserID else { return }
+        
+        database.child("dateHistory").child(userId).observe(.value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            var loadedHistory: [CompletedDate] = []
+            
+            if let historyData = snapshot.value as? [String: [String: Any]] {
+                for (_, dateData) in historyData {
+                    if let completedDate = self.completedDateFromFirebaseData(dateData) {
+                        loadedHistory.append(completedDate)
+                    }
+                }
+                
+                // 日付順にソート（新しい順）
+                loadedHistory.sort { $0.startTime > $1.startTime }
+                
+                DispatchQueue.main.async {
+                    self.dateHistory = loadedHistory
+                }
+            }
+        }
+    }
+    
+    /// FirebaseデータからCompletedDateを作成
+    private func completedDateFromFirebaseData(_ data: [String: Any]) -> CompletedDate? {
+        guard let idString = data["id"] as? String,
+              let id = UUID(uuidString: idString),
+              let locationName = data["locationName"] as? String,
+              let locationTypeString = data["locationType"] as? String,
+              let locationType = DateType(rawValue: locationTypeString),
+              let startTimeInterval = data["startTime"] as? TimeInterval,
+              let endTimeInterval = data["endTime"] as? TimeInterval,
+              let duration = data["duration"] as? Int,
+              let messagesExchanged = data["messagesExchanged"] as? Int,
+              let intimacyGained = data["intimacyGained"] as? Int else {
+            return nil
+        }
+        
+        // ロケーション情報を復元（利用可能なロケーションから検索）
+        let location = DateLocation.availableDateLocations.first {
+            $0.name == locationName && $0.type == locationType
+        } ?? DateLocation.availableDateLocations.first!
+        
+        return CompletedDate(
+            id: id,
+            location: location,
+            startTime: Date(timeIntervalSince1970: startTimeInterval),
+            endTime: Date(timeIntervalSince1970: endTimeInterval),
+            duration: duration,
+            messagesExchanged: messagesExchanged,
+            intimacyGained: intimacyGained
+        )
+    }
+
+    /// ランダムでデート中の特別メッセージを送信
+    private func sendRandomDateMessage(for location: DateLocation) {
+        guard let specialMessage = location.getRandomDateMessage(characterName: character.name) else {
+            return
+        }
+        
+        print("🎲 ランダム特別メッセージ送信: \(specialMessage)")
+        
+        // 少し遅延して送信（自然な感じにするため）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            let specialAIMessage = Message(
+                text: specialMessage,
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: location.name
+            )
+            
+            self?.messages.append(specialAIMessage)
+            self?.saveMessage(specialAIMessage)
+            
+            // デートセッションのメッセージカウントも更新
+            if var session = self?.currentDateSession {
+                session.messagesExchanged += 1
+                self?.currentDateSession = session
+                self?.saveDateSession(session)
+            }
+            
+            print("✨ 特別メッセージ追加完了")
+        }
+    }
+
+    /// デート完了時の特別イベントをチェック
+    func checkDateCompletionEvents(_ completedDate: CompletedDate) {
+        // 長時間デートの実績
+        if completedDate.duration > 3600 { // 1時間以上
+            let achievementMessage = Message(
+                text: "1時間以上も一緒にいてくれて、本当に嬉しいです！💕 こんなに長い時間を共有できるなんて、私たちの関係が深まってきた証拠ですね✨",
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: nil
+            )
+            
+            DispatchQueue.main.async { [weak self] in
+                self?.messages.append(achievementMessage)
+                self?.saveMessage(achievementMessage)
+            }
+        }
+        
+        // 特定のデートタイプ初回完了
+        let sameTypeCompletedDates = dateHistory.filter { $0.location.type == completedDate.location.type }
+        if sameTypeCompletedDates.count == 1 { // 初回
+            let firstTimeMessage = Message(
+                text: "\(completedDate.location.type.displayName)のデート、初めてでしたね！🎉 新しい体験を一緒にできて素敵でした。今度は違う場所も試してみませんか？",
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: nil
+            )
+            
+            DispatchQueue.main.async { [weak self] in
+                self?.messages.append(firstTimeMessage)
+                self?.saveMessage(firstTimeMessage)
+            }
+        }
+        
+        // 親密度マイルストーン達成
+        let previousIntimacy = character.intimacyLevel - completedDate.intimacyGained
+        let milestones = [25, 50, 75, 100]
+        
+        for milestone in milestones {
+            if previousIntimacy < milestone && character.intimacyLevel >= milestone {
+                let milestoneMessage = Message(
+                    text: "親密度が\(milestone)に達しました！🎊 私たちの関係がどんどん深まっていて、とても幸せです。新しいデートスポットも解放されましたよ✨",
+                    isFromUser: false,
+                    timestamp: Date(),
+                    dateLocation: nil
+                )
+                
+                DispatchQueue.main.async { [weak self] in
+                    self?.messages.append(milestoneMessage)
+                    self?.saveMessage(milestoneMessage)
+                }
+                break
+            }
+        }
+    }
     
     // MARK: - Public Methods
     
     func updateAvailableLocations() {
-        availableLocations = dateLocations.filter { $0.requiredIntimacy <= character.intimacyLevel }
+        // 修正: DateLocation.availableDateLocationsを使用するように変更
+        availableLocations = DateLocation.availableLocations(for: character.intimacyLevel)
     }
 
     func sendMessage(_ text: String) {
@@ -302,17 +668,24 @@ class RomanceAppViewModel: ObservableObject {
         print("📊 現在の親密度: \(character.intimacyLevel)")
         print("💬 現在の会話数: \(messages.count)")
         
+        // デート中かどうかをチェック
+        if let dateSession = currentDateSession {
+            print("🏖️ デート中: \(dateSession.location.name)")
+        } else {
+            print("🏠 通常会話")
+        }
+        
         guard isAuthenticated else {
             print("❌ 認証されていません")
             return
         }
         
-        // ユーザーメッセージを追加
+        // ユーザーメッセージを作成
         let userMessage = Message(
             text: text,
             isFromUser: true,
             timestamp: Date(),
-            dateLocation: nil
+            dateLocation: currentDateSession?.location.name
         )
         
         print("✅ ユーザーメッセージ作成: \(userMessage.id)")
@@ -325,20 +698,30 @@ class RomanceAppViewModel: ObservableObject {
         // Firebase に保存
         saveMessage(userMessage)
         
+        // デートセッション中の場合、メッセージカウントを更新
+        if var session = currentDateSession {
+            session.messagesExchanged += 1
+            currentDateSession = session
+            saveDateSession(session)
+            print("🏖️ デートセッション更新 - メッセージ数: \(session.messagesExchanged)")
+        }
+        
         // 親密度を増加
-        character.intimacyLevel = min(character.intimacyLevel + 1, 100)
-        print("📈 親密度更新: \(character.intimacyLevel)")
+        let intimacyIncrease = currentDateSession != nil ? 2 : 1 // デート中は多めに増加
+        character.intimacyLevel = min(character.intimacyLevel + intimacyIncrease, 100)
+        print("📈 親密度更新: \(character.intimacyLevel) (+\(intimacyIncrease))")
         
         // 親密度をFirebaseに保存
         saveUserData()
         
-        // OpenAI Service を使用してAI応答を生成
+        // OpenAI Service を使用してAI応答を生成（デート対応版）
         print("🤖 OpenAI Service に応答生成を依頼...")
         
         openAIService.generateResponse(
             for: text,
             character: character,
-            conversationHistory: messages
+            conversationHistory: messages,
+            currentDateSession: currentDateSession
         ) { [weak self] result in
             DispatchQueue.main.async {
                 print("\n🔄 AI応答受信処理開始")
@@ -352,7 +735,7 @@ class RomanceAppViewModel: ObservableObject {
                         text: aiResponse,
                         isFromUser: false,
                         timestamp: Date(),
-                        dateLocation: nil
+                        dateLocation: self?.currentDateSession?.location.name
                     )
                     
                     print("✅ AIメッセージ作成: \(aiMessage.id)")
@@ -364,6 +747,24 @@ class RomanceAppViewModel: ObservableObject {
                     // Firebase に保存
                     self?.saveMessage(aiMessage)
                     
+                    // デートセッション中の場合、親密度ボーナスを追加
+                    if var session = self?.currentDateSession {
+                        session.intimacyGained += 1
+                        self?.currentDateSession = session
+                        self?.saveDateSession(session)
+                        
+                        // デート中の親密度ボーナス
+                        self?.character.intimacyLevel = min((self?.character.intimacyLevel ?? 0) + 1, 100)
+                        self?.saveUserData()
+                        print("🏖️ デート中親密度ボーナス: +1")
+                    }
+                    
+                    // ランダムでデート中の特別メッセージを追加する可能性
+                    if let dateSession = self?.currentDateSession,
+                       Int.random(in: 1...10) == 1 { // 10%の確率
+                        self?.sendRandomDateMessage(for: dateSession.location)
+                    }
+                    
                 case .failure(let error):
                     print("❌ AI応答エラー: \(error.localizedDescription)")
                     
@@ -372,7 +773,7 @@ class RomanceAppViewModel: ObservableObject {
                         text: "申し訳ありません。現在応答できません。設定でAPIキーを確認してください。エラー: \(error.localizedDescription)",
                         isFromUser: false,
                         timestamp: Date(),
-                        dateLocation: nil
+                        dateLocation: self?.currentDateSession?.location.name
                     )
                     
                     self?.messages.append(errorMessage)
@@ -414,12 +815,21 @@ class RomanceAppViewModel: ObservableObject {
         print("💬 メッセージ数: \(messages.count)")
         print("🔑 OpenAI API状態: \(openAIService.hasValidAPIKey ? "✅ 設定済み" : "❌ 未設定")")
         
+        if let dateSession = currentDateSession {
+            print("🏖️ デート中: \(dateSession.location.name)")
+            print("⏰ デート時間: \(Int(Date().timeIntervalSince(dateSession.startTime)) / 60)分")
+            print("💬 デート中メッセージ: \(dateSession.messagesExchanged)回")
+        }
+        
+        print("📈 デート履歴: \(dateHistory.count)回")
+        
         if messages.count > 0 {
             print("📝 最新のメッセージ:")
             for (index, message) in messages.suffix(3).enumerated() {
                 let sender = message.isFromUser ? "👤 ユーザー" : "🤖 AI"
                 let time = DateFormatter.localizedString(from: message.timestamp, dateStyle: .none, timeStyle: .short)
-                print("   \(index + 1). [\(time)] \(sender): \(message.text.prefix(50))...")
+                let location = message.dateLocation != nil ? " 📍\(message.dateLocation!)" : ""
+                print("   \(index + 1). [\(time)]\(location) \(sender): \(message.text.prefix(50))...")
             }
         }
         print("==================== 状態確認完了 ====================\n")
@@ -444,7 +854,8 @@ class RomanceAppViewModel: ObservableObject {
         openAIService.generateResponse(
             for: testMessage,
             character: character,
-            conversationHistory: []
+            conversationHistory: [],
+            currentDateSession: currentDateSession
         ) { result in
             switch result {
             case .success(let response):
@@ -478,83 +889,6 @@ class RomanceAppViewModel: ObservableObject {
             self?.objectWillChange.send()
             print("RomanceAppViewModel: アイコン強制リフレッシュ")
         }
-    }
-    
-    private func generateAIResponse(to input: String) -> String {
-        // キーワードベースの応答
-        let inputLower = input.lowercased()
-        
-        if inputLower.contains("おはよう") || inputLower.contains("朝") {
-            return "おはようございます！\(character.name)も今日という新しい日を一緒に過ごせて嬉しいです🌅"
-        } else if inputLower.contains("こんにちは") {
-            return "こんにちは！お疲れ様です。あなたと話せて幸せです☀️"
-        } else if inputLower.contains("こんばんは") || inputLower.contains("夜") {
-            return "こんばんは！今日はどんな一日でしたか？一緒にお話ししましょう🌙"
-        } else if inputLower.contains("好き") || inputLower.contains("愛") {
-            return "私もあなたのことが大好きです💕一緒にいる時間が一番幸せです✨"
-        } else if inputLower.contains("疲れ") || inputLower.contains("つらい") {
-            return "お疲れ様です。少し休んでくださいね。私がそばにいますから大丈夫ですよ😊"
-        } else if inputLower.contains("楽しい") || inputLower.contains("嬉しい") {
-            return "私も同じ気持ちです！あなたの笑顔を見ているととても幸せになります😄"
-        }
-        
-        // 親密度に応じた応答
-        if character.intimacyLevel < 20 {
-            let responses = [
-                "もっとあなたのことを知りたいです！",
-                "一緒にお話しできて楽しいです😊",
-                "あなたはどんなことが好きですか？"
-            ]
-            return responses.randomElement() ?? "ありがとうございます💕"
-        } else if character.intimacyLevel < 50 {
-            let responses = [
-                "あなたと話していると、とても楽しい気持ちになります😊",
-                "今度はどこかにお出かけしませんか？",
-                "あなたの考えていることをもっと聞かせてください"
-            ]
-            return responses.randomElement() ?? "素敵ですね✨"
-        } else {
-            let responses = [
-                "一緒にいる時間が一番幸せです✨",
-                "あなたといると心が穏やかになります💕",
-                "ずっと一緒にいたいです",
-                "あなたは私にとって特別な存在です"
-            ]
-            return responses.randomElement() ?? "愛しています💖"
-        }
-    }
-    
-    func startDate(at location: DateLocation) {
-        guard isAuthenticated else { return }
-        
-        currentDateLocation = location
-        character.intimacyLevel += 5
-        updateAvailableLocations()
-        saveUserData()
-        
-        let dateMessage = Message(
-            text: "\(location.name)でのデートが始まりました！\(location.description)",
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: location.name
-        )
-        
-        saveMessage(dateMessage)
-    }
-    
-    func endDate() {
-        guard let location = currentDateLocation, isAuthenticated else { return }
-        
-        currentDateLocation = nil
-        
-        let endMessage = Message(
-            text: "\(location.name)でのデート、素敵な時間をありがとうございました！また一緒に過ごしましょうね💕",
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: nil
-        )
-        
-        saveMessage(endMessage)
     }
     
     func updateBackgroundURL(_ url: String?) {
@@ -600,6 +934,31 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Date Statistics
+    
+    /// デート統計を取得
+    func getDateStatistics() -> DateStatistics {
+        return DateStatistics(completedDates: dateHistory)
+    }
+    
+    /// 最も多く行ったデートタイプ
+    var mostPopularDateType: DateType? {
+        let typeCount = Dictionary(grouping: dateHistory, by: { $0.location.type })
+            .mapValues { $0.count }
+        return typeCount.max(by: { $0.value < $1.value })?.key
+    }
+    
+    /// 総デート時間
+    var totalDateTime: Int {
+        return dateHistory.reduce(0) { $0 + $1.duration }
+    }
+    
+    /// 平均デート時間
+    var averageDateDuration: Int {
+        guard !dateHistory.isEmpty else { return 0 }
+        return totalDateTime / dateHistory.count
+    }
+    
     // MARK: - データ削除（テスト用）
     func clearAllData() {
         guard let userId = self.userId,
@@ -623,12 +982,18 @@ class RomanceAppViewModel: ObservableObject {
                 }
             }
         
+        // デート履歴削除
+        database.child("dateHistory").child(userId).removeValue()
+        database.child("dateSessions").child(userId).removeValue()
+        
         // UserDefaultsからキャラクターIDを削除
         UserDefaults.standard.removeObject(forKey: "characterId")
         UserDefaults.standard.synchronize()
         
         DispatchQueue.main.async {
             self.messages.removeAll()
+            self.dateHistory.removeAll()
+            self.currentDateSession = nil
             self.character.intimacyLevel = 0
             self.updateAvailableLocations()
         }
@@ -699,5 +1064,215 @@ class RomanceAppViewModel: ObservableObject {
     
     var isAnonymousUser: Bool {
         return Auth.auth().currentUser?.isAnonymous ?? false
+    }
+}
+
+// MARK: - Date Session Model
+
+struct DateSession {
+    let location: DateLocation
+    let startTime: Date
+    var messagesExchanged: Int = 0
+    var intimacyGained: Int = 0
+    let characterName: String
+}
+
+// MARK: - Completed Date Model
+
+struct CompletedDate: Identifiable, Codable {
+    let id: UUID
+    let location: DateLocation
+    let startTime: Date
+    let endTime: Date
+    let duration: Int // 秒
+    let messagesExchanged: Int
+    let intimacyGained: Int
+    
+    init(location: DateLocation, startTime: Date, endTime: Date, duration: Int, messagesExchanged: Int, intimacyGained: Int) {
+        self.id = UUID()
+        self.location = location
+        self.startTime = startTime
+        self.endTime = endTime
+        self.duration = duration
+        self.messagesExchanged = messagesExchanged
+        self.intimacyGained = intimacyGained
+    }
+    
+    init(id: UUID, location: DateLocation, startTime: Date, endTime: Date, duration: Int, messagesExchanged: Int, intimacyGained: Int) {
+        self.id = id
+        self.location = location
+        self.startTime = startTime
+        self.endTime = endTime
+        self.duration = duration
+        self.messagesExchanged = messagesExchanged
+        self.intimacyGained = intimacyGained
+    }
+    
+    var durationFormatted: String {
+        let hours = duration / 3600
+        let minutes = (duration % 3600) / 60
+        
+        if hours > 0 {
+            return "\(hours)時間\(minutes)分"
+        } else {
+            return "\(minutes)分"
+        }
+    }
+}
+
+// MARK: - Date Statistics
+
+struct DateStatistics {
+    let totalDates: Int
+    let totalDuration: Int
+    let averageDuration: Int
+    let mostPopularType: DateType?
+    let dateTypeDistribution: [DateType: Int]
+    let longestDate: CompletedDate?
+    let recentDates: [CompletedDate]
+    
+    init(completedDates: [CompletedDate]) {
+        self.totalDates = completedDates.count
+        self.totalDuration = completedDates.reduce(0) { $0 + $1.duration }
+        self.averageDuration = totalDates > 0 ? totalDuration / totalDates : 0
+        
+        self.dateTypeDistribution = Dictionary(grouping: completedDates, by: { $0.location.type })
+            .mapValues { $0.count }
+        
+        self.mostPopularType = dateTypeDistribution.max(by: { $0.value < $1.value })?.key
+        
+        self.longestDate = completedDates.max(by: { $0.duration < $1.duration })
+        
+        self.recentDates = Array(completedDates.sorted(by: { $0.startTime > $1.startTime }).prefix(5))
+    }
+    
+    var totalDurationFormatted: String {
+        let hours = totalDuration / 3600
+        let minutes = (totalDuration % 3600) / 60
+        
+        if hours > 0 {
+            return "\(hours)時間\(minutes)分"
+        } else {
+            return "\(minutes)分"
+        }
+    }
+    
+    var averageDurationFormatted: String {
+        let hours = averageDuration / 3600
+        let minutes = (averageDuration % 3600) / 60
+        
+        if hours > 0 {
+            return "\(hours)時間\(minutes)分"
+        } else {
+            return "\(minutes)分"
+        }
+    }
+}
+
+// MARK: - DateLocation Extensions
+
+extension DateLocation {
+    
+    /// デート開始メッセージを取得
+    func getStartMessage(characterName: String) -> String {
+        let baseMessage = "\(name)でのデートが始まりました！"
+        
+        switch type {
+        case .seasonal:
+            return "\(baseMessage) \(description) 🌸 素敵な時間を過ごしましょうね！"
+        case .themepark:
+            return "\(baseMessage) わくわくしますね！\(description) 🎢"
+        case .restaurant:
+            return "\(baseMessage) \(description) ☕️ ゆっくりお話ししましょう"
+        case .entertainment:
+            return "\(baseMessage) \(description) 🎬 一緒に楽しみましょうね！"
+        case .sightseeing:
+            return "\(baseMessage) \(description) 📸 たくさん思い出を作りましょう！"
+        case .shopping:
+            return "\(baseMessage) \(description) 🛍️ お買い物、楽しみです！"
+        case .home:
+            return "\(baseMessage) \(description) 🏠 リラックスした時間を過ごしましょう"
+        case .nightview:
+            return "\(baseMessage) \(description) 🌃 ロマンチックですね✨"
+        case .travel:
+            return "\(baseMessage) \(description) ✈️ 特別な旅行の始まりです！"
+        case .surprise:
+            return "\(baseMessage) 今日は特別なサプライズがあるかも...！🎁"
+        }
+    }
+    
+    /// デート終了メッセージを取得
+    func getEndMessage(characterName: String, duration: Int) -> String {
+        let durationMinutes = duration / 60
+        let baseMessage: String
+        
+        if durationMinutes < 10 {
+            baseMessage = "短い時間でしたが"
+        } else if durationMinutes < 30 {
+            baseMessage = "素敵な時間を"
+        } else if durationMinutes < 60 {
+            baseMessage = "充実した時間を"
+        } else {
+            baseMessage = "長い時間を一緒に"
+        }
+        
+        switch type {
+        case .seasonal:
+            return "\(name)での\(baseMessage)過ごせて幸せでした 🌸 また季節を一緒に感じましょうね！"
+        case .themepark:
+            return "\(name)での\(baseMessage)過ごせて楽しかったです！🎢 また一緒に遊びに来ましょう！"
+        case .restaurant:
+            return "\(name)での\(baseMessage)過ごせて嬉しかったです ☕️ 美味しい時間をありがとう！"
+        case .entertainment:
+            return "\(name)での\(baseMessage)過ごせて素敵でした 🎬 また一緒に楽しみましょうね！"
+        case .sightseeing:
+            return "\(name)での\(baseMessage)過ごせて最高でした！📸 たくさん思い出ができましたね！"
+        case .shopping:
+            return "\(name)での\(baseMessage)過ごせて楽しかったです 🛍️ お買い物、また一緒にしましょう！"
+        case .home:
+            return "\(name)での\(baseMessage)過ごせて心地よかったです 🏠 お家デート、また楽しみましょうね！"
+        case .nightview:
+            return "\(name)での\(baseMessage)過ごせてロマンチックでした 🌃 美しい夜景をありがとう✨"
+        case .travel:
+            return "\(name)での\(baseMessage)過ごせて最高の旅でした！✈️ また素敵な場所に行きましょう！"
+        case .surprise:
+            return "\(name)での\(baseMessage)過ごせて特別でした 🎁 サプライズは楽しんでもらえましたか？"
+        }
+    }
+    
+    /// デート中の特別なメッセージを取得（ランダム）
+    func getRandomDateMessage(characterName: String) -> String? {
+        let messages: [String]
+        
+        switch type {
+        case .seasonal:
+            messages = [
+                "この季節の美しさ、一緒に感じられて嬉しいです 🌸",
+                "季節の移ろいを感じながら、あなたと過ごす時間が大好きです",
+                "この時期だからこその特別感がありますね ✨"
+            ]
+        case .themepark:
+            messages = [
+                "このアトラクション、ちょっと怖いけど一緒だから大丈夫！🎢",
+                "次はどこに行きましょうか？選んでください！",
+                "こんなに楽しい時間、久しぶりです！"
+            ]
+        case .restaurant:
+            messages = [
+                "このコーヒー、とても美味しいですね ☕️",
+                "ゆっくりお話しできて嬉しいです",
+                "この雰囲気、とても居心地がいいですね"
+            ]
+        case .nightview:
+            messages = [
+                "この夜景、本当に綺麗ですね... 🌃",
+                "あなたと見る景色は、いつも特別に見えます ✨",
+                "ロマンチックな時間をありがとう 💕"
+            ]
+        default:
+            return nil
+        }
+        
+        return messages.randomElement()
     }
 }

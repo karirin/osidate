@@ -124,10 +124,10 @@ struct Message: Identifiable, Codable {
     }
 }
 
-struct DateLocation: Identifiable {
-    let id = UUID()
-    let name: String
-    let backgroundImage: String
-    let requiredIntimacy: Int
-    let description: String
-}
+//struct DateLocation: Identifiable {
+//    let id = UUID()
+//    let name: String
+//    let backgroundImage: String
+//    let requiredIntimacy: Int
+//    let description: String
+//}

@@ -1,8 +1,8 @@
 //
-//  ContentView.swift
+//  ContentView.swift - 背景画像修正版
 //  osidate
 //
-//  Updated with Firebase Auth integration
+//  Fixed background image layout issues
 //
 
 import SwiftUI
@@ -39,6 +39,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $viewModel.showingSettings) {
             SettingsView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $viewModel.showingDateSelector) {
+            DateSelectorView(viewModel: viewModel)
         }
     }
     
@@ -131,41 +134,81 @@ struct ContentView: View {
     // MARK: - Main App View
     private func MainAppView() -> some View {
         NavigationView {
-            ZStack {
-                Group {
-                    if let urlStr = viewModel.character.backgroundURL,
-                       let url = URL(string: urlStr) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image): image.resizable()
-                            default: Image(viewModel.character.backgroundName).resizable()
-                            }
-                        }
-                    } else {
-                        Image(viewModel.character.backgroundName).resizable()
-                    }
-                }
-                .ignoresSafeArea()
-                .opacity(0.8)
-                
-                VStack {
-                    // Header
-                    headerView
+            GeometryReader { geometry in
+                ZStack {
+                    // 修正された背景画像
+                    backgroundView(geometry: geometry)
                     
-                    floatingIconView
-                    ZStack {
+                    VStack(spacing: 0) {
+                        // Header
+                        headerView
+                        
+                        // デート状況表示（デート中の場合）
+                        if viewModel.currentDateSession != nil {
+                            dateStatusView
+                        }
+                        
+                        // Floating Icon
+                        floatingIconView
+                        
                         // Chat Area
                         chatView
+                        
+                        // Input Area
+                        inputView
+                        
+                        // Bottom Buttons（デート中でない場合のみ表示）
+                        if viewModel.currentDateSession == nil {
+                            bottomButtonsView
+                        }
                     }
-                    
-                    // Input Area
-                    inputView
-                    
-                    // Bottom Buttons
-//                    bottomButtonsView
                 }
             }
+            .clipped() // 画面外への表示を防ぐ
         }
+        .navigationViewStyle(StackNavigationViewStyle()) // iPadでの表示問題を防ぐ
+    }
+    
+    // MARK: - Fixed Background View
+    private func backgroundView(geometry: GeometryProxy) -> some View {
+        Group {
+            if let urlStr = viewModel.character.backgroundURL,
+               let url = URL(string: urlStr) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .edgesIgnoringSafeArea(.all)
+//                            .aspectRatio(contentMode: .fill)
+//                            .frame(
+//                                width: geometry.size.width,
+//                                height: geometry.size.height
+//                            )
+//                            .clipped() // 画面外への表示を防ぐ
+                    default:
+                        defaultBackgroundImage(geometry: geometry)
+                    }
+                }
+            } else {
+                defaultBackgroundImage(geometry: geometry)
+            }
+        }
+        .ignoresSafeArea()
+        .opacity(0.8)
+        .animation(.easeInOut(duration: 0.5), value: viewModel.character.backgroundName)
+    }
+    
+    // デフォルト背景画像
+    private func defaultBackgroundImage(geometry: GeometryProxy) -> some View {
+        Image(viewModel.character.backgroundName)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(
+                width: geometry.size.width,
+                height: geometry.size.height
+            )
+            .clipped() // 画面外への表示を防ぐ
     }
     
     private var headerView: some View {
@@ -187,7 +230,7 @@ struct ContentView: View {
                     }
                 }
                 
-                // プログレスバーを修正
+                // プログレスバー
                 VStack(alignment: .leading, spacing: 2) {
                     HStack {
                         Text("親密度")
@@ -200,12 +243,10 @@ struct ContentView: View {
                     }
                     
                     ZStack(alignment: .leading) {
-                        // 背景バー
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.gray.opacity(0.3))
                             .frame(width: 150, height: 4)
                         
-                        // プログレスバー
                         RoundedRectangle(cornerRadius: 2)
                             .fill(intimacyColor)
                             .frame(width: 150 * CGFloat(viewModel.character.intimacyLevel) / 100, height: 4)
@@ -216,23 +257,28 @@ struct ContentView: View {
             
             Spacer()
             
-            Button(action: { viewModel.showingSettings = true }) {
-                Image(systemName: "gearshape")
-                    .font(.title2)
-                    .foregroundColor(.blue)
-            }
-            
-            Button(action: { viewModel.showingBackgroundSelector = true }) {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.title2)
-                    .foregroundColor(.blue)
+            HStack(spacing: 12) {
+                Button(action: { viewModel.showingSettings = true }) {
+                    Image(systemName: "gearshape")
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                }
+                
+                Button(action: { viewModel.showingBackgroundSelector = true }) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                }
             }
         }
         .padding()
-        .background(Color.white.opacity(0.5))
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.horizontal)
+        .padding(.top, 8)
     }
 
-    // 親密度の色を決定するプロパティを追加
+    // 親密度の色を決定するプロパティ
     private var intimacyColor: Color {
         switch viewModel.character.intimacyLevel {
         case 0...10: return .gray
@@ -243,10 +289,58 @@ struct ContentView: View {
         }
     }
     
+    // MARK: - Date Status View
+    private var dateStatusView: some View {
+        Group {
+            if let session = viewModel.currentDateSession {
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: session.location.type.icon)
+                            .foregroundColor(session.location.type.color)
+                        
+                        Text("\(session.location.name)でデート中")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        
+                        Spacer()
+                        
+                        Button("終了") {
+                            viewModel.endDate()
+                        }
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.1))
+                        .cornerRadius(12)
+                    }
+                    
+                    HStack {
+                        Text("開始時刻: \(DateFormatter.localizedString(from: session.startTime, dateStyle: .none, timeStyle: .short))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        Text("メッセージ: \(session.messagesExchanged)回")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding()
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .padding(.horizontal)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.currentDateSession != nil)
+    }
+    
     private var floatingIconView: some View {
-        CharacterIconView(character: viewModel.character, size: 150)
-            .id(viewModel.character.iconURL ?? "default")   // ← ★これを追加
-            .padding(.top)
+        CharacterIconView(character: viewModel.character, size: 120) // サイズを少し小さくして画面におさまりやすく
+            .id(viewModel.character.iconURL ?? "default")
+            .padding(.vertical, 10)
             .offset(y: iconOffset)
     }
     
@@ -257,19 +351,18 @@ struct ContentView: View {
                     ForEach(viewModel.messages) { message in
                         MessageBubbleEnhanced(message: message)
                             .id(message.id)
+                            .padding(.horizontal) // メッセージに適切なパディングを追加
                     }
                 }
-                .padding()
+                .padding(.vertical)
             }
             .onChange(of: viewModel.messages.count) { _ in
-                // Auto scroll to latest message
                 if let lastMessage = viewModel.messages.last {
                     withAnimation(.easeInOut(duration: 0.5)) {
                         proxy.scrollTo(lastMessage.id, anchor: .bottom)
                     }
                 }
                 
-                // Show floating icon for new AI messages
                 if let lastMessage = viewModel.messages.last, !lastMessage.isFromUser {
                     triggerFloatingIcon()
                 }
@@ -280,7 +373,6 @@ struct ContentView: View {
     private var inputView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                // メッセージ入力フィールド
                 HStack(spacing: 8) {
                     TextField("", text: $messageText, prompt: Text("メッセージを入力...").foregroundColor(.gray.opacity(0.6)))
                         .textFieldStyle(PlainTextFieldStyle())
@@ -292,7 +384,6 @@ struct ContentView: View {
                             sendMessage()
                         }
                     
-                    // 文字数カウンター（長いメッセージの場合のみ表示）
                     if messageText.count > 50 {
                         Text("\(messageText.count)")
                             .font(.caption2)
@@ -304,7 +395,7 @@ struct ContentView: View {
                 .padding(.vertical, 12)
                 .background(
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(Color(.systemGray6))
+                        .fill(.ultraThinMaterial)
                         .overlay(
                             RoundedRectangle(cornerRadius: 24)
                                 .stroke(isInputFocused ? Color.gray.opacity(0.5) : Color.clear, lineWidth: 1)
@@ -312,7 +403,6 @@ struct ContentView: View {
                         )
                 )
                 
-                // 送信ボタン
                 Button(action: sendMessage) {
                     ZStack {
                         Circle()
@@ -323,7 +413,7 @@ struct ContentView: View {
                             )
                             .frame(width: 44, height: 44)
                         
-                        Image(systemName: messageText.isEmpty ? "arrow.up" : "arrow.up")
+                        Image(systemName: "arrow.up")
                             .font(.system(size: 20, weight: .semibold))
                             .foregroundColor(.white)
                             .rotationEffect(.degrees(pulseAnimation ? 5 : 0))
@@ -337,60 +427,55 @@ struct ContentView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-//            .background(
-//                // グラスモーフィズム効果
-//                Rectangle()
-//                    .fill(.ultraThinMaterial)
-//                    .overlay(
-//                        LinearGradient(
-//                            gradient: Gradient(colors: [
-//                                Color.white.opacity(0.1),
-//                                Color.clear
-//                            ]),
-//                            startPoint: .top,
-//                            endPoint: .bottom
-//                        )
-//                    )
-//            )
+            .background(.ultraThinMaterial)
         }
-//        .background(
-//            // 背景のぼかし効果
-//            Rectangle()
-//                .fill(.ultraThinMaterial)
-//                .ignoresSafeArea(.container, edges: .bottom)
-//        )
     }
     
     private var bottomButtonsView: some View {
-        HStack {
+        HStack(spacing: 16) {
             Button("デート") {
-                viewModel.showingDateView = true
+                viewModel.showingDateSelector = true
             }
-            .padding()
-            .background(viewModel.isAuthenticated ? Color.pink : Color.gray)
+            .font(.headline)
+            .fontWeight(.semibold)
             .foregroundColor(.white)
-            .cornerRadius(10)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                LinearGradient(
+                    colors: [Color.pink, Color.pink.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(12)
             .disabled(!viewModel.isAuthenticated)
-            
-            Spacer()
+            .opacity(viewModel.isAuthenticated ? 1.0 : 0.6)
+            .shadow(color: Color.pink.opacity(0.3), radius: 8, x: 0, y: 4)
         }
-        .padding()
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial)
     }
     
     private func sendMessage() {
         guard !messageText.isEmpty else { return }
         
+        // デートセッションがある場合、メッセージカウントを更新
+        if let message = viewModel.messages.last, viewModel.currentDateSession != nil {
+            viewModel.updateDateSessionOnMessage(message)
+        }
+        
         viewModel.sendMessage(messageText)
         messageText = ""
         
-        // Trigger pulse animation
         triggerPulseAnimation()
     }
     
     private func triggerPulseAnimation() {
         pulseAnimation = true
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             pulseAnimation = false
         }
     }
@@ -398,7 +483,6 @@ struct ContentView: View {
     private func triggerFloatingIcon() {
         showFloatingIcon = true
         
-        // Hide floating icon after 3 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation(.easeOut(duration: 0.5)) {
                 showFloatingIcon = false
@@ -423,40 +507,44 @@ struct MessageBubbleEnhanced: View {
                         .cornerRadius(15)
                     
                     HStack {
+                        // デート場所の表示
+                        if let location = message.dateLocation {
+                            Text("📍 \(location)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                        
                         Text(timeString(from: message.timestamp))
                             .font(.caption2)
                             .foregroundColor(.gray)
                         
-                        // Read receipt (double check mark)
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
                             .foregroundColor(.blue)
                     }
-                    
-                    if let location = message.dateLocation {
-                        Text("📍 \(location)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
                 }
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .trailing) // 最大幅を制限
             } else {
                 VStack(alignment: .leading) {
                     Text(message.text)
                         .padding()
-                        .background(Color.white)
+                        .background(.ultraThinMaterial)
                         .cornerRadius(15)
                         .shadow(radius: 1)
                     
-                    Text(timeString(from: message.timestamp))
-                        .font(.caption2)
-                        .foregroundColor(.gray)
-                    
-                    if let location = message.dateLocation {
-                        Text("📍 \(location)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    HStack {
+                        Text(timeString(from: message.timestamp))
+                            .font(.caption2)
+                            .foregroundColor(.gray)
+                        
+                        if let location = message.dateLocation {
+                            Text("📍 \(location)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .leading) // 最大幅を制限
                 Spacer()
             }
         }
