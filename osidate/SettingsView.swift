@@ -38,6 +38,7 @@ struct SettingsView: View {
                     
                     // Main settings sections
                     VStack(spacing: 16) {
+                        appearanceSettingsSection
                         characterSettingsSection
                         anniversarySettingsSection
                     }
@@ -46,18 +47,21 @@ struct SettingsView: View {
                 }
             }
             .background(Color(.systemGroupedBackground))
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
+//            .toolbar {
+//                ToolbarItem(placement: .navigationBarTrailing) {
+//                    Button {
+//                        dismiss()
+//                    } label: {
+//                        Image(systemName: "xmark.circle.fill")
+//                            .font(.title2)
+//                            .foregroundStyle(.secondary)
+//                    }
+//                }
+//            }
             .setupAlerts()
+            .sheet(isPresented: $viewModel.showingBackgroundSelector) {
+                BackgroundSelectorView(viewModel: viewModel)
+            }
             .sheet(isPresented: $showingImagePicker) {
                 ImagePickerView { pickedImage in
                     self.selectedImageForCropping = pickedImage
@@ -202,6 +206,129 @@ struct SettingsView: View {
         }
         .padding(.top, 20)
         .padding(.bottom, 8)
+    }
+    
+    private var hasCustomBackground: Bool {
+        return viewModel.character.backgroundURL != nil && !viewModel.character.backgroundURL!.isEmpty
+    }
+    
+    private var appearanceSettingsSection: some View {
+        ModernSectionView(title: "外観設定", icon: "paintbrush.pointed") {
+            VStack(spacing: 16) {
+                // Character icon editor
+                ModernSettingRow(
+                    icon: "person.crop.circle.badge.camera",
+                    title: "アイコン設定",
+                    subtitle: characterIcon != nil ? "カスタムアイコンが設定されています" : "デフォルトアイコンを使用中"
+                ) {
+                    Button {
+                        generateHapticFeedback()
+                        showingImagePicker = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            if imageManager.isUploading {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("アップロード中...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Image(systemName: "camera.fill")
+                                    .foregroundColor(.blue)
+                                Text("編集")
+                                    .foregroundColor(.blue)
+                                    .fontWeight(.medium)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.blue.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .disabled(imageManager.isUploading)
+                }
+                
+                Divider()
+                
+                // Background editor
+                ModernSettingRow(
+                    icon: "photo.on.rectangle.angled",
+                    title: "背景設定",
+                    subtitle: hasCustomBackground ? "カスタム背景が設定されています" : "プリセット背景を使用中"
+                ) {
+                    Button {
+                        generateHapticFeedback()
+                        viewModel.showingBackgroundSelector = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "paintbrush.pointed.fill")
+                                .foregroundColor(.purple)
+                            Text("編集")
+                                .foregroundColor(.purple)
+                                .fontWeight(.medium)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(.purple.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                }
+                
+                // Show current background preview if custom background is set
+                if hasCustomBackground {
+                    Divider()
+                    
+                    HStack {
+                        Image(systemName: "photo")
+                            .foregroundColor(.secondary)
+                            .frame(width: 24)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("現在の背景")
+                                .font(.subheadline)
+                                .foregroundColor(.primary)
+                            Text("カスタム画像を使用")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        // Small background preview
+                        Group {
+                            if let backgroundURL = viewModel.character.backgroundURL,
+                               let url = URL(string: backgroundURL) {
+                                AsyncImage(url: url) { image in
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .overlay(
+                                            ProgressView()
+                                                .scaleEffect(0.6)
+                                        )
+                                }
+                            } else {
+                                Image(viewModel.character.backgroundName)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            }
+                        }
+                        .frame(width: 60, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color(.systemGray4), lineWidth: 1)
+                        )
+                    }
+                }
+            }
+        }
     }
     
     // MARK: - Character Settings

@@ -17,7 +17,8 @@ struct osidateApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ContentView(viewModel: RomanceAppViewModel())
+            TopView()
+//            ContentView(viewModel: RomanceAppViewModel())
         }
     }
 }

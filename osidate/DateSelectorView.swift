@@ -98,14 +98,6 @@ struct DateSelectorView: View {
             }
             .navigationTitle("デートを選ぶ")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("キャンセル") {
-                        dismiss()
-                    }
-                    .foregroundColor(primaryColor)
-                }
-            }
             .sheet(isPresented: $showingDateDetail) {
                 if let location = selectedLocation {
                     DateDetailView(

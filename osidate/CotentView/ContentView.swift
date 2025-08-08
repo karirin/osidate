@@ -1,8 +1,8 @@
 //
-//  ContentView.swift - 背景画像修正版
+//  ContentView.swift - Modern UI Design
 //  osidate
 //
-//  Fixed background image layout issues
+//  Enhanced with modern design patterns and improved UX
 //
 
 import SwiftUI
@@ -13,17 +13,26 @@ struct ContentView: View {
     @State private var pulseAnimation = false
     @State private var messageText = ""
     @State private var iconOffset: CGFloat = 0
+    @State private var keyboardHeight: CGFloat = 0
+    @State private var backgroundBlur: CGFloat = 0
+    @State private var headerOpacity: Double = 1.0
     @FocusState private var isInputFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    
+    // Design Constants
+    private let cardCornerRadius: CGFloat = 20
+    private let primaryColor = Color(.systemBlue)
+    private let accentColor = Color(.systemPurple)
     
     var body: some View {
-        ZStack{
+        ZStack {
             Group {
                 if viewModel.isLoading {
-                    LoadingView()
+                    ModernLoadingView()
                 } else if viewModel.isAuthenticated {
                     MainAppView()
                 } else {
-                    AuthenticationView()
+                    ModernAuthenticationView()
                 }
             }
         }
@@ -43,92 +52,237 @@ struct ContentView: View {
         .sheet(isPresented: $viewModel.showingDateSelector) {
             DateSelectorView(viewModel: viewModel)
         }
-    }
-    
-    // MARK: - Loading View
-    private func LoadingView() -> some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-            
-            Text("アプリを初期化中...")
-                .font(.headline)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemBackground))
-    }
-    
-    // MARK: - Authentication View
-    private func AuthenticationView() -> some View {
-        VStack(spacing: 30) {
-            VStack(spacing: 10) {
-                Image(systemName: "heart.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.pink)
-                
-                Text("おかえりなさい")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
-                
-                Text("あなたの特別なパートナーが待っています")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            
-            VStack(spacing: 15) {
-                Button(action: {
-                    viewModel.signInAnonymously()
-                }) {
-                    HStack {
-                        Image(systemName: "person.circle")
-                        Text("ゲストとして始める")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(10)
-                }
-                .disabled(viewModel.isLoading)
-                
-                if viewModel.isLoading {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("認証中...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    keyboardHeight = keyboardFrame.cgRectValue.height
+                    backgroundBlur = 2
+                    headerOpacity = 0.7
                 }
             }
-            
-            VStack(spacing: 8) {
-                Text("ゲストアカウントについて")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.secondary)
-                
-                Text("• データは自動的に保存されます\n• アプリを削除するとデータは失われます\n• 将来的にアカウント移行機能を提供予定")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.leading)
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(10)
         }
-        .padding(30)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            withAnimation(.easeInOut(duration: 0.3)) {
+                keyboardHeight = 0
+                backgroundBlur = 0
+                headerOpacity = 1.0
+            }
+        }
+    }
+    
+    // MARK: - Modern Loading View
+    private func ModernLoadingView() -> some View {
+        ZStack {
+            // Animated gradient background
             LinearGradient(
-                gradient: Gradient(colors: [Color.pink.opacity(0.1), Color.blue.opacity(0.1)]),
+                colors: [
+                    primaryColor.opacity(0.1),
+                    accentColor.opacity(0.1),
+                    Color(.systemPink).opacity(0.1)
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-        )
+            .ignoresSafeArea()
+            .hueRotation(.degrees(backgroundBlur * 10))
+            .animation(.linear(duration: 3).repeatForever(autoreverses: false), value: backgroundBlur)
+            
+            VStack(spacing: 30) {
+                // Custom loading animation
+                ZStack {
+                    ForEach(0..<3) { index in
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [primaryColor, accentColor],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 20, height: 20)
+                            .scaleEffect(showFloatingIcon ? 1.2 : 0.8)
+                            .opacity(showFloatingIcon ? 0.8 : 0.4)
+                            .offset(x: CGFloat(index - 1) * 30)
+                            .animation(
+                                .easeInOut(duration: 0.6)
+                                    .repeatForever(autoreverses: true)
+                                    .delay(Double(index) * 0.2),
+                                value: showFloatingIcon
+                            )
+                    }
+                }
+                .onAppear {
+                    showFloatingIcon = true
+                }
+                
+                VStack(spacing: 12) {
+                    Text("アプリを初期化中...")
+                        .font(.title3)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text("あなたの特別な時間を準備しています")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Modern Authentication View
+    private func ModernAuthenticationView() -> some View {
+        ZStack {
+            // Dynamic background
+            LinearGradient(
+                colors: [
+                    Color(.systemPink).opacity(0.15),
+                    Color(.systemBlue).opacity(0.15),
+                    Color(.systemPurple).opacity(0.10)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            ScrollView {
+                VStack(spacing: 50) {
+                    Spacer(minLength: 60)
+                    
+                    // Hero section
+                    VStack(spacing: 25) {
+                        ZStack {
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [Color.pink.opacity(0.3), Color.blue.opacity(0.3)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .frame(width: 140, height: 140)
+                                .scaleEffect(pulseAnimation ? 1.1 : 1.0)
+                                .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
+                            
+                            Image(systemName: "heart.circle.fill")
+                                .font(.system(size: 80, weight: .light))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.pink, .red],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                        }
+                        .onAppear {
+                            pulseAnimation = true
+                        }
+                        
+                        VStack(spacing: 12) {
+                            Text("おかえりなさい")
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        colors: [.primary, .secondary],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                            
+                            Text("あなたの特別なパートナーが\n心を込めてお待ちしています")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(4)
+                        }
+                    }
+                    
+                    // Authentication button
+                    VStack(spacing: 20) {
+                        Button(action: {
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                                viewModel.signInAnonymously()
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.title2)
+                                
+                                Text("ゲストとして始める")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [primaryColor, primaryColor.opacity(0.8)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .shadow(color: primaryColor.opacity(0.3), radius: 12, x: 0, y: 8)
+                            )
+                        }
+                        .disabled(viewModel.isLoading)
+                        .scaleEffect(viewModel.isLoading ? 0.95 : 1.0)
+                        .opacity(viewModel.isLoading ? 0.7 : 1.0)
+                        .animation(.easeInOut(duration: 0.2), value: viewModel.isLoading)
+                        
+                        if viewModel.isLoading {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                    .scaleEffect(0.9)
+                                    .tint(primaryColor)
+                                
+                                Text("認証中...")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding(.top, 8)
+                        }
+                    }
+                    
+                    // Information card
+                    VStack(spacing: 16) {
+                        HStack {
+                            Image(systemName: "info.circle.fill")
+                                .foregroundColor(accentColor)
+                            
+                            Text("ゲストアカウントについて")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            InfoRow(icon: "checkmark.circle.fill",
+                                   text: "データは自動的に保存されます",
+                                   color: .green)
+                            InfoRow(icon: "exclamationmark.triangle.fill",
+                                   text: "アプリを削除するとデータは失われます",
+                                   color: .orange)
+                            InfoRow(icon: "arrow.triangle.2.circlepath",
+                                   text: "将来的にアカウント移行機能を提供予定",
+                                   color: .blue)
+                        }
+                    }
+                    .padding(20)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(cardCornerRadius)
+                    .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                    
+                    Spacer(minLength: 30)
+                }
+                .padding(.horizontal, 24)
+            }
+        }
     }
     
     // MARK: - Main App View
@@ -136,40 +290,38 @@ struct ContentView: View {
         NavigationView {
             GeometryReader { geometry in
                 ZStack {
-                    // 修正された背景画像
+                    // Enhanced background with blur effect
                     backgroundView(geometry: geometry)
+                        .blur(radius: backgroundBlur)
                     
                     VStack(spacing: 0) {
-                        // Header
-                        headerView
+                        // Modern header
+//                        modernHeaderView
+//                            .opacity(headerOpacity)
                         
-                        // デート状況表示（デート中の場合）
+                        // Date status
                         if viewModel.currentDateSession != nil {
-                            dateStatusView
+                            modernDateStatusView
                         }
                         
-                        // Floating Icon
-                        floatingIconView
+                        // Floating character icon
+                        modernFloatingIconView
                         
-                        // Chat Area
-                        chatView
+                        // Enhanced chat area
+                        modernChatView
                         
-                        // Input Area
-                        inputView
-                        
-                        // Bottom Buttons（デート中でない場合のみ表示）
-                        if viewModel.currentDateSession == nil {
-                            bottomButtonsView
-                        }
+                        // Modern input area
+                        modernInputView
+                            .padding(.bottom, keyboardHeight > 0 ? 0 : 8)
                     }
                 }
             }
-            .clipped() // 画面外への表示を防ぐ
+            .clipped()
         }
-        .navigationViewStyle(StackNavigationViewStyle()) // iPadでの表示問題を防ぐ
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
-    // MARK: - Fixed Background View
+    // MARK: - Enhanced Background View
     private func backgroundView(geometry: GeometryProxy) -> some View {
         Group {
             if let urlStr = viewModel.character.backgroundURL,
@@ -180,12 +332,6 @@ struct ContentView: View {
                         image
                             .resizable()
                             .edgesIgnoringSafeArea(.all)
-//                            .aspectRatio(contentMode: .fill)
-//                            .frame(
-//                                width: geometry.size.width,
-//                                height: geometry.size.height
-//                            )
-//                            .clipped() // 画面外への表示を防ぐ
                     default:
                         defaultBackgroundImage(geometry: geometry)
                     }
@@ -195,167 +341,323 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea()
-        .opacity(0.8)
+        .overlay(
+            // Dynamic overlay for better readability
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.1),
+                    Color.clear,
+                    Color.black.opacity(0.2)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+        )
         .animation(.easeInOut(duration: 0.5), value: viewModel.character.backgroundName)
     }
     
-    // デフォルト背景画像
     private func defaultBackgroundImage(geometry: GeometryProxy) -> some View {
         Image(viewModel.character.backgroundName)
             .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(
-                width: geometry.size.width,
-                height: geometry.size.height
-            )
-            .clipped() // 画面外への表示を防ぐ
+            .edgesIgnoringSafeArea(.all)
     }
     
-    private var headerView: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(viewModel.character.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                
-                HStack(spacing: 8) {
-                    Text(viewModel.character.intimacyTitle)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+    // MARK: - Modern Header View
+    private var modernHeaderView: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 12) {
+                    Text(viewModel.character.name)
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
                     
                     if viewModel.isAnonymousUser {
                         Image(systemName: "person.crop.circle.dashed")
-                            .font(.caption)
+                            .font(.subheadline)
                             .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.orange.opacity(0.1))
+                            .clipShape(Capsule())
                     }
                 }
                 
-                // プログレスバー
-                VStack(alignment: .leading, spacing: 2) {
+                Text(viewModel.character.intimacyTitle)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 4)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                
+                // Enhanced progress bar
+                VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("親密度")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundColor(.secondary)
                         Spacer()
                         Text("\(viewModel.character.intimacyLevel)/100")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(intimacyColor)
                     }
                     
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 150, height: 4)
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 6)
                         
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(intimacyColor)
-                            .frame(width: 150 * CGFloat(viewModel.character.intimacyLevel) / 100, height: 4)
-                            .animation(.easeInOut(duration: 0.3), value: viewModel.character.intimacyLevel)
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(
+                                LinearGradient(
+                                    colors: [intimacyColor.opacity(0.7), intimacyColor],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: 180 * CGFloat(viewModel.character.intimacyLevel) / 100, height: 6)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: viewModel.character.intimacyLevel)
                     }
+                    .frame(width: 180)
                 }
             }
             
             Spacer()
             
             HStack(spacing: 12) {
-                Button(action: { viewModel.showingSettings = true }) {
-                    Image(systemName: "gearshape")
-                        .font(.title2)
-                        .foregroundColor(.blue)
+                ModernButton(icon: "gearshape.fill", color: primaryColor) {
+                    viewModel.showingSettings = true
                 }
                 
-                Button(action: { viewModel.showingBackgroundSelector = true }) {
-                    Image(systemName: "photo.on.rectangle")
-                        .font(.title2)
-                        .foregroundColor(.blue)
+                ModernButton(icon: "photo.on.rectangle.angled", color: accentColor) {
+                    viewModel.showingBackgroundSelector = true
                 }
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .padding(.horizontal)
+        .padding(20)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius))
+        .padding(.horizontal, 16)
         .padding(.top, 8)
+        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
     }
-
-    // 親密度の色を決定するプロパティ
+    
+    // Enhanced intimacy color
     private var intimacyColor: Color {
         switch viewModel.character.intimacyLevel {
         case 0...10: return .gray
         case 11...30: return .blue
         case 31...60: return .green
-        case 61...100: return .pink
+        case 61...80: return .orange
+        case 81...100: return .pink
         default: return .red
         }
     }
     
-    // MARK: - Date Status View
-    private var dateStatusView: some View {
+    // MARK: - Modern Date Status View
+    private var modernDateStatusView: some View {
         Group {
             if let session = viewModel.currentDateSession {
-                VStack(spacing: 8) {
-                    HStack {
+                VStack(spacing: 12) {
+                    HStack(spacing: 12) {
                         Image(systemName: session.location.type.icon)
+                            .font(.title2)
                             .foregroundColor(session.location.type.color)
+                            .frame(width: 40, height: 40)
+                            .background(session.location.type.color.opacity(0.1))
+                            .clipShape(Circle())
                         
-                        Text("\(session.location.name)でデート中")
-                            .font(.headline)
-                            .fontWeight(.bold)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(session.location.name)でデート中")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
+                            
+                            Text("開始: \(DateFormatter.localizedString(from: session.startTime, dateStyle: .none, timeStyle: .short))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
                         
                         Spacer()
                         
                         Button("終了") {
-                            viewModel.endDate()
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                                viewModel.endDate()
+                            }
                         }
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.1))
-                        .cornerRadius(12)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.red, in: Capsule())
+                        .shadow(color: .red.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
                     
-                    HStack {
-                        Text("開始時刻: \(DateFormatter.localizedString(from: session.startTime, dateStyle: .none, timeStyle: .short))")
+                    // Date progress indicator
+                    HStack(spacing: 16) {
+                        Label("\(session.messagesExchanged)", systemImage: "message.fill")
                             .font(.caption)
                             .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(.ultraThinMaterial)
+                            .clipShape(Capsule())
                         
                         Spacer()
                         
-                        Text("メッセージ: \(session.messagesExchanged)回")
+                        // Time elapsed
+                        Text(timeElapsedString(from: session.startTime))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding()
-                .background(.ultraThinMaterial)
-                .cornerRadius(12)
-                .padding(.horizontal)
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .padding(20)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius))
+                .padding(.horizontal, 16)
+                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .move(edge: .top).combined(with: .opacity)
+                ))
             }
         }
-        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.currentDateSession != nil)
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: viewModel.currentDateSession != nil)
     }
     
-    private var floatingIconView: some View {
-        CharacterIconView(character: viewModel.character, size: 120) // サイズを少し小さくして画面におさまりやすく
-            .id(viewModel.character.iconURL ?? "default")
-            .padding(.vertical, 10)
-            .offset(y: iconOffset)
+    private func timeElapsedString(from startTime: Date) -> String {
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minutes = Int(elapsed / 60)
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        
+        if hours > 0 {
+            return "\(hours)時間\(remainingMinutes)分"
+        } else {
+            return "\(remainingMinutes)分"
+        }
     }
     
-    private var chatView: some View {
+    // MARK: - Modern Floating Icon with Message Animation
+    @State private var showMessageBubble = false
+    @State private var messageBubbleText = ""
+    @State private var messageBubbleOffset: CGFloat = 0
+    @State private var messageBubbleOpacity: Double = 0
+    @State private var characterTalkingAnimation = false
+    
+    private var modernFloatingIconView: some View {
+        ZStack {
+            // Glow effect
+//            Circle()
+//                .fill(
+//                    RadialGradient(
+//                        colors: [intimacyColor.opacity(showMessageBubble ? 0.5 : 0.3), Color.clear],
+//                        center: .center,
+//                        startRadius: 60,
+//                        endRadius: showMessageBubble ? 140 : 120
+//                    )
+//                )
+//                .frame(width: 240, height: 240)
+//                .scaleEffect(showFloatingIcon ? 1.2 : 1.0)
+//                .opacity(showFloatingIcon ? 0.6 : 0.3)
+//                .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: showFloatingIcon)
+//                .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showMessageBubble)
+            
+            // Message bubble from character
+            if showMessageBubble {
+                VStack {
+                    HStack {
+                        Spacer()
+                        
+                        // Speech bubble
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(messageBubbleText)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 18)
+                                        .fill(.ultraThinMaterial)
+                                        .shadow(color: intimacyColor.opacity(0.3), radius: 12, x: 0, y: 6)
+                                )
+                                .overlay(
+                                    // Speech bubble tail
+                                    Path { path in
+                                        path.move(to: CGPoint(x: 15, y: 40))
+                                        path.addLine(to: CGPoint(x: 5, y: 50))
+                                        path.addLine(to: CGPoint(x: 25, y: 45))
+                                        path.closeSubpath()
+                                    }
+                                    .fill(.ultraThinMaterial)
+                                    .shadow(color: intimacyColor.opacity(0.2), radius: 4, x: 0, y: 2),
+                                    alignment: .bottomLeading
+                                )
+                        }
+                        .frame(maxWidth: 200, alignment: .leading)
+                        .offset(x: -20, y: messageBubbleOffset)
+                        .opacity(messageBubbleOpacity)
+                        .scaleEffect(messageBubbleOpacity)
+                        
+                        Spacer()
+                    }
+                    
+                    Spacer()
+                }
+                .frame(height: 180)
+            }
+            
+            // Character icon with talking animation
+            CharacterIconView(character: viewModel.character, size: 120)
+                .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
+                .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
+                .overlay(
+                    // Speaking indicator (subtle rings)
+                    Group {
+                        if characterTalkingAnimation {
+                            ForEach(0..<3) { index in
+                                Circle()
+                                    .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
+                                    .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
+                                    .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
+                                    .opacity(characterTalkingAnimation ? 0 : 0.7)
+                                    .animation(
+                                        .easeOut(duration: 1.0)
+                                            .delay(Double(index) * 0.2)
+                                            .repeatForever(autoreverses: false),
+                                        value: characterTalkingAnimation
+                                    )
+                            }
+                        }
+                    }
+                )
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
+                .id(viewModel.character.iconURL ?? "default")
+        }
+        .padding(.vertical, 20)
+        .offset(y: iconOffset)
+        .onAppear {
+            showFloatingIcon = true
+        }
+    }
+    
+    // MARK: - Modern Chat View
+    private var modernChatView: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(spacing: 10) {
+                LazyVStack(spacing: 16) {
                     ForEach(viewModel.messages) { message in
-                        MessageBubbleEnhanced(message: message)
+                        ModernMessageBubble(message: message)
                             .id(message.id)
-                            .padding(.horizontal) // メッセージに適切なパディングを追加
+                            .padding(.horizontal, 16)
                     }
                 }
-                .padding(.vertical)
+                .padding(.vertical, 16)
             }
+            .background(.clear)
             .onChange(of: viewModel.messages.count) { _ in
                 if let lastMessage = viewModel.messages.last {
                     withAnimation(.easeInOut(duration: 0.5)) {
@@ -370,10 +672,12 @@ struct ContentView: View {
         }
     }
     
-    private var inputView: some View {
+    // MARK: - Modern Input View
+    private var modernInputView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                HStack(spacing: 8) {
+                // Input field with modern design
+                HStack(spacing: 12) {
                     TextField("", text: $messageText, prompt: Text("メッセージを入力...").foregroundColor(.gray.opacity(0.6)))
                         .textFieldStyle(PlainTextFieldStyle())
                         .disabled(!viewModel.isAuthenticated)
@@ -387,81 +691,108 @@ struct ContentView: View {
                     if messageText.count > 50 {
                         Text("\(messageText.count)")
                             .font(.caption2)
+                            .fontWeight(.medium)
                             .foregroundColor(messageText.count > 200 ? .red : .gray)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(messageText.count > 200 ? .red.opacity(0.1) : .gray.opacity(0.1))
+                            )
                             .animation(.easeInOut(duration: 0.2), value: messageText.count)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 16)
                 .background(
-                    RoundedRectangle(cornerRadius: 24)
+                    RoundedRectangle(cornerRadius: 25)
                         .fill(.ultraThinMaterial)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 24)
-                                .stroke(isInputFocused ? Color.gray.opacity(0.5) : Color.clear, lineWidth: 1)
-                                .animation(.easeInOut(duration: 0.2), value: isInputFocused)
+                        .stroke(
+                            isInputFocused ? primaryColor.opacity(0.5) : Color.clear,
+                            lineWidth: 2
                         )
                 )
                 
+                // Send button with enhanced design
                 Button(action: sendMessage) {
                     ZStack {
                         Circle()
                             .fill(
-                                messageText.isEmpty || !viewModel.isAuthenticated
-                                ? Color.gray.opacity(0.3)
-                                : Color.green
+                                LinearGradient(
+                                    colors: messageText.isEmpty || !viewModel.isAuthenticated
+                                        ? [Color.gray.opacity(0.3), Color.gray.opacity(0.2)]
+                                        : [.green, .green.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                            .frame(width: 44, height: 44)
+                            .frame(width: 50, height: 50)
+                            .shadow(
+                                color: messageText.isEmpty ? Color.clear : .green.opacity(0.3),
+                                radius: messageText.isEmpty ? 0 : 8,
+                                x: 0,
+                                y: messageText.isEmpty ? 0 : 4
+                            )
                         
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 20, weight: .semibold))
+                            .font(.system(size: 20, weight: .bold))
                             .foregroundColor(.white)
                             .rotationEffect(.degrees(pulseAnimation ? 5 : 0))
                             .scaleEffect(pulseAnimation ? 1.1 : 1.0)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: pulseAnimation)
                     }
                 }
                 .disabled(messageText.isEmpty || !viewModel.isAuthenticated)
                 .scaleEffect(messageText.isEmpty ? 0.9 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: messageText.isEmpty)
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: pulseAnimation)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(.ultraThinMaterial)
+            .padding(.vertical, 16)
+//            .background(.ultraThinMaterial)
         }
     }
     
-    private var bottomButtonsView: some View {
+    // MARK: - Modern Bottom Buttons
+    private var modernBottomButtonsView: some View {
         HStack(spacing: 16) {
             Button("デート") {
-                viewModel.showingDateSelector = true
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                    viewModel.showingDateSelector = true
+                }
             }
             .font(.headline)
-            .fontWeight(.semibold)
+            .fontWeight(.bold)
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
             .background(
-                LinearGradient(
-                    colors: [Color.pink, Color.pink.opacity(0.8)],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.pink, Color.pink.opacity(0.8)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: Color.pink.opacity(0.4), radius: 12, x: 0, y: 8)
             )
-            .cornerRadius(12)
             .disabled(!viewModel.isAuthenticated)
             .opacity(viewModel.isAuthenticated ? 1.0 : 0.6)
-            .shadow(color: Color.pink.opacity(0.3), radius: 8, x: 0, y: 4)
+            .scaleEffect(viewModel.isAuthenticated ? 1.0 : 0.98)
+            .animation(.easeInOut(duration: 0.2), value: viewModel.isAuthenticated)
         }
-        .padding(.horizontal)
+        .padding(.horizontal, 16)
         .padding(.bottom, 8)
         .background(.ultraThinMaterial)
     }
     
+    // MARK: - Helper Functions
     private func sendMessage() {
         guard !messageText.isEmpty else { return }
         
-        // デートセッションがある場合、メッセージカウントを更新
+        // Show character listening animation
+        showCharacterListening()
+        
         if let message = viewModel.messages.last, viewModel.currentDateSession != nil {
             viewModel.updateDateSessionOnMessage(message)
         }
@@ -472,9 +803,28 @@ struct ContentView: View {
         triggerPulseAnimation()
     }
     
+    // MARK: - Character Listening Animation
+    private func showCharacterListening() {
+        // Subtle glow effect when user sends message
+        withAnimation(.easeInOut(duration: 0.5)) {
+            showFloatingIcon = true
+        }
+        
+        // Small scale animation to show character is "receiving" the message
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            characterTalkingAnimation = true
+        }
+        
+        // Quick reset
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                characterTalkingAnimation = false
+            }
+        }
+    }
+    
     private func triggerPulseAnimation() {
         pulseAnimation = true
-        
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             pulseAnimation = false
         }
@@ -483,78 +833,179 @@ struct ContentView: View {
     private func triggerFloatingIcon() {
         showFloatingIcon = true
         
+        // Get the last AI message for the speech bubble
+        if let lastMessage = viewModel.messages.last, !lastMessage.isFromUser {
+            showCharacterSpeaking(with: lastMessage.text)
+        }
+        
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
             withAnimation(.easeOut(duration: 0.5)) {
                 showFloatingIcon = false
             }
         }
     }
+    
+    // MARK: - Character Speaking Animation
+    private func showCharacterSpeaking(with text: String) {
+        // Set the message text (truncate if too long)
+        let displayText = text.count > 50 ? String(text.prefix(47)) + "..." : text
+        messageBubbleText = displayText
+        
+        // Start talking animation
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            characterTalkingAnimation = true
+        }
+        
+        // Show message bubble with entrance animation
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3)) {
+            showMessageBubble = true
+            messageBubbleOffset = -10
+            messageBubbleOpacity = 1.0
+        }
+        
+        // Add floating animation to the bubble
+        withAnimation(.easeInOut(duration: 2.0).delay(0.5)) {
+            messageBubbleOffset = -20
+        }
+        
+        // Hide message bubble after 2.5 seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                messageBubbleOpacity = 0
+                messageBubbleOffset = -30
+            }
+            
+            // Reset after animation completes
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showMessageBubble = false
+                messageBubbleOffset = 0
+            }
+        }
+        
+        // Stop talking animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                characterTalkingAnimation = false
+            }
+        }
+    }
 }
 
-struct MessageBubbleEnhanced: View {
-    let message: Message
-    @State private var showAnimation = false
+// MARK: - Modern Button Component
+private struct ModernButton: View {
+    let icon: String
+    let color: Color
+    let action: () -> Void
     
     var body: some View {
-        HStack {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(color)
+                .frame(width: 44, height: 44)
+                .background(.ultraThinMaterial, in: Circle())
+                .shadow(color: color.opacity(0.3), radius: 4, x: 0, y: 2)
+        }
+        .scaleEffect(0.95)
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: color)
+    }
+}
+
+// MARK: - Modern Message Bubble
+struct ModernMessageBubble: View {
+    let message: Message
+    @State private var showAnimation = false
+    @Environment(\.colorScheme) private var colorScheme
+    
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
             if message.isFromUser {
                 Spacer()
-                VStack(alignment: .trailing) {
-                    Text(message.text)
-                        .padding()
-                        .background(Color.green.opacity(0.8))
-                        .foregroundColor(.white)
-                        .cornerRadius(15)
-                    
-                    HStack {
-                        // デート場所の表示
-                        if let location = message.dateLocation {
-                            Text("📍 \(location)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Text(timeString(from: message.timestamp))
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                        
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.caption2)
-                            .foregroundColor(.blue)
-                    }
-                }
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .trailing) // 最大幅を制限
+                userMessageView
             } else {
-                VStack(alignment: .leading) {
-                    Text(message.text)
-                        .padding()
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(15)
-                        .shadow(radius: 1)
-                    
-                    HStack {
-                        Text(timeString(from: message.timestamp))
-                            .font(.caption2)
-                            .foregroundColor(.gray)
-                        
-                        if let location = message.dateLocation {
-                            Text("📍 \(location)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .leading) // 最大幅を制限
+                aiMessageView
                 Spacer()
             }
         }
         .scaleEffect(showAnimation ? 1.0 : 0.8)
         .opacity(showAnimation ? 1.0 : 0.0)
         .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1)) {
                 showAnimation = true
             }
         }
+    }
+    
+    private var userMessageView: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            Text(message.text)
+                .font(.body)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(
+                            LinearGradient(
+                                colors: [.blue, .blue.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                )
+                .foregroundColor(.white)
+            
+            HStack(spacing: 8) {
+                if let location = message.dateLocation {
+                    Label(location, systemImage: "location.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                
+                Text(timeString(from: message.timestamp))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.caption2)
+                    .foregroundColor(.green)
+            }
+        }
+        .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .trailing)
+    }
+    
+    private var aiMessageView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(message.text)
+                .font(.body)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.ultraThinMaterial)
+                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                )
+                .foregroundColor(.primary)
+            
+            HStack(spacing: 8) {
+                Text(timeString(from: message.timestamp))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                
+                if let location = message.dateLocation {
+                    Label(location, systemImage: "location.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+            }
+        }
+        .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .leading)
     }
     
     private func timeString(from date: Date) -> String {
@@ -564,6 +1015,31 @@ struct MessageBubbleEnhanced: View {
     }
 }
 
+// MARK: - Info Row Component for Authentication View
+struct InfoRow: View {
+    let icon: String
+    let text: String
+    let color: Color
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(color)
+                .frame(width: 24)
+            
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            Spacer()
+        }
+    }
+}
+
 #Preview {
-    ContentView(viewModel: RomanceAppViewModel())
+//    ContentView(viewModel: RomanceAppViewModel())
+    TopView()
 }
