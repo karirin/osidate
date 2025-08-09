@@ -1,11 +1,12 @@
 //
-//  ContentView.swift - Modern UI Design
+//  ContentView.swift - Modern UI Design (Keyboard Enhanced)
 //  osidate
 //
-//  Enhanced with modern design patterns and improved UX
+//  Enhanced with keyboard-aware scrolling like OshiAIChatView
 //
 
 import SwiftUI
+import Combine
 
 struct ContentView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
@@ -52,20 +53,9 @@ struct ContentView: View {
         .sheet(isPresented: $viewModel.showingDateSelector) {
             DateSelectorView(viewModel: viewModel)
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    keyboardHeight = keyboardFrame.cgRectValue.height
-                    backgroundBlur = 2
-                    headerOpacity = 0.7
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+        .onReceive(Publishers.keyboardHeight) { height in
             withAnimation(.easeInOut(duration: 0.3)) {
-                keyboardHeight = 0
-                backgroundBlur = 0
-                headerOpacity = 1.0
+                keyboardHeight = height
             }
         }
     }
@@ -295,10 +285,6 @@ struct ContentView: View {
                         .blur(radius: backgroundBlur)
                     
                     VStack(spacing: 0) {
-                        // Modern header
-//                        modernHeaderView
-//                            .opacity(headerOpacity)
-                        
                         // Date status
                         if viewModel.currentDateSession != nil {
                             modernDateStatusView
@@ -307,10 +293,10 @@ struct ContentView: View {
                         // Floating character icon
                         modernFloatingIconView
                         
-                        // Enhanced chat area
+                        // Enhanced chat area - キーボード対応版
                         modernChatView
                         
-                        // Modern input area
+                        // Modern input area - キーボード対応版
                         modernInputView
                             .padding(.bottom, keyboardHeight > 0 ? 0 : 8)
                     }
@@ -361,99 +347,6 @@ struct ContentView: View {
         Image(viewModel.character.backgroundName)
             .resizable()
             .edgesIgnoringSafeArea(.all)
-    }
-    
-    // MARK: - Modern Header View
-    private var modernHeaderView: some View {
-        HStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    Text(viewModel.character.name)
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    if viewModel.isAnonymousUser {
-                        Image(systemName: "person.crop.circle.dashed")
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.orange.opacity(0.1))
-                            .clipShape(Capsule())
-                    }
-                }
-                
-                Text(viewModel.character.intimacyTitle)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 4)
-                    .background(.ultraThinMaterial)
-                    .clipShape(Capsule())
-                
-                // Enhanced progress bar
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("親密度")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text("\(viewModel.character.intimacyLevel)/100")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(intimacyColor)
-                    }
-                    
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(height: 6)
-                        
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(
-                                LinearGradient(
-                                    colors: [intimacyColor.opacity(0.7), intimacyColor],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: 180 * CGFloat(viewModel.character.intimacyLevel) / 100, height: 6)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: viewModel.character.intimacyLevel)
-                    }
-                    .frame(width: 180)
-                }
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 12) {
-                ModernButton(icon: "gearshape.fill", color: primaryColor) {
-                    viewModel.showingSettings = true
-                }
-                
-                ModernButton(icon: "photo.on.rectangle.angled", color: accentColor) {
-                    viewModel.showingBackgroundSelector = true
-                }
-            }
-        }
-        .padding(20)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius))
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-    }
-    
-    // Enhanced intimacy color
-    private var intimacyColor: Color {
-        switch viewModel.character.intimacyLevel {
-        case 0...10: return .gray
-        case 11...30: return .blue
-        case 31...60: return .green
-        case 61...80: return .orange
-        case 81...100: return .pink
-        default: return .red
-        }
     }
     
     // MARK: - Modern Date Status View
@@ -549,22 +442,6 @@ struct ContentView: View {
     
     private var modernFloatingIconView: some View {
         ZStack {
-            // Glow effect
-//            Circle()
-//                .fill(
-//                    RadialGradient(
-//                        colors: [intimacyColor.opacity(showMessageBubble ? 0.5 : 0.3), Color.clear],
-//                        center: .center,
-//                        startRadius: 60,
-//                        endRadius: showMessageBubble ? 140 : 120
-//                    )
-//                )
-//                .frame(width: 240, height: 240)
-//                .scaleEffect(showFloatingIcon ? 1.2 : 1.0)
-//                .opacity(showFloatingIcon ? 0.6 : 0.3)
-//                .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: showFloatingIcon)
-//                .animation(.spring(response: 0.6, dampingFraction: 0.8), value: showMessageBubble)
-            
             // Message bubble from character
             if showMessageBubble {
                 VStack {
@@ -644,7 +521,19 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Modern Chat View
+    // Enhanced intimacy color
+    private var intimacyColor: Color {
+        switch viewModel.character.intimacyLevel {
+        case 0...10: return .gray
+        case 11...30: return .blue
+        case 31...60: return .green
+        case 61...80: return .orange
+        case 81...100: return .pink
+        default: return .red
+        }
+    }
+    
+    // MARK: - Modern Chat View (キーボード対応版)
     private var modernChatView: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -654,14 +543,28 @@ struct ContentView: View {
                             .id(message.id)
                             .padding(.horizontal, 16)
                     }
+                    
+                    // OshiAIChatViewと同じように最下部マーカーを追加
+                    Color.clear
+                        .frame(height: 1)
+                        .id("bottomMarker")
                 }
                 .padding(.vertical, 16)
             }
             .background(.clear)
+            // キーボード表示時のスクロール処理（OshiAIChatViewと同様）
+            .onChange(of: keyboardHeight) { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo("bottomMarker", anchor: .bottom)
+                    }
+                }
+            }
+            // メッセージ追加時のスクロール処理
             .onChange(of: viewModel.messages.count) { _ in
-                if let lastMessage = viewModel.messages.last {
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                if !viewModel.messages.isEmpty {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo("bottomMarker", anchor: .bottom)
                     }
                 }
                 
@@ -672,7 +575,7 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Modern Input View
+    // MARK: - Modern Input View (キーボード対応版)
     private var modernInputView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -748,42 +651,7 @@ struct ContentView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
-//            .background(.ultraThinMaterial)
         }
-    }
-    
-    // MARK: - Modern Bottom Buttons
-    private var modernBottomButtonsView: some View {
-        HStack(spacing: 16) {
-            Button("デート") {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
-                    viewModel.showingDateSelector = true
-                }
-            }
-            .font(.headline)
-            .fontWeight(.bold)
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.pink, Color.pink.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .shadow(color: Color.pink.opacity(0.4), radius: 12, x: 0, y: 8)
-            )
-            .disabled(!viewModel.isAuthenticated)
-            .opacity(viewModel.isAuthenticated ? 1.0 : 0.6)
-            .scaleEffect(viewModel.isAuthenticated ? 1.0 : 0.98)
-            .animation(.easeInOut(duration: 0.2), value: viewModel.isAuthenticated)
-        }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .background(.ultraThinMaterial)
     }
     
     // MARK: - Helper Functions
@@ -888,6 +756,21 @@ struct ContentView: View {
                 characterTalkingAnimation = false
             }
         }
+    }
+}
+
+extension Publishers {
+    static var keyboardHeight: AnyPublisher<CGFloat, Never> {
+        let willShow = NotificationCenter.default.publisher(for: UIApplication.keyboardWillShowNotification)
+            .map { notification -> CGFloat in
+                (notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect)?.height ?? 0
+            }
+        
+        let willHide = NotificationCenter.default.publisher(for: UIApplication.keyboardWillHideNotification)
+            .map { _ -> CGFloat in 0 }
+        
+        return MergeMany(willShow, willHide)
+            .eraseToAnyPublisher()
     }
 }
 
@@ -1040,6 +923,5 @@ struct InfoRow: View {
 }
 
 #Preview {
-//    ContentView(viewModel: RomanceAppViewModel())
-    TopView()
+    ContentView(viewModel: RomanceAppViewModel())
 }
