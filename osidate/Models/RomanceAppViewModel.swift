@@ -150,6 +150,10 @@ class RomanceAppViewModel: ObservableObject {
                 self.loadCharacterData()
                 self.loadMessages()
                 self.loadDateHistory()
+                
+                // 🔥 重要: アクティブなデートセッションを読み込み
+                self.loadActiveDateSession()
+                
                 self.updateAvailableLocations()
                 self.scheduleTimeBasedEvents()
             } else {
@@ -159,7 +163,10 @@ class RomanceAppViewModel: ObservableObject {
 
                 self.messages.removeAll()
                 self.dateHistory.removeAll()
+                
+                // 🔥 重要: デートセッションもクリア
                 self.currentDateSession = nil
+                
                 self.character.intimacyLevel = 0
                 self.updateAvailableLocations()
 
@@ -183,16 +190,19 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - Initial Data
     private func setupInitialData() {
         guard let uid = userId else { return }
-
+        
         // Users
         database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
             if !(snap.exists()) { self?.createInitialUserData() }
         }
-
+        
         // Characters
         database.child("characters").child(characterId).observeSingleEvent(of: .value) { [weak self] snap in
             if !(snap.exists()) { self?.createInitialCharacterData() }
         }
+        
+        // 🔥 追加: アクティブなデートセッションを読み込み
+        loadActiveDateSession()
     }
 
     private func createInitialUserData() {
@@ -356,7 +366,20 @@ class RomanceAppViewModel: ObservableObject {
 
     /// デートを開始する
     func startDate(at location: DateLocation) {
-        guard isAuthenticated else { return }
+        print("\n🏖️ ==================== デート開始処理 ====================")
+        print("📍 開始場所: \(location.name)")
+        print("🏷️ タイプ: \(location.type.displayName)")
+        
+        guard isAuthenticated else {
+            print("❌ 認証されていません")
+            return
+        }
+        
+        // 既存のデートセッションがある場合は終了
+        if let existingSession = currentDateSession {
+            print("⚠️ 既存のデートセッションを終了: \(existingSession.location.name)")
+            endDate()
+        }
         
         // 現在のデートセッションを作成
         let session = DateSession(
@@ -365,12 +388,18 @@ class RomanceAppViewModel: ObservableObject {
             characterName: character.name
         )
         
-        currentDateSession = session
+        // 🔥 重要: メインスレッドで確実に設定
+        DispatchQueue.main.async { [weak self] in
+            self?.currentDateSession = session
+            print("✅ currentDateSession設定完了: \(session.location.name)")
+            print("🔍 設定後の確認: \(self?.currentDateSession?.location.name ?? "nil")")
+        }
         
         // 背景を変更
         if !location.backgroundImage.isEmpty {
             character.backgroundName = location.backgroundImage
             updateCharacterSettings()
+            print("🖼️ 背景変更: \(location.backgroundImage)")
         }
         
         // デート開始メッセージを送信
@@ -383,6 +412,7 @@ class RomanceAppViewModel: ObservableObject {
         
         DispatchQueue.main.async { [weak self] in
             self?.messages.append(startMessage)
+            print("📝 デート開始メッセージ追加: \(startMessage.text)")
         }
         
         saveMessage(startMessage)
@@ -390,16 +420,40 @@ class RomanceAppViewModel: ObservableObject {
         // 親密度を増加
         character.intimacyLevel = min(character.intimacyLevel + 3, 100)
         saveUserData()
+        print("📈 親密度増加: +3 -> \(character.intimacyLevel)")
         
         // デートセッションをFirebaseに保存
         saveDateSession(session)
         
+        // 🔥 デバッグ: 2秒後に状態確認
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+            print("\n🔍 ==================== 2秒後の状態確認 ====================")
+            if let currentSession = self?.currentDateSession {
+                print("✅ currentDateSession存在: \(currentSession.location.name)")
+            } else {
+                print("❌ currentDateSession が nil になっています！")
+                print("🔍 可能性のある原因を調査中...")
+                
+                // 再設定を試行
+                self?.currentDateSession = session
+                print("🔄 再設定を試行しました")
+            }
+            print("==================== 状態確認完了 ====================\n")
+        }
+        
         print("🏖️ デート開始: \(location.name)")
+        print("==================== デート開始処理完了 ====================\n")
     }
     
     /// デートを終了する
     func endDate() {
-        guard let session = currentDateSession, isAuthenticated else { return }
+        guard let session = currentDateSession, isAuthenticated else {
+            print("❌ endDate: デートセッションなしまたは未認証")
+            return
+        }
+        
+        print("\n🏁 ==================== デート終了処理 ====================")
+        print("📍 終了場所: \(session.location.name)")
         
         let endTime = Date()
         let duration = Int(endTime.timeIntervalSince(session.startTime))
@@ -445,10 +499,19 @@ class RomanceAppViewModel: ObservableObject {
         // デート完了イベントをチェック
         checkDateCompletionEvents(completedDate)
         
-        // 現在のセッションをクリア
-        currentDateSession = nil
+        // 🔥 重要: Firebaseのセッションを非アクティブに
+        if let userId = currentUserID {
+            database.child("dateSessions").child(userId).child("isActive").setValue(false)
+        }
+        
+        // 🔥 重要: 現在のセッションをクリア
+        DispatchQueue.main.async { [weak self] in
+            self?.currentDateSession = nil
+            print("✅ currentDateSession をクリアしました")
+        }
         
         print("🏁 デート終了: \(session.location.name), 時間: \(duration)秒")
+        print("==================== デート終了処理完了 ====================\n")
     }
 
     /// メッセージ送信時のデートセッション更新
@@ -478,7 +541,10 @@ class RomanceAppViewModel: ObservableObject {
 
     /// デートセッションをFirebaseに保存
     private func saveDateSession(_ session: DateSession) {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID else {
+            print("❌ saveDateSession: ユーザーIDなし")
+            return
+        }
         
         let sessionData: [String: Any] = [
             "locationName": session.location.name,
@@ -486,10 +552,73 @@ class RomanceAppViewModel: ObservableObject {
             "startTime": session.startTime.timeIntervalSince1970,
             "messagesExchanged": session.messagesExchanged,
             "intimacyGained": session.intimacyGained,
-            "characterName": session.characterName
+            "characterName": session.characterName,
+            "isActive": true // 🔥 追加: アクティブ状態を明示
         ]
         
-        database.child("dateSessions").child(userId).setValue(sessionData)
+        print("💾 デートセッション保存中: \(session.location.name)")
+        database.child("dateSessions").child(userId).setValue(sessionData) { [weak self] error, _ in
+            if let error = error {
+                print("❌ デートセッション保存エラー: \(error.localizedDescription)")
+            } else {
+                print("✅ デートセッション保存成功")
+                
+                // 保存後に現在の状態を再確認
+                DispatchQueue.main.async {
+                    if self?.currentDateSession == nil {
+                        print("⚠️ 保存後にcurrentDateSessionがnilになっています！")
+                        // 再設定を試行
+                        self?.currentDateSession = session
+                        print("🔄 currentDateSessionを再設定しました")
+                    }
+                }
+            }
+        }
+    }
+    
+    func loadActiveDateSession() {
+        guard let userId = currentUserID else { return }
+        
+        print("🔄 アクティブなデートセッション読み込み中...")
+        
+        database.child("dateSessions").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self,
+                  let sessionData = snapshot.value as? [String: Any],
+                  let isActive = sessionData["isActive"] as? Bool,
+                  isActive else {
+                print("📭 アクティブなデートセッションなし")
+                return
+            }
+            
+            // セッションデータからDateSessionを復元
+            if let locationName = sessionData["locationName"] as? String,
+               let locationTypeString = sessionData["locationType"] as? String,
+               let locationType = DateType(rawValue: locationTypeString),
+               let startTimeInterval = sessionData["startTime"] as? TimeInterval,
+               let messagesExchanged = sessionData["messagesExchanged"] as? Int,
+               let intimacyGained = sessionData["intimacyGained"] as? Int,
+               let characterName = sessionData["characterName"] as? String {
+                
+                // ロケーション情報を復元
+                if let location = DateLocation.availableDateLocations.first(where: {
+                    $0.name == locationName && $0.type == locationType
+                }) {
+                    
+                    var restoredSession = DateSession(
+                        location: location,
+                        startTime: Date(timeIntervalSince1970: startTimeInterval),
+                        characterName: characterName
+                    )
+                    restoredSession.messagesExchanged = messagesExchanged
+                    restoredSession.intimacyGained = intimacyGained
+                    
+                    DispatchQueue.main.async {
+                        self.currentDateSession = restoredSession
+                        print("✅ デートセッション復元成功: \(location.name)")
+                    }
+                }
+            }
+        }
     }
     
     /// 完了したデートをFirebaseに保存
@@ -668,16 +797,29 @@ class RomanceAppViewModel: ObservableObject {
         print("📊 現在の親密度: \(character.intimacyLevel)")
         print("💬 現在の会話数: \(messages.count)")
         
-        // デート中かどうかをチェック
-        if let dateSession = currentDateSession {
-            print("🏖️ デート中: \(dateSession.location.name)")
-        } else {
-            print("🏠 通常会話")
-        }
-        
         guard isAuthenticated else {
             print("❌ 認証されていません")
             return
+        }
+        
+        // 🔥 新しいアプローチ: リアルタイムでFirebaseからデートセッションを取得
+        loadCurrentDateSessionForMessage { [weak self] dateSession in
+            self?.processSendMessage(text, with: dateSession)
+        }
+    }
+    
+    private func processSendMessage(_ text: String, with dateSession: DateSession?) {
+        print("\n🔍 ==================== メッセージ処理開始 ====================")
+        
+        if let session = dateSession {
+            print("🏖️ === デート中 ===")
+            print("📍 場所: \(session.location.name)")
+            print("🏷️ タイプ: \(session.location.type.displayName)")
+            print("⏱️ 開始時刻: \(session.startTime)")
+            print("💬 デート中メッセージ数: \(session.messagesExchanged)")
+            print("💖 獲得親密度: \(session.intimacyGained)")
+        } else {
+            print("🏠 通常会話")
         }
         
         // ユーザーメッセージを作成
@@ -685,10 +827,11 @@ class RomanceAppViewModel: ObservableObject {
             text: text,
             isFromUser: true,
             timestamp: Date(),
-            dateLocation: currentDateSession?.location.name
+            dateLocation: dateSession?.location.name
         )
         
         print("✅ ユーザーメッセージ作成: \(userMessage.id)")
+        print("📍 メッセージのデート場所: \(userMessage.dateLocation ?? "なし")")
         
         DispatchQueue.main.async { [weak self] in
             self?.messages.append(userMessage)
@@ -699,15 +842,21 @@ class RomanceAppViewModel: ObservableObject {
         saveMessage(userMessage)
         
         // デートセッション中の場合、メッセージカウントを更新
-        if var session = currentDateSession {
+        if var session = dateSession {
             session.messagesExchanged += 1
-            currentDateSession = session
+            
+            // 🔥 重要: currentDateSessionとFirebase両方を更新
+            DispatchQueue.main.async { [weak self] in
+                self?.currentDateSession = session
+            }
             saveDateSession(session)
             print("🏖️ デートセッション更新 - メッセージ数: \(session.messagesExchanged)")
+        } else {
+            print("⚠️ デートセッションが存在しないため、メッセージカウント更新なし")
         }
         
         // 親密度を増加
-        let intimacyIncrease = currentDateSession != nil ? 2 : 1 // デート中は多めに増加
+        let intimacyIncrease = dateSession != nil ? 2 : 1 // デート中は多めに増加
         character.intimacyLevel = min(character.intimacyLevel + intimacyIncrease, 100)
         print("📈 親密度更新: \(character.intimacyLevel) (+\(intimacyIncrease))")
         
@@ -716,93 +865,178 @@ class RomanceAppViewModel: ObservableObject {
         
         // OpenAI Service を使用してAI応答を生成（デート対応版）
         print("🤖 OpenAI Service に応答生成を依頼...")
+        print("🔍 渡すデートセッション情報:")
+        if let session = dateSession {
+            print("  ✅ デートセッション: \(session.location.name)")
+        } else {
+            print("  ❌ デートセッション: nil")
+        }
         
         openAIService.generateResponse(
             for: text,
             character: character,
             conversationHistory: messages,
-            currentDateSession: currentDateSession
+            currentDateSession: dateSession  // 🔥 確実に正しいセッションを渡す
         ) { [weak self] result in
             DispatchQueue.main.async {
-                print("\n🔄 AI応答受信処理開始")
+                self?.handleAIResponse(result, with: dateSession)
+            }
+        }
+        
+        print("==================== メッセージ処理完了 ====================\n")
+    }
+    
+    private func handleAIResponse(_ result: Result<String, Error>, with dateSession: DateSession?) {
+        print("\n🔄 AI応答受信処理開始")
+        
+        switch result {
+        case .success(let aiResponse):
+            print("🎉 AI応答成功!")
+            print("📝 応答内容: \(aiResponse)")
+            
+            let aiMessage = Message(
+                text: aiResponse,
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: dateSession?.location.name
+            )
+            
+            print("✅ AIメッセージ作成: \(aiMessage.id)")
+            print("📍 AIメッセージのデート場所: \(aiMessage.dateLocation ?? "なし")")
+            
+            messages.append(aiMessage)
+            print("✅ AIメッセージをUIに追加")
+            print("💬 現在の総メッセージ数: \(messages.count)")
+            
+            // Firebase に保存
+            saveMessage(aiMessage)
+            
+            // デートセッション中の場合、親密度ボーナスを追加
+            if var session = dateSession {
+                session.intimacyGained += 1
                 
-                switch result {
-                case .success(let aiResponse):
-                    print("🎉 AI応答成功!")
-                    print("📝 応答内容: \(aiResponse)")
-                    
-                    let aiMessage = Message(
-                        text: aiResponse,
-                        isFromUser: false,
-                        timestamp: Date(),
-                        dateLocation: self?.currentDateSession?.location.name
-                    )
-                    
-                    print("✅ AIメッセージ作成: \(aiMessage.id)")
-                    
-                    self?.messages.append(aiMessage)
-                    print("✅ AIメッセージをUIに追加")
-                    print("💬 現在の総メッセージ数: \(self?.messages.count ?? 0)")
-                    
-                    // Firebase に保存
-                    self?.saveMessage(aiMessage)
-                    
-                    // デートセッション中の場合、親密度ボーナスを追加
-                    if var session = self?.currentDateSession {
-                        session.intimacyGained += 1
-                        self?.currentDateSession = session
-                        self?.saveDateSession(session)
-                        
-                        // デート中の親密度ボーナス
-                        self?.character.intimacyLevel = min((self?.character.intimacyLevel ?? 0) + 1, 100)
-                        self?.saveUserData()
-                        print("🏖️ デート中親密度ボーナス: +1")
-                    }
-                    
-                    // ランダムでデート中の特別メッセージを追加する可能性
-                    if let dateSession = self?.currentDateSession,
-                       Int.random(in: 1...10) == 1 { // 10%の確率
-                        self?.sendRandomDateMessage(for: dateSession.location)
-                    }
-                    
-                case .failure(let error):
-                    print("❌ AI応答エラー: \(error.localizedDescription)")
-                    
-                    // エラーメッセージを表示
-                    let errorMessage = Message(
-                        text: "申し訳ありません。現在応答できません。設定でAPIキーを確認してください。エラー: \(error.localizedDescription)",
-                        isFromUser: false,
-                        timestamp: Date(),
-                        dateLocation: self?.currentDateSession?.location.name
-                    )
-                    
-                    self?.messages.append(errorMessage)
-                    print("⚠️ エラーメッセージをUIに追加")
-                    
-                    // Firebase に保存
-                    self?.saveMessage(errorMessage)
-                    
-                    // エラーの詳細をログ出力
-                    if let openAIError = error as? OpenAIError {
-                        switch openAIError {
-                        case .missingAPIKey:
-                            print("🔑 APIキーが設定されていません")
-                        case .invalidURL:
-                            print("🌐 無効なURL")
-                        case .noData:
-                            print("📭 データなし")
-                        case .noResponse:
-                            print("📪 応答なし")
-                        case .apiError(let message):
-                            print("🚨 API エラー: \(message)")
-                        }
-                    }
+                // 🔥 重要: currentDateSessionとFirebase両方を更新
+                currentDateSession = session
+                saveDateSession(session)
+                
+                // デート中の親密度ボーナス
+                character.intimacyLevel = min(character.intimacyLevel + 1, 100)
+                saveUserData()
+                print("🏖️ デート中親密度ボーナス: +1")
+            } else {
+                print("⚠️ AIメッセージ作成時もデートセッションなし")
+            }
+            
+            // ランダムでデート中の特別メッセージを追加する可能性
+            if let session = dateSession,
+               Int.random(in: 1...10) == 1 { // 10%の確率
+                sendRandomDateMessage(for: session.location)
+            }
+            
+        case .failure(let error):
+            print("❌ AI応答エラー: \(error.localizedDescription)")
+            
+            // エラーメッセージを表示
+            let errorMessage = Message(
+                text: "申し訳ありません。現在応答できません。設定でAPIキーを確認してください。エラー: \(error.localizedDescription)",
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: dateSession?.location.name
+            )
+            
+            messages.append(errorMessage)
+            print("⚠️ エラーメッセージをUIに追加")
+            
+            // Firebase に保存
+            saveMessage(errorMessage)
+            
+            // エラーの詳細をログ出力
+            if let openAIError = error as? OpenAIError {
+                switch openAIError {
+                case .missingAPIKey:
+                    print("🔑 APIキーが設定されていません")
+                case .invalidURL:
+                    print("🌐 無効なURL")
+                case .noData:
+                    print("📭 データなし")
+                case .noResponse:
+                    print("📪 応答なし")
+                case .apiError(let message):
+                    print("🚨 API エラー: \(message)")
                 }
+            }
+        }
+        
+        print("==================== AI応答処理完了 ====================\n")
+    }
+    
+    private func loadCurrentDateSessionForMessage(completion: @escaping (DateSession?) -> Void) {
+        guard let userId = currentUserID else {
+            print("❌ ユーザーIDなし - 通常会話として処理")
+            completion(nil)
+            return
+        }
+        
+        print("🔍 リアルタイムでデートセッション状態をチェック中...")
+        
+        database.child("dateSessions").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self else {
+                completion(nil)
+                return
+            }
+            
+            // Firebaseにアクティブなセッションがあるかチェック
+            if let sessionData = snapshot.value as? [String: Any],
+               let isActive = sessionData["isActive"] as? Bool,
+               isActive {
                 
-                print("==================== メッセージ送信完了 ====================\n")
+                print("✅ Firebaseにアクティブなデートセッション発見")
+                
+                // セッションデータからDateSessionを復元
+                if let locationName = sessionData["locationName"] as? String,
+                   let locationTypeString = sessionData["locationType"] as? String,
+                   let locationType = DateType(rawValue: locationTypeString),
+                   let startTimeInterval = sessionData["startTime"] as? TimeInterval,
+                   let messagesExchanged = sessionData["messagesExchanged"] as? Int,
+                   let intimacyGained = sessionData["intimacyGained"] as? Int,
+                   let characterName = sessionData["characterName"] as? String {
+                    
+                    // ロケーション情報を復元
+                    if let location = DateLocation.availableDateLocations.first(where: {
+                        $0.name == locationName && $0.type == locationType
+                    }) {
+                        
+                        var restoredSession = DateSession(
+                            location: location,
+                            startTime: Date(timeIntervalSince1970: startTimeInterval),
+                            characterName: characterName
+                        )
+                        restoredSession.messagesExchanged = messagesExchanged
+                        restoredSession.intimacyGained = intimacyGained
+                        
+                        // メモリ上のcurrentDateSessionも更新
+                        DispatchQueue.main.async {
+                            self.currentDateSession = restoredSession
+                            print("🔄 currentDateSessionを復元: \(location.name)")
+                        }
+                        
+                        print("🏖️ デートセッション復元成功: \(location.name)")
+                        completion(restoredSession)
+                    } else {
+                        print("❌ ロケーション情報が見つかりません")
+                        completion(nil)
+                    }
+                } else {
+                    print("❌ セッションデータの解析失敗")
+                    completion(nil)
+                }
+            } else {
+                print("📭 アクティブなデートセッションなし")
+                completion(nil)
             }
         }
     }
+
 
     // MARK: - デバッグ用ヘルパーメソッド
 
