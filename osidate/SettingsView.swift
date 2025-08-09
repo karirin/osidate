@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var showingSignOutAlert = false
     @State private var showingResetUserDefaultsAlert = false
     @State private var isDataSyncing = false
+    @FocusState private var isInputFocused: Bool
     
     // Image picker and cropping states
     @StateObject private var imageManager = ImageStorageManager()
@@ -45,6 +46,11 @@ struct SettingsView: View {
                     .padding(.horizontal, 20)
                     .padding(.bottom, 32)
                 }
+            }
+            .scrollDismissesKeyboard(.immediately) // iOS16+
+            .contentShape(Rectangle())             // VStack以外でもタップを拾えるように
+            .onTapGesture {                        // 画面タップでフォーカス解除
+                isInputFocused = false
             }
             .background(Color(.systemGroupedBackground))
 //            .toolbar {
@@ -343,6 +349,7 @@ struct SettingsView: View {
                 ) {
                     TextField("名前を入力", text: $viewModel.character.name)
                         .textFieldStyle(ModernTextFieldStyle())
+                        .focused($isInputFocused)
                         .onChange(of: viewModel.character.name) { _ in
                             viewModel.updateCharacterSettings()
                         }
@@ -375,6 +382,7 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
+                        .focused($isInputFocused)
                         .onChange(of: viewModel.character.personality) { _ in
                             viewModel.updateCharacterSettings()
                         }
@@ -407,6 +415,7 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
+                        .focused($isInputFocused) 
                         .onChange(of: viewModel.character.speakingStyle) { _ in
                             viewModel.updateCharacterSettings()
                         }

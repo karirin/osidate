@@ -3,6 +3,7 @@
 //  osidate
 //
 //  Enhanced with keyboard-aware scrolling like OshiAIChatView
+//  Modified to show only recent 5 messages
 //
 
 import SwiftUI
@@ -17,6 +18,7 @@ struct ContentView: View {
     @State private var keyboardHeight: CGFloat = 0
     @State private var backgroundBlur: CGFloat = 0
     @State private var headerOpacity: Double = 1.0
+    @State private var showingFullChatHistory = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     
@@ -24,6 +26,11 @@ struct ContentView: View {
     private let cardCornerRadius: CGFloat = 20
     private let primaryColor = Color(.systemBlue)
     private let accentColor = Color(.systemPurple)
+    
+    // MARK: - Recent Messages Computed Property
+    private var recentMessages: [Message] {
+        Array(viewModel.messages.suffix(5))
+    }
     
     var body: some View {
         ZStack {
@@ -52,6 +59,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $viewModel.showingDateSelector) {
             DateSelectorView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $showingFullChatHistory) {
+            FullChatHistoryView(viewModel: viewModel)
         }
         .onReceive(Publishers.keyboardHeight) { height in
             withAnimation(.easeInOut(duration: 0.3)) {
@@ -288,6 +298,7 @@ struct ContentView: View {
                         // Date status
                         if viewModel.currentDateSession != nil {
                             modernDateStatusView
+                                .padding(.top)
                         }
                         
                         // Floating character icon
@@ -363,14 +374,25 @@ struct ContentView: View {
                             .clipShape(Circle())
                         
                         VStack(alignment: .leading, spacing: 4) {
+                            // 修正：デート中表示のフォントサイズを動的調整
                             Text("\(session.location.name)でデート中")
-                                .font(.headline)
+                                .font(adaptiveFontSizeForDateStatus("\(session.location.name)でデート中"))
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
+                                .lineLimit(1)  // 改行を防ぐ
+                                .minimumScaleFactor(0.7)  // 必要に応じてさらに縮小
                             
-                            Text("開始: \(DateFormatter.localizedString(from: session.startTime, dateStyle: .none, timeStyle: .short))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            HStack{
+                                Text("開始: \(DateFormatter.localizedString(from: session.startTime, dateStyle: .none, timeStyle: .short))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                // Time elapsed
+                                Text("経過時間: \(timeElapsedString(from: session.startTime))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
                         }
                         
                         Spacer()
@@ -388,24 +410,6 @@ struct ContentView: View {
                         .background(.red, in: Capsule())
                         .shadow(color: .red.opacity(0.3), radius: 4, x: 0, y: 2)
                     }
-                    
-                    // Date progress indicator
-                    HStack(spacing: 16) {
-                        Label("\(session.messagesExchanged)", systemImage: "message.fill")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(.ultraThinMaterial)
-                            .clipShape(Capsule())
-                        
-                        Spacer()
-                        
-                        // Time elapsed
-                        Text(timeElapsedString(from: session.startTime))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
                 }
                 .padding(20)
                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius))
@@ -418,6 +422,21 @@ struct ContentView: View {
             }
         }
         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: viewModel.currentDateSession != nil)
+    }
+    
+    private func adaptiveFontSizeForDateStatus(_ text: String) -> Font {
+        let characterCount = text.count
+        
+        switch characterCount {
+        case 0...8:
+            return .headline    // 標準サイズ
+        case 9...12:
+            return .subheadline // 少し小さく
+        case 13...16:
+            return .body        // より小さく
+        default:
+            return .callout     // 最小サイズ
+        }
     }
     
     private func timeElapsedString(from startTime: Date) -> String {
@@ -442,51 +461,6 @@ struct ContentView: View {
     
     private var modernFloatingIconView: some View {
         ZStack {
-            // Message bubble from character
-            if showMessageBubble {
-                VStack {
-                    HStack {
-                        Spacer()
-                        
-                        // Speech bubble
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(messageBubbleText)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 18)
-                                        .fill(.ultraThinMaterial)
-                                        .shadow(color: intimacyColor.opacity(0.3), radius: 12, x: 0, y: 6)
-                                )
-                                .overlay(
-                                    // Speech bubble tail
-                                    Path { path in
-                                        path.move(to: CGPoint(x: 15, y: 40))
-                                        path.addLine(to: CGPoint(x: 5, y: 50))
-                                        path.addLine(to: CGPoint(x: 25, y: 45))
-                                        path.closeSubpath()
-                                    }
-                                    .fill(.ultraThinMaterial)
-                                    .shadow(color: intimacyColor.opacity(0.2), radius: 4, x: 0, y: 2),
-                                    alignment: .bottomLeading
-                                )
-                        }
-                        .frame(maxWidth: 200, alignment: .leading)
-                        .offset(x: -20, y: messageBubbleOffset)
-                        .opacity(messageBubbleOpacity)
-                        .scaleEffect(messageBubbleOpacity)
-                        
-                        Spacer()
-                    }
-                    
-                    Spacer()
-                }
-                .frame(height: 180)
-            }
-            
             // Character icon with talking animation
             CharacterIconView(character: viewModel.character, size: 120)
                 .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
@@ -533,12 +507,41 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Modern Chat View (キーボード対応版)
+    // MARK: - Modern Chat View (キーボード対応版) - 直近5件のみ表示
     private var modernChatView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ForEach(viewModel.messages) { message in
+                    // 直近5件以外にメッセージがある場合、「過去のメッセージを表示」ボタンを表示
+                    if viewModel.messages.count > 5 {
+                        VStack(spacing: 12) {
+                            Text("\(viewModel.messages.count - 5)件の過去のメッセージがあります")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Button(action: {
+                                showingFullChatHistory = true
+                            }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .font(.caption)
+                                    Text("過去のメッセージを表示")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(primaryColor)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(.ultraThinMaterial)
+                                .clipShape(Capsule())
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 16)
+                    }
+                    
+                    // 直近5件のメッセージのみ表示
+                    ForEach(recentMessages) { message in
                         ModernMessageBubble(message: message)
                             .id(message.id)
                             .padding(.horizontal, 16)
@@ -561,14 +564,14 @@ struct ContentView: View {
                 }
             }
             // メッセージ追加時のスクロール処理
-            .onChange(of: viewModel.messages.count) { _ in
-                if !viewModel.messages.isEmpty {
+            .onChange(of: recentMessages.count) { _ in
+                if !recentMessages.isEmpty {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         proxy.scrollTo("bottomMarker", anchor: .bottom)
                     }
                 }
                 
-                if let lastMessage = viewModel.messages.last, !lastMessage.isFromUser {
+                if let lastMessage = recentMessages.last, !lastMessage.isFromUser {
                     triggerFloatingIcon()
                 }
             }
@@ -702,7 +705,7 @@ struct ContentView: View {
         showFloatingIcon = true
         
         // Get the last AI message for the speech bubble
-        if let lastMessage = viewModel.messages.last, !lastMessage.isFromUser {
+        if let lastMessage = recentMessages.last, !lastMessage.isFromUser {
             showCharacterSpeaking(with: lastMessage.text)
         }
         
