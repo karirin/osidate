@@ -618,7 +618,7 @@ class RomanceAppViewModel: ObservableObject {
         )
     }
 
-    /// 利用可能な全デートスポットを取得（無限モード含む）
+    /// 利用可能な全デートスポットを取得（既存メソッド - 親密度制限あり）
     func getAllAvailableLocations() -> [DateLocation] {
         var locations = DateLocation.availableLocations(for: character.intimacyLevel)
         
@@ -1334,6 +1334,75 @@ class RomanceAppViewModel: ObservableObject {
 
     func getDateStatistics() -> DateStatistics {
         return DateStatistics(completedDates: dateHistory)
+    }
+    
+    func getAllDateLocations() -> [DateLocation] {
+        var locations = DateLocation.availableDateLocations
+        
+        // 無限モードが解放されている場合、動的に生成されたデートを追加
+        if character.unlockedInfiniteMode {
+            // 無限デートを3個まで表示
+            for i in 0..<3 {
+                let infiniteDate = DateLocation.generateInfiniteDate(
+                    for: character.intimacyLevel,
+                    dateCount: infiniteDateCount + i
+                )
+                locations.append(infiniteDate)
+            }
+        }
+        
+        return locations
+    }
+    
+    /// 解放済みデートスポットの数を取得
+    func getUnlockedLocationCount() -> Int {
+        return DateLocation.availableLocations(for: character.intimacyLevel).count +
+               (character.unlockedInfiniteMode ? 3 : 0)
+    }
+    
+    /// ロック済みデートスポットの数を取得
+    func getLockedLocationCount() -> Int {
+        let totalCount = DateLocation.availableDateLocations.count +
+                        (character.unlockedInfiniteMode ? 3 : 0)
+        return totalCount - getUnlockedLocationCount()
+    }
+    
+    /// 特定の親密度レベルで解放されるデートスポットを取得
+    func getLocationsUnlockedAtLevel(_ intimacyLevel: Int) -> [DateLocation] {
+        return DateLocation.availableDateLocations.filter {
+            $0.requiredIntimacy == intimacyLevel
+        }
+    }
+    
+    /// 次に解放されるデートスポットを取得（モチベーション向上用）
+    func getNextUnlockableLocation() -> DateLocation? {
+        return DateLocation.availableDateLocations
+            .filter { $0.requiredIntimacy > character.intimacyLevel }
+            .min { $0.requiredIntimacy < $1.requiredIntimacy }
+    }
+    
+    /// デートスポットの解放状況統計を取得
+    func getLocationUnlockStats() -> LocationUnlockStats {
+        let allLocations = DateLocation.availableDateLocations
+        let unlockedCount = getUnlockedLocationCount()
+        let totalCount = allLocations.count + (character.unlockedInfiniteMode ? 999 : 0)
+        
+        let unlockedByType = Dictionary(grouping: allLocations.filter {
+            $0.requiredIntimacy <= character.intimacyLevel
+        }, by: { $0.type }).mapValues { $0.count }
+        
+        let lockedByType = Dictionary(grouping: allLocations.filter {
+            $0.requiredIntimacy > character.intimacyLevel
+        }, by: { $0.type }).mapValues { $0.count }
+        
+        return LocationUnlockStats(
+            totalLocations: totalCount,
+            unlockedLocations: unlockedCount,
+            lockedLocations: totalCount - unlockedCount,
+            unlockedByType: unlockedByType,
+            lockedByType: lockedByType,
+            unlockProgress: Double(unlockedCount) / Double(totalCount)
+        )
     }
     
     var mostPopularDateType: DateType? {

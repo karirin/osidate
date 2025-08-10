@@ -543,3 +543,20 @@ extension DateLocation {
         return messages.randomElement()
     }
 }
+
+struct LocationUnlockStats {
+    let totalLocations: Int
+    let unlockedLocations: Int
+    let lockedLocations: Int
+    let unlockedByType: [DateType: Int]
+    let lockedByType: [DateType: Int]
+    let unlockProgress: Double // 0.0 - 1.0
+    
+    var unlockPercentage: Int {
+        return Int(unlockProgress * 100)
+    }
+    
+    var progressDescription: String {
+        return "\(unlockedLocations) / \(totalLocations) 解放済み (\(unlockPercentage)%)"
+    }
+}

@@ -1,8 +1,8 @@
 //
-//  DateSelectorView.swift - 拡張された50箇所デート対応版
+//  DateSelectorView.swift - 全デートスポット表示対応版
 //  osidate
 //
-//  50箇所のデートスポット + 無限モード対応
+//  親密度不足のスポットもロック状態で表示
 //
 
 import SwiftUI
@@ -21,6 +21,7 @@ struct DateSelectorView: View {
     @State private var shimmerOffset: CGFloat = -100
     @State private var showingIntimacyFilter = false
     @State private var selectedIntimacyRange: IntimacyRange = .all
+    @State private var showUnlockedOnly = false  // 🌟 新しいフィルター
     
     // 🌟 親密度範囲フィルター
     enum IntimacyRange: String, CaseIterable {
@@ -71,9 +72,33 @@ struct DateSelectorView: View {
         colorScheme == .dark ? Color(.systemGray6) : Color.white
     }
     
-    // フィルタリングされたロケーション
+    // 🌟 すべてのデートスポット取得（無限モード含む）
+    private var allDateLocations: [DateLocation] {
+        var locations = DateLocation.availableDateLocations
+        
+        // 無限モードが解放されている場合、動的に生成されたデートを追加
+        if viewModel.character.unlockedInfiniteMode {
+            // 無限デートを3個まで表示
+            for i in 0..<3 {
+                let infiniteDate = DateLocation.generateInfiniteDate(
+                    for: viewModel.character.intimacyLevel,
+                    dateCount: viewModel.infiniteDateCount + i
+                )
+                locations.append(infiniteDate)
+            }
+        }
+        
+        return locations
+    }
+    
+    // 🌟 フィルタリングされたロケーション（全スポット対応）
     private var filteredLocations: [DateLocation] {
-        var locations = viewModel.getAllAvailableLocations()
+        var locations = allDateLocations
+        
+        // 🌟 解放済みフィルター
+        if showUnlockedOnly {
+            locations = locations.filter { $0.requiredIntimacy <= viewModel.character.intimacyLevel }
+        }
         
         // 親密度範囲フィルター
         if selectedIntimacyRange != .all {
@@ -105,9 +130,9 @@ struct DateSelectorView: View {
         return locations.sorted { $0.requiredIntimacy < $1.requiredIntimacy }
     }
     
-    // 親密度レベル別のロケーション数
+    // 🌟 親密度レベル別のロケーション数（全スポット対応）
     private var locationCounts: [IntimacyRange: Int] {
-        let allLocations = viewModel.getAllAvailableLocations()
+        let allLocations = allDateLocations
         var counts: [IntimacyRange: Int] = [:]
         
         for range in IntimacyRange.allCases {
@@ -122,6 +147,13 @@ struct DateSelectorView: View {
         }
         
         return counts
+    }
+    
+    // 🌟 利用可能・ロック済みの統計
+    private var availabilityStats: (available: Int, locked: Int) {
+        let available = allDateLocations.filter { $0.requiredIntimacy <= viewModel.character.intimacyLevel }.count
+        let locked = allDateLocations.filter { $0.requiredIntimacy > viewModel.character.intimacyLevel }.count
+        return (available: available, locked: locked)
     }
     
     var body: some View {
@@ -147,6 +179,12 @@ struct DateSelectorView: View {
                         
                         // 🌟 拡張された親密度ステータス
                         intimacyStatusSection
+                        
+                        // 🌟 利用可能性統計セクション
+                        availabilityStatsSection
+                        
+                        // 🌟 解放済みフィルター
+                        unlockFilterSection
                         
                         // 🌟 親密度範囲フィルター
                         intimacyRangeFilterSection
@@ -196,8 +234,11 @@ struct DateSelectorView: View {
                         viewModel: viewModel,
                         location: location,
                         onStartDate: { dateLocation in
-                            viewModel.startDate(at: dateLocation)
-                            dismiss()
+                            // 親密度チェック
+                            if dateLocation.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                viewModel.startDate(at: dateLocation)
+                                dismiss()
+                            }
                         }
                     )
                 }
@@ -318,6 +359,172 @@ struct DateSelectorView: View {
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.3), value: cardAppearOffset)
     }
     
+    // MARK: - 🌟 利用可能性統計セクション
+    private var availabilityStatsSection: some View {
+        HStack(spacing: 16) {
+            VStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.green)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("利用可能")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        
+                        Text("\(availabilityStats.available) スポット")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Text("今すぐデートできます")
+                    .font(.caption)
+                    .foregroundColor(.green)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(.green.opacity(0.1))
+            .cornerRadius(12)
+            
+            VStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "lock.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.orange)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("未解放")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        
+                        Text("\(availabilityStats.locked) スポット")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                
+                Text("親密度を上げると解放")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(.orange.opacity(0.1))
+            .cornerRadius(12)
+        }
+        .offset(y: cardAppearOffset)
+        .opacity(cardAppearOpacity)
+        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.35), value: cardAppearOffset)
+    }
+    
+    // MARK: - 🌟 解放済みフィルター
+    private var unlockFilterSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("表示フィルター")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+            }
+            
+            HStack(spacing: 12) {
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showUnlockedOnly = false
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye")
+                            .font(.caption)
+                        Text("すべて表示")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        !showUnlockedOnly
+                        ? primaryColor.opacity(0.2)
+                        : Color.gray.opacity(0.1)
+                    )
+                    .foregroundColor(
+                        !showUnlockedOnly
+                        ? primaryColor
+                        : .secondary
+                    )
+                    .cornerRadius(20)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(
+                                !showUnlockedOnly
+                                ? primaryColor.opacity(0.5)
+                                : Color.clear,
+                                lineWidth: 1
+                            )
+                    )
+                }
+                
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showUnlockedOnly = true
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle")
+                            .font(.caption)
+                        Text("解放済みのみ")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        showUnlockedOnly
+                        ? .green.opacity(0.2)
+                        : Color.gray.opacity(0.1)
+                    )
+                    .foregroundColor(
+                        showUnlockedOnly
+                        ? .green
+                        : .secondary
+                    )
+                    .cornerRadius(20)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(
+                                showUnlockedOnly
+                                ? .green.opacity(0.5)
+                                : Color.clear,
+                                lineWidth: 1
+                            )
+                    )
+                }
+                
+                Spacer()
+                
+                Text("\(filteredLocations.count)件")
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(12)
+            }
+        }
+        .offset(y: cardAppearOffset)
+        .opacity(cardAppearOpacity)
+        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.4), value: cardAppearOffset)
+    }
+    
     // MARK: - 🌟 親密度範囲フィルター
     private var intimacyRangeFilterSection: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -353,7 +560,7 @@ struct DateSelectorView: View {
         }
         .offset(y: cardAppearOffset)
         .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.4), value: cardAppearOffset)
+        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.45), value: cardAppearOffset)
     }
     
     private func intimacyRangeChip(range: IntimacyRange) -> some View {
@@ -609,7 +816,7 @@ struct DateSelectorView: View {
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.8), value: cardAppearOffset)
     }
     
-    // MARK: - 🌟 拡張されたデートロケーションカード
+    // MARK: - 🌟 拡張されたデートロケーションカード（全スポット表示対応）
     private func dateLocationCard(location: DateLocation) -> some View {
         Button(action: {
             selectedLocation = location
@@ -664,7 +871,7 @@ struct DateSelectorView: View {
                                 .background(location.type.color.opacity(0.8))
                                 .cornerRadius(6)
                                 
-                                // 🌟 親密度表示
+                                // 🌟 親密度表示（利用可能性に応じて色分け）
                                 HStack(spacing: 2) {
                                     Image(systemName: "heart.fill")
                                         .font(.system(size: 8))
@@ -674,7 +881,11 @@ struct DateSelectorView: View {
                                 .foregroundColor(.white)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 2)
-                                .background(Color.black.opacity(0.6))
+                                .background(
+                                    location.requiredIntimacy <= viewModel.character.intimacyLevel
+                                    ? Color.green.opacity(0.8)
+                                    : Color.red.opacity(0.8)
+                                )
                                 .cornerRadius(4)
                             }
                             Spacer()
@@ -708,14 +919,27 @@ struct DateSelectorView: View {
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.6)
                                 
-                                // 🌟 特別デート表示
-                                if location.isSpecial {
+                                // 🌟 ロック状態表示
+                                if location.requiredIntimacy > viewModel.character.intimacyLevel {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 8))
+                                        Text("ロック中")
+                                            .font(.system(size: 8, weight: .bold))
+                                    }
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(4)
+                                } else if location.isSpecial {
                                     HStack(spacing: 2) {
                                         Image(systemName: "crown.fill")
                                             .font(.system(size: 8))
                                         Text("特別")
                                             .font(.system(size: 8, weight: .bold))
                                     }
+                                    .foregroundColor(.yellow)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
                                     .background(Color.black.opacity(0.6))
@@ -779,32 +1003,49 @@ struct DateSelectorView: View {
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
             
-            // 🌟 拡張された利用不可時のオーバーレイ
+            // 🌟 利用不可時のオーバーレイ（改善版）
             .overlay(
                 Group {
                     if location.requiredIntimacy > viewModel.character.intimacyLevel {
                         RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.black.opacity(0.3))
+                            .fill(Color.black.opacity(0.4))
                             .overlay(
-                                VStack(spacing: 8) {
+                                VStack(spacing: 12) {
                                     Image(systemName: "lock.fill")
-                                        .font(.title2)
+                                        .font(.title)
                                         .foregroundColor(.white)
+                                        .shadow(color: .black.opacity(0.5), radius: 2)
                                     
-                                    VStack(spacing: 4) {
+                                    VStack(spacing: 6) {
                                         Text("親密度 \(location.requiredIntimacy) 必要")
                                             .font(.caption)
                                             .fontWeight(.bold)
                                             .foregroundColor(.white)
                                             .multilineTextAlignment(.center)
                                             .lineLimit(2)
+                                            .shadow(color: .black.opacity(0.7), radius: 1)
                                         
                                         Text("あと \(location.requiredIntimacy - viewModel.character.intimacyLevel)")
                                             .font(.caption2)
-                                            .foregroundColor(.white.opacity(0.8))
+                                            .foregroundColor(.white.opacity(0.9))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(Color.red.opacity(0.7))
+                                            .cornerRadius(8)
                                     }
+                                    
+                                    // 🌟 解放のヒント
+                                    Text("💕 もっと会話して親密度を上げよう")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(Color.blue.opacity(0.6))
+                                        .cornerRadius(6)
                                 }
                             )
+                            .animation(.easeInOut(duration: 0.3), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
                     }
                 }
             )
@@ -842,7 +1083,7 @@ struct DateSelectorView: View {
                 }
             )
         }
-        .disabled(location.requiredIntimacy > viewModel.character.intimacyLevel)
+        // 🌟 ロック状態に関係なくタップ可能（詳細は見れるが開始はできない）
         .scaleEffect(location.requiredIntimacy > viewModel.character.intimacyLevel ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
     }
@@ -874,6 +1115,817 @@ struct DateSelectorView: View {
         
         withAnimation(.linear(duration: 2).repeatForever(autoreverses: false)) {
             shimmerOffset = 100
+        }
+    }
+}
+
+struct DateDetailView: View {
+    @ObservedObject var viewModel: RomanceAppViewModel
+    let location: DateLocation
+    let onStartDate: (DateLocation) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
+    
+    @State private var showConfirmation = false
+    @State private var showUnlockMotivation = false  // 🌟 解放モチベーション表示
+    
+    private var primaryColor: Color {
+        location.type.color
+    }
+    
+    private var cardColor: Color {
+        colorScheme == .dark ? Color(.systemGray6) : Color.white
+    }
+    
+    // 🌟 デートスポットが利用可能かチェック
+    private var isUnlocked: Bool {
+        location.requiredIntimacy <= viewModel.character.intimacyLevel
+    }
+    
+    // 🌟 必要な親密度不足の値
+    private var intimacyDeficit: Int {
+        max(0, location.requiredIntimacy - viewModel.character.intimacyLevel)
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 32) {
+                    headerImageSection
+                    
+                    // 🌟 ロック状態の場合は特別なセクションを表示
+                    if !isUnlocked {
+                        lockStatusSection
+                    }
+                    
+                    basicInfoSection
+                    
+                    // 🌟 親密度ボーナス情報
+                    intimacyBonusSection
+                    
+                    detailInfoSection
+                    specialEffectsSection
+                    
+                    // 🌟 ロック状態に応じたボタン
+                    if isUnlocked {
+                        startButtonSection
+                    } else {
+                        unlockMotivationSection
+                    }
+                    
+                    Spacer(minLength: 20)
+                }
+                .padding(.horizontal, 20)
+            }
+            .navigationTitle(location.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("戻る") {
+                        dismiss()
+                    }
+                    .foregroundColor(primaryColor)
+                }
+            }
+            .alert("デートを開始しますか？", isPresented: $showConfirmation) {
+                Button("キャンセル", role: .cancel) { }
+                Button("開始") {
+                    onStartDate(location)
+                    dismiss()
+                }
+            } message: {
+                Text("\(location.name)でのデートを開始します。\n約\(location.duration)分間の特別な時間をお楽しみください。\n\n親密度ボーナス: +\(location.intimacyBonus)")
+            }
+            .sheet(isPresented: $showUnlockMotivation) {
+                UnlockMotivationView(
+                    viewModel: viewModel,
+                    targetLocation: location,
+                    currentIntimacy: viewModel.character.intimacyLevel,
+                    requiredIntimacy: location.requiredIntimacy
+                )
+            }
+        }
+    }
+    
+    // MARK: - 🌟 ロック状態セクション
+    private var lockStatusSection: some View {
+        VStack(spacing: 20) {
+            // ロックアイコンとメッセージ
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(.red.opacity(0.1))
+                        .frame(width: 80, height: 80)
+                    
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 32, weight: .medium))
+                        .foregroundColor(.red)
+                }
+                
+                VStack(spacing: 8) {
+                    Text("このデートスポットはロック中です")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("親密度 \(location.requiredIntimacy) に達すると解放されます")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            
+            // 進捗表示
+            VStack(spacing: 12) {
+                HStack {
+                    Text("現在の進捗")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text("\(viewModel.character.intimacyLevel) / \(location.requiredIntimacy)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(primaryColor)
+                }
+                
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(height: 8)
+                            .cornerRadius(4)
+                        
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [primaryColor, primaryColor.opacity(0.7)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(
+                                width: geometry.size.width * min(1.0, Double(viewModel.character.intimacyLevel) / Double(location.requiredIntimacy)),
+                                height: 8
+                            )
+                            .cornerRadius(4)
+                    }
+                }
+                .frame(height: 8)
+                
+                HStack {
+                    Text("あと \(intimacyDeficit) で解放")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .fontWeight(.medium)
+                    
+                    Spacer()
+                    
+                    Text("\(Int(Double(viewModel.character.intimacyLevel) / Double(location.requiredIntimacy) * 100))%")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(20)
+        .background(.red.opacity(0.05))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(.red.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Header Image Section (継続使用)
+    private var headerImageSection: some View {
+        ZStack {
+            if UIImage(named: location.backgroundImage) != nil {
+                Image(location.backgroundImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(height: 200)
+                    .clipped()
+                    .overlay(
+                        LinearGradient(
+                            colors: [
+                                Color.black.opacity(0.2),
+                                Color.black.opacity(0.6)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            } else {
+                LinearGradient(
+                    colors: [primaryColor.opacity(0.6), primaryColor.opacity(0.3)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .frame(height: 200)
+            }
+            
+            // 🌟 ロック状態の場合はオーバーレイを追加
+            if !isUnlocked {
+                Rectangle()
+                    .fill(.black.opacity(0.4))
+                    .frame(height: 200)
+                
+                VStack(spacing: 12) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundColor(.white)
+                    
+                    Text("ロック中")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                }
+            }
+            
+            VStack(spacing: 16) {
+                Image(systemName: location.type.icon)
+                    .font(.system(size: 48, weight: .light))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+                
+                Text(location.type.displayName)
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.7), radius: 2, x: 0, y: 1)
+                
+                HStack(spacing: 16) {
+                    HStack(spacing: 4) {
+                        Image(systemName: location.timeOfDay.icon)
+                            .font(.caption)
+                        Text(location.timeOfDay.displayName)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.white.opacity(0.9))
+                    .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.caption)
+                        Text("\(location.duration)分")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                    }
+                    .foregroundColor(.white.opacity(0.9))
+                    .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
+                    
+                    // 🌟 親密度ボーナス表示
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .font(.caption)
+                        Text("+\(location.intimacyBonus)")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                    }
+                    .foregroundColor(.yellow)
+                    .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .shadow(color: primaryColor.opacity(0.3), radius: 15, x: 0, y: 8)
+    }
+    
+    // MARK: - Basic Info Section
+    private var basicInfoSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("デートについて")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            Text(location.description)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .lineSpacing(4)
+            
+            HStack(spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("必要親密度")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "heart.fill")
+                            .font(.caption)
+                            .foregroundColor(isUnlocked ? .green : .red)
+                        
+                        Text("\(location.requiredIntimacy)")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(isUnlocked ? .green : .red)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("利用可能季節")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    HStack(spacing: 4) {
+                        ForEach(location.availableSeasons, id: \.self) { season in
+                            Text(season.displayName)
+                                .font(.caption2)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 2)
+                                .background(primaryColor.opacity(0.2))
+                                .foregroundColor(primaryColor)
+                                .cornerRadius(8)
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+        }
+        .padding()
+        .background(cardColor)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+    }
+    
+    // MARK: - 🌟 親密度ボーナスセクション
+    private var intimacyBonusSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "heart.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.pink)
+                
+                Text("親密度ボーナス")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("+\(location.intimacyBonus)")
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.pink)
+            }
+            
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("デート完了ボーナス")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        Text(isUnlocked
+                             ? "このデートを完了すると +\(location.intimacyBonus) の親密度ボーナスを獲得"
+                             : "解放後、このデートを完了すると +\(location.intimacyBonus) の親密度ボーナスを獲得できます"
+                        )
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    ZStack {
+                        Circle()
+                            .fill(.pink.opacity(0.2))
+                            .frame(width: 40, height: 40)
+                        
+                        Text("+\(location.intimacyBonus)")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.pink)
+                    }
+                }
+                
+                if location.isSpecial {
+                    HStack(spacing: 8) {
+                        Image(systemName: "crown.fill")
+                            .font(.caption)
+                            .foregroundColor(.pink)
+                        
+                        Text("特別デート: 通常より高い親密度ボーナス")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.pink)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.yellow.opacity(0.1))
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding()
+        .background(cardColor)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+    }
+    
+    // MARK: - Detail Info Section
+    private var detailInfoSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("このデートの特徴")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                detailRow(icon: "bubble.left.and.bubble.right", title: "会話スタイル", description: "この場所に適した特別な会話を楽しめます")
+                detailRow(icon: "photo", title: "背景変更", description: "デート中は専用の背景に変更されます")
+                detailRow(icon: "sparkles", title: "特別演出", description: "場所に応じた特別な効果やイベントが発生します")
+                detailRow(icon: "heart.text.square", title: "思い出作り", description: "デートの記録が残り、後で振り返ることができます")
+                
+                // 🌟 ロック状態でも体験予告を表示
+                if !isUnlocked {
+                    detailRow(icon: "lock.fill", title: "解放後の特典", description: "親密度が\(location.requiredIntimacy)に達すると、この特別な体験を楽しむことができます")
+                }
+            }
+        }
+        .padding()
+        .background(cardColor)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+    }
+    
+    private func detailRow(icon: String, title: String, description: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(primaryColor)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(nil)
+            }
+            
+            Spacer()
+        }
+    }
+    
+    // MARK: - Special Effects Section
+    private var specialEffectsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("特別演出")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            if location.specialEffects.isEmpty {
+                Text(isUnlocked
+                     ? "このデートでは基本的な演出をお楽しみいただけます"
+                     : "解放後、基本的な演出をお楽しみいただけます"
+                )
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            } else {
+                LazyVGrid(columns: Array(repeating: .init(.flexible()), count: 2), spacing: 8) {
+                    ForEach(location.specialEffects, id: \.self) { effect in
+                        Text(effectDisplayName(effect))
+                            .font(.caption)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(primaryColor.opacity(isUnlocked ? 0.1 : 0.05))
+                            .foregroundColor(primaryColor.opacity(isUnlocked ? 1.0 : 0.6))
+                            .cornerRadius(12)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(cardColor)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+    }
+    
+    // MARK: - Start Button Section
+    private var startButtonSection: some View {
+        Button(action: {
+            showConfirmation = true
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 18, weight: .medium))
+                
+                Text("デートを開始")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                
+                // 🌟 親密度ボーナス表示
+                Text("(+\(location.intimacyBonus))")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [primaryColor, primaryColor.opacity(0.8)],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(16)
+            .shadow(color: primaryColor.opacity(0.3), radius: 12, x: 0, y: 6)
+        }
+    }
+    
+    // MARK: - 🌟 解放モチベーションセクション
+    private var unlockMotivationSection: some View {
+        VStack(spacing: 16) {
+            // 解放までの情報
+            VStack(spacing: 12) {
+                HStack {
+                    Text("解放条件")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text("あと \(intimacyDeficit)")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.red)
+                }
+                
+                HStack {
+                    Text("必要な親密度")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("\(location.requiredIntimacy)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+                
+                HStack {
+                    Text("現在の親密度")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text("\(viewModel.character.intimacyLevel)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                }
+            }
+            .padding()
+            .background(.orange.opacity(0.1))
+            .cornerRadius(12)
+            
+            // モチベーション向上ボタン
+            Button(action: {
+                showUnlockMotivation = true
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "target")
+                        .font(.system(size: 18, weight: .medium))
+                    
+                    Text("解放への道のりを見る")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [.orange, .orange.opacity(0.8)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: .orange.opacity(0.3), radius: 12, x: 0, y: 6)
+            }
+            
+            // ヒント
+            HStack(spacing: 8) {
+                Image(systemName: "lightbulb.fill")
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                
+                Text("💡 ヒント: 毎日の会話やデートで親密度を上げることができます")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.blue.opacity(0.1))
+            .cornerRadius(8)
+        }
+    }
+    
+    private func effectDisplayName(_ effect: String) -> String {
+        switch effect {
+        case "sakura_petals": return "🌸 桜の花びら"
+        case "romantic_atmosphere": return "💕 ロマンチック"
+        case "sunset_glow": return "🌅 夕焼け"
+        case "wave_sounds": return "🌊 波の音"
+        case "falling_leaves": return "🍂 落ち葉"
+        case "crisp_air": return "🍃 爽やかな風"
+        case "snow_falling": return "❄️ 雪景色"
+        case "warm_atmosphere": return "♨️ 温かい雰囲気"
+        case "carnival_lights": return "🎡 カーニバル"
+        case "excitement": return "🎉 興奮"
+        case "blue_lighting": return "💙 幻想的な光"
+        case "peaceful_atmosphere": return "😌 穏やかな雰囲気"
+        case "coffee_aroma": return "☕️ コーヒーの香り"
+        case "cozy_atmosphere": return "🏠 居心地の良さ"
+        case "elegant_atmosphere": return "✨ 上品な雰囲気"
+        case "romantic_lighting": return "🕯️ ロマンチックな照明"
+        case "dim_lighting": return "💡 落ち着いた照明"
+        case "intimate_atmosphere": return "💑 親密な雰囲気"
+        case "cooking_sounds": return "🍳 料理音"
+        case "delicious_aromas": return "🍽️ 美味しい香り"
+        case "city_lights": return "🌃 夜景"
+        case "shopping_excitement": return "🛍️ お買い物"
+        case "discovery": return "🔍 新発見"
+        case "infinite_magic": return "♾️ 無限の魔法"
+        case "transcendent_love": return "✨ 超越的な愛"
+        case "limitless_imagination": return "🌌 無限の想像力"
+        default: return effect
+        }
+    }
+}
+
+// MARK: - 🌟 解放モチベーションビュー
+struct UnlockMotivationView: View {
+    @ObservedObject var viewModel: RomanceAppViewModel
+    let targetLocation: DateLocation
+    let currentIntimacy: Int
+    let requiredIntimacy: Int
+    @Environment(\.dismiss) private var dismiss
+    
+    private var intimacyDeficit: Int {
+        requiredIntimacy - currentIntimacy
+    }
+    
+    private var estimatedDaysToUnlock: Int {
+        let avgDailyGain = max(1, viewModel.getAverageMessagesPerDay() * 2) // メッセージ1つあたり平均2の親密度と仮定
+        return max(1, Int(ceil(Double(intimacyDeficit) / avgDailyGain)))
+    }
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // ターゲット情報
+                    VStack(spacing: 16) {
+                        Image(systemName: targetLocation.type.icon)
+                            .font(.system(size: 48))
+                            .foregroundColor(targetLocation.type.color)
+                        
+                        Text(targetLocation.name)
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("解放まであと \(intimacyDeficit) の親密度が必要です")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    
+                    // 進捗表示
+                    VStack(spacing: 12) {
+                        ProgressView(value: Double(currentIntimacy), total: Double(requiredIntimacy))
+                            .progressViewStyle(LinearProgressViewStyle(tint: targetLocation.type.color))
+                            .frame(height: 8)
+                        
+                        HStack {
+                            Text("現在: \(currentIntimacy)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                            
+                            Text("目標: \(requiredIntimacy)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    .cornerRadius(12)
+                    
+                    // 解放方法
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("親密度を上げる方法")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                        
+                        VStack(spacing: 12) {
+                            motivationRow(icon: "message.fill", title: "日常会話", points: "1-3", description: "毎日の何気ない会話で親密度アップ")
+                            motivationRow(icon: "heart.fill", title: "デート", points: "5-20", description: "デートを完了すると大幅に親密度アップ")
+                            motivationRow(icon: "text.bubble.fill", title: "長いメッセージ", points: "2-5", description: "感情を込めた長いメッセージで親密度ボーナス")
+                            motivationRow(icon: "calendar.fill", title: "継続利用", points: "1-2", description: "毎日アプリを使うことで親密度が自然に上昇")
+                        }
+                    }
+                    .padding()
+                    .background(.blue.opacity(0.1))
+                    .cornerRadius(16)
+                    
+                    // 予想期間
+                    VStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "clock.fill")
+                                .foregroundColor(.green)
+                            Text("解放予想期間")
+                                .font(.headline)
+                                .fontWeight(.semibold)
+                        }
+                        
+                        Text("現在のペースなら約 \(estimatedDaysToUnlock) 日で解放できそうです！")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("💡 毎日会話することで、より早く解放できます")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                    .background(.green.opacity(0.1))
+                    .cornerRadius(12)
+                    
+                    // 閉じるボタン
+                    Button("頑張って親密度を上げよう！") {
+                        dismiss()
+                    }
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(targetLocation.type.color)
+                    .cornerRadius(16)
+                }
+                .padding(20)
+            }
+            .navigationTitle("解放への道のり")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func motivationRow(icon: String, title: String, points: String, description: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.title3)
+                .foregroundColor(.blue)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text(title)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    Text("+\(points)")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.green.opacity(0.2))
+                        .cornerRadius(4)
+                }
+                
+                Text(description)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 }
@@ -965,439 +2017,6 @@ struct IntimacyFilterView: View {
                     }
                 }
             }
-        }
-    }
-}
-
-// MARK: - 🌟 DateDetailView も拡張対応（継続使用 + 親密度ボーナス表示）
-struct DateDetailView: View {
-    @ObservedObject var viewModel: RomanceAppViewModel
-    let location: DateLocation
-    let onStartDate: (DateLocation) -> Void
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
-    
-    @State private var showConfirmation = false
-    
-    private var primaryColor: Color {
-        location.type.color
-    }
-    
-    private var cardColor: Color {
-        colorScheme == .dark ? Color(.systemGray6) : Color.white
-    }
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 32) {
-                    headerImageSection
-                    basicInfoSection
-                    
-                    // 🌟 親密度ボーナス情報
-                    intimacyBonusSection
-                    
-                    detailInfoSection
-                    specialEffectsSection
-                    startButtonSection
-                    
-                    Spacer(minLength: 20)
-                }
-                .padding(.horizontal, 20)
-            }
-            .navigationTitle(location.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("戻る") {
-                        dismiss()
-                    }
-                    .foregroundColor(primaryColor)
-                }
-            }
-            .alert("デートを開始しますか？", isPresented: $showConfirmation) {
-                Button("キャンセル", role: .cancel) { }
-                Button("開始") {
-                    onStartDate(location)
-                    dismiss()
-                }
-            } message: {
-                Text("\(location.name)でのデートを開始します。\n約\(location.duration)分間の特別な時間をお楽しみください。\n\n親密度ボーナス: +\(location.intimacyBonus)")
-            }
-        }
-    }
-    
-    // MARK: - Header Image Section (継続使用)
-    private var headerImageSection: some View {
-        ZStack {
-            if UIImage(named: location.backgroundImage) != nil {
-                Image(location.backgroundImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(height: 200)
-                    .clipped()
-                    .overlay(
-                        LinearGradient(
-                            colors: [
-                                Color.black.opacity(0.2),
-                                Color.black.opacity(0.6)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-            } else {
-                LinearGradient(
-                    colors: [primaryColor.opacity(0.6), primaryColor.opacity(0.3)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .frame(height: 200)
-            }
-            
-            VStack(spacing: 16) {
-                Image(systemName: location.type.icon)
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
-                
-                Text(location.type.displayName)
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.7), radius: 2, x: 0, y: 1)
-                
-                HStack(spacing: 16) {
-                    HStack(spacing: 4) {
-                        Image(systemName: location.timeOfDay.icon)
-                            .font(.caption)
-                        Text(location.timeOfDay.displayName)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white.opacity(0.9))
-                    .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "clock")
-                            .font(.caption)
-                        Text("\(location.duration)分")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white.opacity(0.9))
-                    .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
-                    
-                    // 🌟 親密度ボーナス表示
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .font(.caption)
-                        Text("+\(location.intimacyBonus)")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                    }
-                    .foregroundColor(.yellow)
-                    .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
-                }
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: primaryColor.opacity(0.3), radius: 15, x: 0, y: 8)
-    }
-    
-    // MARK: - 🌟 親密度ボーナスセクション
-    private var intimacyBonusSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "heart.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.pink)
-                
-                Text("親密度ボーナス")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                Text("+\(location.intimacyBonus)")
-                    .font(.title)
-                    .fontWeight(.bold)
-                    .foregroundColor(.pink)
-            }
-            
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("デート完了ボーナス")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.primary)
-                        
-                        Text("このデートを完了すると +\(location.intimacyBonus) の親密度ボーナスを獲得")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Spacer()
-                    
-                    ZStack {
-                        Circle()
-                            .fill(.pink.opacity(0.2))
-                            .frame(width: 40, height: 40)
-                        
-                        Text("+\(location.intimacyBonus)")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(.pink)
-                    }
-                }
-                
-                if location.isSpecial {
-                    HStack(spacing: 8) {
-                        Image(systemName: "crown.fill")
-                            .font(.caption)
-                            .foregroundColor(.pink)
-                        
-                        Text("特別デート: 通常より高い親密度ボーナス")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(.pink)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.yellow.opacity(0.1))
-                    .cornerRadius(8)
-                }
-            }
-        }
-        .padding()
-        .background(cardColor)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-    }
-    
-    // MARK: - Basic Info Section (継続使用)
-    private var basicInfoSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("デートについて")
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            Text(location.description)
-                .font(.body)
-                .foregroundColor(.secondary)
-                .lineSpacing(4)
-            
-            HStack(spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("必要親密度")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .font(.caption)
-                            .foregroundColor(location.requiredIntimacy <= viewModel.character.intimacyLevel ? .green : .red)
-                        
-                        Text("\(location.requiredIntimacy)")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(location.requiredIntimacy <= viewModel.character.intimacyLevel ? .green : .red)
-                    }
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("利用可能季節")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    HStack(spacing: 4) {
-                        ForEach(location.availableSeasons, id: \.self) { season in
-                            Text(season.displayName)
-                                .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(primaryColor.opacity(0.2))
-                                .foregroundColor(primaryColor)
-                                .cornerRadius(8)
-                        }
-                    }
-                }
-                
-                Spacer()
-            }
-        }
-        .padding()
-        .background(cardColor)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-    }
-    
-    // MARK: - Detail Info Section (継続使用)
-    private var detailInfoSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("このデートの特徴")
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            VStack(alignment: .leading, spacing: 12) {
-                detailRow(icon: "bubble.left.and.bubble.right", title: "会話スタイル", description: "この場所に適した特別な会話を楽しめます")
-                detailRow(icon: "photo", title: "背景変更", description: "デート中は専用の背景に変更されます")
-                detailRow(icon: "sparkles", title: "特別演出", description: "場所に応じた特別な効果やイベントが発生します")
-                detailRow(icon: "heart.text.square", title: "思い出作り", description: "デートの記録が残り、後で振り返ることができます")
-            }
-        }
-        .padding()
-        .background(cardColor)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-    }
-    
-    private func detailRow(icon: String, title: String, description: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(primaryColor)
-                .frame(width: 24)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                
-                Text(description)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(nil)
-            }
-            
-            Spacer()
-        }
-    }
-    
-    // MARK: - Special Effects Section (継続使用)
-    private var specialEffectsSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("特別演出")
-                .font(.headline)
-                .fontWeight(.bold)
-                .foregroundColor(.primary)
-            
-            if location.specialEffects.isEmpty {
-                Text("このデートでは基本的な演出をお楽しみいただけます")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } else {
-                LazyVGrid(columns: Array(repeating: .init(.flexible()), count: 2), spacing: 8) {
-                    ForEach(location.specialEffects, id: \.self) { effect in
-                        Text(effectDisplayName(effect))
-                            .font(.caption)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(primaryColor.opacity(0.1))
-                            .foregroundColor(primaryColor)
-                            .cornerRadius(12)
-                    }
-                }
-            }
-        }
-        .padding()
-        .background(cardColor)
-        .cornerRadius(16)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-    }
-    
-    // MARK: - Start Button Section (継続使用)
-    private var startButtonSection: some View {
-        VStack(spacing: 16) {
-            if location.requiredIntimacy > viewModel.character.intimacyLevel {
-                VStack(spacing: 8) {
-                    Text("親密度が足りません")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.red)
-                    
-                    Text("このデートを楽しむには親密度\(location.requiredIntimacy)以上が必要です")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                    
-                    Text("現在の親密度: \(viewModel.character.intimacyLevel) (あと\(location.requiredIntimacy - viewModel.character.intimacyLevel))")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding()
-                .background(Color.red.opacity(0.1))
-                .cornerRadius(12)
-            } else {
-                Button(action: {
-                    showConfirmation = true
-                }) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 18, weight: .medium))
-                        
-                        Text("デートを開始")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                        
-                        // 🌟 親密度ボーナス表示
-                        Text("(+\(location.intimacyBonus))")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(
-                            colors: [primaryColor, primaryColor.opacity(0.8)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(16)
-                    .shadow(color: primaryColor.opacity(0.3), radius: 12, x: 0, y: 6)
-                }
-                .scaleEffect(0.98)
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showConfirmation)
-            }
-        }
-    }
-    
-    private func effectDisplayName(_ effect: String) -> String {
-        switch effect {
-        case "sakura_petals": return "🌸 桜の花びら"
-        case "romantic_atmosphere": return "💕 ロマンチック"
-        case "sunset_glow": return "🌅 夕焼け"
-        case "wave_sounds": return "🌊 波の音"
-        case "falling_leaves": return "🍂 落ち葉"
-        case "crisp_air": return "🍃 爽やかな風"
-        case "snow_falling": return "❄️ 雪景色"
-        case "warm_atmosphere": return "♨️ 温かい雰囲気"
-        case "carnival_lights": return "🎡 カーニバル"
-        case "excitement": return "🎉 興奮"
-        case "blue_lighting": return "💙 幻想的な光"
-        case "peaceful_atmosphere": return "😌 穏やかな雰囲気"
-        case "coffee_aroma": return "☕️ コーヒーの香り"
-        case "cozy_atmosphere": return "🏠 居心地の良さ"
-        case "elegant_atmosphere": return "✨ 上品な雰囲気"
-        case "romantic_lighting": return "🕯️ ロマンチックな照明"
-        case "dim_lighting": return "💡 落ち着いた照明"
-        case "intimate_atmosphere": return "💑 親密な雰囲気"
-        case "cooking_sounds": return "🍳 料理音"
-        case "delicious_aromas": return "🍽️ 美味しい香り"
-        case "city_lights": return "🌃 夜景"
-        case "shopping_excitement": return "🛍️ お買い物"
-        case "discovery": return "🔍 新発見"
-        case "infinite_magic": return "♾️ 無限の魔法"
-        case "transcendent_love": return "✨ 超越的な愛"
-        case "limitless_imagination": return "🌌 無限の想像力"
-        default: return effect
         }
     }
 }

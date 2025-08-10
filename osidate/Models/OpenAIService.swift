@@ -107,7 +107,7 @@ class OpenAIService: ObservableObject {
         messages.append(["role": "user", "content": userMessage])
         
         let body: [String: Any] = [
-            "model": "gpt-4",
+            "model": "gpt-4.1-nano-2025-04-14",
             "messages": messages,
             "temperature": 0.8,
             "max_tokens": 150
