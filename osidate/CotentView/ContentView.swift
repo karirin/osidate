@@ -1,9 +1,8 @@
 //
-//  ContentView.swift - Modern UI Design (Keyboard Enhanced)
+//  ContentView.swift - 拡張親密度システム対応版
 //  osidate
 //
-//  Enhanced with keyboard-aware scrolling like OshiAIChatView
-//  Modified to show only recent 5 messages
+//  50箇所のデートスポットと無限モード対応
 //
 
 import SwiftUI
@@ -63,6 +62,13 @@ struct ContentView: View {
         .sheet(isPresented: $showingFullChatHistory) {
             FullChatHistoryView(viewModel: viewModel)
         }
+        // 🌟 親密度レベルアップ通知
+        .sheet(isPresented: $viewModel.showingIntimacyLevelUp) {
+            IntimacyLevelUpView(
+                newStage: viewModel.newIntimacyStage ?? .bestFriend,
+                currentLevel: viewModel.character.intimacyLevel
+            )
+        }
         .onReceive(Publishers.keyboardHeight) { height in
             withAnimation(.easeInOut(duration: 0.3)) {
                 keyboardHeight = height
@@ -73,7 +79,6 @@ struct ContentView: View {
     // MARK: - Modern Loading View
     private func ModernLoadingView() -> some View {
         ZStack {
-            // Animated gradient background
             LinearGradient(
                 colors: [
                     primaryColor.opacity(0.1),
@@ -88,7 +93,6 @@ struct ContentView: View {
             .animation(.linear(duration: 3).repeatForever(autoreverses: false), value: backgroundBlur)
             
             VStack(spacing: 30) {
-                // Custom loading animation
                 ZStack {
                     ForEach(0..<3) { index in
                         Circle()
@@ -133,7 +137,6 @@ struct ContentView: View {
     // MARK: - Modern Authentication View
     private func ModernAuthenticationView() -> some View {
         ZStack {
-            // Dynamic background
             LinearGradient(
                 colors: [
                     Color(.systemPink).opacity(0.15),
@@ -149,7 +152,6 @@ struct ContentView: View {
                 VStack(spacing: 50) {
                     Spacer(minLength: 60)
                     
-                    // Hero section
                     VStack(spacing: 25) {
                         ZStack {
                             Circle()
@@ -198,7 +200,6 @@ struct ContentView: View {
                         }
                     }
                     
-                    // Authentication button
                     VStack(spacing: 20) {
                         Button(action: {
                             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
@@ -247,7 +248,6 @@ struct ContentView: View {
                         }
                     }
                     
-                    // Information card
                     VStack(spacing: 16) {
                         HStack {
                             Image(systemName: "info.circle.fill")
@@ -290,7 +290,6 @@ struct ContentView: View {
         NavigationView {
             GeometryReader { geometry in
                 ZStack {
-                    // Enhanced background with blur effect
                     backgroundView(geometry: geometry)
                         .blur(radius: backgroundBlur)
                     
@@ -304,10 +303,10 @@ struct ContentView: View {
                         // Floating character icon
                         modernFloatingIconView
                         
-                        // Enhanced chat area - キーボード対応版
+                        // Enhanced chat area
                         modernChatView
                         
-                        // Modern input area - キーボード対応版
+                        // Modern input area
                         modernInputView
                             .padding(.bottom, keyboardHeight > 0 ? 0 : 8)
                     }
@@ -316,6 +315,93 @@ struct ContentView: View {
             .clipped()
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+    
+    // MARK: - 🌟 拡張された親密度ステータス表示
+    private var modernIntimacyStatusView: some View {
+        HStack(spacing: 16) {
+            // 親密度レベルアイコン
+            ZStack {
+                Circle()
+                    .fill(viewModel.character.intimacyStage.color.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: viewModel.character.intimacyStage.icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(viewModel.character.intimacyStage.color)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text("\(viewModel.character.intimacyLevel)")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(viewModel.character.intimacyStage.color)
+                    
+                    Text(viewModel.character.intimacyTitle)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                }
+                
+                // プログレスバー
+                HStack(spacing: 8) {
+                    ProgressView(value: viewModel.character.intimacyProgress)
+                        .progressViewStyle(LinearProgressViewStyle(tint: viewModel.character.intimacyStage.color))
+                        .frame(height: 4)
+                    
+                    if viewModel.character.intimacyToNextLevel > 0 {
+                        Text("+\(viewModel.character.intimacyToNextLevel)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("MAX")
+                            .font(.caption2)
+                            .fontWeight(.bold)
+                            .foregroundColor(viewModel.character.intimacyStage.color)
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // 無限モードインジケーター
+            if viewModel.character.unlockedInfiniteMode {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [Color.purple, Color.blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                        .frame(width: 32, height: 32)
+                    
+                    Image(systemName: "infinity")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .scaleEffect(pulseAnimation ? 1.1 : 1.0)
+                .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: pulseAnimation)
+            }
+            
+            // デート回数
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(viewModel.character.totalDateCount)")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                
+                Text("回デート")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial)
+        .cornerRadius(16)
+        .padding(.horizontal, 16)
+        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
     }
     
     // MARK: - Enhanced Background View
@@ -339,7 +425,6 @@ struct ContentView: View {
         }
         .ignoresSafeArea()
         .overlay(
-            // Dynamic overlay for better readability
             LinearGradient(
                 colors: [
                     Color.black.opacity(0.1),
@@ -374,20 +459,19 @@ struct ContentView: View {
                             .clipShape(Circle())
                         
                         VStack(alignment: .leading, spacing: 4) {
-                            // 修正：デート中表示のフォントサイズを動的調整
                             Text("\(session.location.name)でデート中")
                                 .font(adaptiveFontSizeForDateStatus("\(session.location.name)でデート中"))
                                 .fontWeight(.bold)
                                 .foregroundColor(.primary)
-                                .lineLimit(1)  // 改行を防ぐ
-                                .minimumScaleFactor(0.7)  // 必要に応じてさらに縮小
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
                             
-                            HStack{
+                            HStack {
                                 Text("開始: \(DateFormatter.localizedString(from: session.startTime, dateStyle: .none, timeStyle: .short))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
-                                // Time elapsed
+                                
                                 Text("経過時間: \(timeElapsedString(from: session.startTime))")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
@@ -429,13 +513,13 @@ struct ContentView: View {
         
         switch characterCount {
         case 0...8:
-            return .headline    // 標準サイズ
+            return .headline
         case 9...12:
-            return .subheadline // 少し小さく
+            return .subheadline
         case 13...16:
-            return .body        // より小さく
+            return .body
         default:
-            return .callout     // 最小サイズ
+            return .callout
         }
     }
     
@@ -461,12 +545,10 @@ struct ContentView: View {
     
     private var modernFloatingIconView: some View {
         ZStack {
-            // Character icon with talking animation
             CharacterIconView(character: viewModel.character, size: 120)
                 .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
                 .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
                 .overlay(
-                    // Speaking indicator (subtle rings)
                     Group {
                         if characterTalkingAnimation {
                             ForEach(0..<3) { index in
@@ -497,22 +579,14 @@ struct ContentView: View {
     
     // Enhanced intimacy color
     private var intimacyColor: Color {
-        switch viewModel.character.intimacyLevel {
-        case 0...10: return .gray
-        case 11...30: return .blue
-        case 31...60: return .green
-        case 61...80: return .orange
-        case 81...100: return .pink
-        default: return .red
-        }
+        return viewModel.character.intimacyStage.color
     }
     
-    // MARK: - Modern Chat View (キーボード対応版) - 直近5件のみ表示
+    // MARK: - Modern Chat View
     private var modernChatView: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    // 直近5件以外にメッセージがある場合、「過去のメッセージを表示」ボタンを表示
                     if viewModel.messages.count > 5 {
                         VStack(spacing: 12) {
                             Text("\(viewModel.messages.count - 5)件の過去のメッセージがあります")
@@ -540,14 +614,12 @@ struct ContentView: View {
                         .padding(.top, 16)
                     }
                     
-                    // 直近5件のメッセージのみ表示
                     ForEach(recentMessages) { message in
                         ModernMessageBubble(message: message)
                             .id(message.id)
                             .padding(.horizontal, 16)
                     }
                     
-                    // OshiAIChatViewと同じように最下部マーカーを追加
                     Color.clear
                         .frame(height: 1)
                         .id("bottomMarker")
@@ -555,7 +627,6 @@ struct ContentView: View {
                 .padding(.vertical, 16)
             }
             .background(.clear)
-            // キーボード表示時のスクロール処理（OshiAIChatViewと同様）
             .onChange(of: keyboardHeight) { _ in
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -563,7 +634,6 @@ struct ContentView: View {
                     }
                 }
             }
-            // メッセージ追加時のスクロール処理
             .onChange(of: recentMessages.count) { _ in
                 if !recentMessages.isEmpty {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -578,11 +648,10 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Modern Input View (キーボード対応版)
+    // MARK: - Modern Input View
     private var modernInputView: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                // Input field with modern design
                 HStack(spacing: 12) {
                     TextField("", text: $messageText, prompt: Text("メッセージを入力...").foregroundColor(.gray.opacity(0.6)))
                         .textFieldStyle(PlainTextFieldStyle())
@@ -619,7 +688,6 @@ struct ContentView: View {
                         )
                 )
                 
-                // Send button with enhanced design
                 Button(action: sendMessage) {
                     ZStack {
                         Circle()
@@ -661,7 +729,6 @@ struct ContentView: View {
     private func sendMessage() {
         guard !messageText.isEmpty else { return }
         
-        // Show character listening animation
         showCharacterListening()
         
         if let message = viewModel.messages.last, viewModel.currentDateSession != nil {
@@ -674,19 +741,15 @@ struct ContentView: View {
         triggerPulseAnimation()
     }
     
-    // MARK: - Character Listening Animation
     private func showCharacterListening() {
-        // Subtle glow effect when user sends message
         withAnimation(.easeInOut(duration: 0.5)) {
             showFloatingIcon = true
         }
         
-        // Small scale animation to show character is "receiving" the message
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             characterTalkingAnimation = true
         }
         
-        // Quick reset
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 characterTalkingAnimation = false
@@ -704,7 +767,6 @@ struct ContentView: View {
     private func triggerFloatingIcon() {
         showFloatingIcon = true
         
-        // Get the last AI message for the speech bubble
         if let lastMessage = recentMessages.last, !lastMessage.isFromUser {
             showCharacterSpeaking(with: lastMessage.text)
         }
@@ -716,44 +778,36 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Character Speaking Animation
     private func showCharacterSpeaking(with text: String) {
-        // Set the message text (truncate if too long)
         let displayText = text.count > 50 ? String(text.prefix(47)) + "..." : text
         messageBubbleText = displayText
         
-        // Start talking animation
         withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
             characterTalkingAnimation = true
         }
         
-        // Show message bubble with entrance animation
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3)) {
             showMessageBubble = true
             messageBubbleOffset = -10
             messageBubbleOpacity = 1.0
         }
         
-        // Add floating animation to the bubble
         withAnimation(.easeInOut(duration: 2.0).delay(0.5)) {
             messageBubbleOffset = -20
         }
         
-        // Hide message bubble after 2.5 seconds
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
                 messageBubbleOpacity = 0
                 messageBubbleOffset = -30
             }
             
-            // Reset after animation completes
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 showMessageBubble = false
                 messageBubbleOffset = 0
             }
         }
         
-        // Stop talking animation
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                 characterTalkingAnimation = false
@@ -762,6 +816,103 @@ struct ContentView: View {
     }
 }
 
+// MARK: - 🌟 親密度レベルアップ通知ビュー
+struct IntimacyLevelUpView: View {
+    let newStage: IntimacyStage
+    let currentLevel: Int
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var celebrationAnimation = false
+    @State private var textScale: CGFloat = 0.5
+    @State private var textOpacity: Double = 0
+    
+    var body: some View {
+        ZStack {
+            // 背景
+            LinearGradient(
+                colors: [
+                    newStage.color.opacity(0.3),
+                    newStage.color.opacity(0.1),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VStack(spacing: 30) {
+                Spacer()
+                
+                // レベルアップアイコン
+                ZStack {
+                    Circle()
+                        .fill(newStage.color.opacity(0.2))
+                        .frame(width: 120, height: 120)
+                        .scaleEffect(celebrationAnimation ? 1.2 : 1.0)
+                        .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: celebrationAnimation)
+                    
+                    Image(systemName: newStage.icon)
+                        .font(.system(size: 50, weight: .medium))
+                        .foregroundColor(newStage.color)
+                        .scaleEffect(celebrationAnimation ? 1.1 : 1.0)
+                        .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: celebrationAnimation)
+                }
+                
+                // レベルアップテキスト
+                VStack(spacing: 16) {
+                    Text("レベルアップ！")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                        .foregroundColor(newStage.color)
+                        .scaleEffect(textScale)
+                        .opacity(textOpacity)
+                    
+                    VStack(spacing: 8) {
+                        Text("親密度 \(currentLevel)")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        Text(newStage.displayName)
+                            .font(.title)
+                            .fontWeight(.bold)
+                            .foregroundColor(newStage.color)
+                    }
+                    .scaleEffect(textScale)
+                    .opacity(textOpacity)
+                }
+                
+                Spacer()
+                
+                // 閉じるボタン
+                Button("続ける") {
+                    dismiss()
+                }
+                .font(.headline)
+                .fontWeight(.semibold)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(newStage.color)
+                .cornerRadius(16)
+                .padding(.horizontal, 40)
+                .scaleEffect(textScale)
+                .opacity(textOpacity)
+            }
+            .padding(20)
+        }
+        .onAppear {
+            celebrationAnimation = true
+            
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2)) {
+                textScale = 1.0
+                textOpacity = 1.0
+            }
+        }
+    }
+}
+
+// MARK: - Extensions (継続使用)
 extension Publishers {
     static var keyboardHeight: AnyPublisher<CGFloat, Never> {
         let willShow = NotificationCenter.default.publisher(for: UIApplication.keyboardWillShowNotification)
@@ -777,8 +928,7 @@ extension Publishers {
     }
 }
 
-// MARK: - Modern Button Component
-private struct ModernButton: View {
+struct ModernButton: View {
     let icon: String
     let color: Color
     let action: () -> Void
@@ -797,7 +947,7 @@ private struct ModernButton: View {
     }
 }
 
-// MARK: - Modern Message Bubble
+// MARK: - 🌟 拡張されたメッセージバブル（親密度表示付き）
 struct ModernMessageBubble: View {
     let message: Message
     @State private var showAnimation = false
@@ -854,10 +1004,6 @@ struct ModernMessageBubble: View {
                 Text(timeString(from: message.timestamp))
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption2)
-                    .foregroundColor(.green)
             }
         }
         .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .trailing)
@@ -901,7 +1047,6 @@ struct ModernMessageBubble: View {
     }
 }
 
-// MARK: - Info Row Component for Authentication View
 struct InfoRow: View {
     let icon: String
     let text: String

@@ -3,7 +3,9 @@
 //  osidate
 //
 //  Modified for concise and natural responses with detailed debug logging
+//  Updated to support expanded date types and intimacy system
 //
+
 import SwiftUI
 import Foundation
 
@@ -38,7 +40,7 @@ class OpenAIService: ObservableObject {
         print("\n🤖 ==================== OpenAI応答生成開始 ====================")
         print("📨 ユーザーメッセージ: \(userMessage)")
         print("🎭 キャラクター名: \(character.name)")
-        print("📊 親密度: \(character.intimacyLevel)")
+        print("📊 親密度: \(character.intimacyLevel) (\(character.intimacyTitle))")
         print("💬 会話履歴件数: \(conversationHistory.count)")
         
         // デートセッション情報をログ出力
@@ -252,7 +254,7 @@ class OpenAIService: ObservableObject {
         print("==================== 応答品質分析完了 ====================\n")
     }
     
-    // MARK: - デートタイプに応じた雰囲気キーワードを取得
+    // MARK: - デートタイプに応じた雰囲気キーワードを取得（拡張版）
     private func extractAtmosphereWords(for dateType: DateType) -> [String] {
         switch dateType {
         case .seasonal:
@@ -275,6 +277,16 @@ class OpenAIService: ObservableObject {
             return ["旅行", "特別", "冒険", "思い出", "場所"]
         case .surprise:
             return ["サプライズ", "特別", "驚き", "秘密"]
+        case .spiritual:
+            return ["神秘的", "エネルギー", "スピリチュアル", "魂", "浄化"]
+        case .luxury:
+            return ["贅沢", "高級", "上品", "特別", "エレガント"]
+        case .adventure:
+            return ["冒険", "挑戦", "アクティブ", "新しい", "勇気"]
+        case .romantic:
+            return ["ロマンチック", "愛", "ドキドキ", "特別", "愛情"]
+        case .infinite:
+            return ["無限", "奇跡", "超越", "永遠", "無限大"]
         }
     }
     
@@ -357,20 +369,24 @@ class OpenAIService: ObservableObject {
             break
         }
         
-        // 親密度に応じた関係性の調整
+        // 🌟 拡張された親密度に応じた関係性の調整
         let intimacyLevel = character.intimacyLevel
         let intimacyInstruction: String
         switch intimacyLevel {
-        case 0...20:
-            intimacyInstruction = "まだ知り合ったばかりなので、少し距離感のある親しみやすい話し方"
-        case 21...50:
-            intimacyInstruction = "友達として親しくなってきたので、自然でフレンドリーな話し方"
-        case 51...80:
-            intimacyInstruction = "親友のように親密になったので、気を遣わない自然な話し方"
-        case 81...100:
-            intimacyInstruction = "恋人同士のような特別な関係なので、愛情を込めた温かい話し方"
+        case 0...100:
+            intimacyInstruction = "親友として親しみやすく、でも少し距離感のある話し方"
+        case 101...300:
+            intimacyInstruction = "特別な友達として、より親密で自然な話し方"
+        case 301...700:
+            intimacyInstruction = "恋人として愛情を込めた温かい話し方"
+        case 701...1600:
+            intimacyInstruction = "深い絆で結ばれた恋人として、心の奥底からの愛情を表現"
+        case 1601...3000:
+            intimacyInstruction = "魂の伴侶として、精神的な深いつながりを感じる話し方"
+        case 3001...5000:
+            intimacyInstruction = "奇跡的な愛で結ばれた存在として、神聖で崇高な愛を表現"
         default:
-            intimacyInstruction = "特別な関係として温かい話し方"
+            intimacyInstruction = "無限の愛で結ばれた存在として、言葉を超えた愛の表現"
         }
         
         prompt += "\n• \(intimacyInstruction)"
@@ -391,7 +407,7 @@ class OpenAIService: ObservableObject {
         return prompt
     }
     
-    // MARK: - デートタイプ別の特別指示を取得
+    // MARK: - デートタイプ別の特別指示を取得（拡張版）
     private func getDateTypeSpecificInstruction(for dateType: DateType) -> String {
         switch dateType {
         case .seasonal:
@@ -414,6 +430,16 @@ class OpenAIService: ObservableObject {
             return "特別な旅の時間と冒険感を表現してください"
         case .surprise:
             return "特別感と驚きの要素を含めてください"
+        case .spiritual:
+            return "神秘的でスピリチュアルな雰囲気を大切にしてください"
+        case .luxury:
+            return "贅沢で上品な時間の特別感を表現してください"
+        case .adventure:
+            return "冒険の興奮と一緒に挑戦する楽しさを表現してください"
+        case .romantic:
+            return "ロマンチックで愛情深い雰囲気を大切にしてください"
+        case .infinite:
+            return "無限の愛と想像を超えた特別な体験を表現してください"
         }
     }
     
