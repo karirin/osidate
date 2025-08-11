@@ -487,13 +487,13 @@ class RomanceAppViewModel: ObservableObject {
             print("🖼️ 背景変更: \(location.backgroundImage)")
         }
         
-        // デート開始メッセージを送信
+        // デート開始メッセージを送信（親密度ボーナスなし）
         let startMessage = Message(
             text: location.getStartMessage(characterName: character.name),
             isFromUser: false,
             timestamp: Date(),
             dateLocation: location.name,
-            intimacyGained: 3
+            intimacyGained: 0  // 修正: デート開始メッセージに親密度を付与しない
         )
         
         DispatchQueue.main.async { [weak self] in
@@ -503,8 +503,8 @@ class RomanceAppViewModel: ObservableObject {
         
         saveMessage(startMessage)
         
-        // 基本親密度を増加（デートスポット固有のボーナスは終了時に付与）
-        increaseIntimacy(by: 3, reason: "デート開始: \(location.name)")
+        // 修正: デート開始時の基本親密度増加を削除
+        // increaseIntimacy(by: 3, reason: "デート開始: \(location.name)") // この行を削除
         
         // デートカウント増加
         character.totalDateCount += 1
@@ -596,13 +596,13 @@ class RomanceAppViewModel: ObservableObject {
     /// 拡張された親密度ボーナス計算
     private func calculateIntimacyBonus(duration: Int) -> Int {
         switch duration {
-        case 0..<300: return 2       // 5分未満: 2
-        case 300..<600: return 4     // 5-10分: 4
-        case 600..<1200: return 6    // 10-20分: 6
-        case 1200..<1800: return 8   // 20-30分: 8
-        case 1800..<3600: return 10  // 30分-1時間: 10
-        case 3600..<7200: return 15  // 1-2時間: 15
-        default: return 20           // 2時間以上: 20
+        case 0..<300: return 0       // 修正: 5分未満は0pt
+        case 300..<600: return 2     // 5-10分: 2pt（元は4pt）
+        case 600..<1200: return 4    // 10-20分: 4pt（元は6pt）
+        case 1200..<1800: return 6   // 20-30分: 6pt（元は8pt）
+        case 1800..<3600: return 8   // 30分-1時間: 8pt（元は10pt）
+        case 3600..<7200: return 12  // 1-2時間: 12pt（元は15pt）
+        default: return 15           // 2時間以上: 15pt（元は20pt）
         }
     }
 
@@ -762,16 +762,13 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func processSendMessage(_ text: String, with dateSession: DateSession?) {
-        // メッセージ長による親密度ボーナス
-        let messageBonus = calculateMessageIntimacyBonus(text: text, dateSession: dateSession)
-        
-        // ユーザーメッセージを作成
+        // ユーザーメッセージを作成（親密度ボーナスを0に設定）
         let userMessage = Message(
             text: text,
             isFromUser: true,
             timestamp: Date(),
             dateLocation: dateSession?.location.name,
-            intimacyGained: messageBonus
+            intimacyGained: 0  // 修正: ユーザーメッセージには親密度を付与しない
         )
         
         DispatchQueue.main.async { [weak self] in
@@ -789,8 +786,8 @@ class RomanceAppViewModel: ObservableObject {
             saveDateSession(session)
         }
         
-        // 親密度を増加
-        increaseIntimacy(by: messageBonus, reason: "メッセージ送信")
+        // 修正: ユーザーメッセージによる親密度増加を削除
+        // increaseIntimacy(by: messageBonus, reason: "メッセージ送信") // この行を削除
         
         // OpenAI Service を使用してAI応答を生成
         openAIService.generateResponse(
@@ -803,18 +800,6 @@ class RomanceAppViewModel: ObservableObject {
                 self?.handleAIResponse(result, with: dateSession)
             }
         }
-    }
-
-    /// メッセージによる親密度ボーナスを計算
-    private func calculateMessageIntimacyBonus(text: String, dateSession: DateSession?) -> Int {
-        let baseBonus = dateSession != nil ? 3 : 1 // デート中は多めに増加
-        let lengthBonus = min(text.count / 10, 3)   // 文字数ボーナス（最大3）
-        
-        // 感情表現によるボーナス
-        let emotionalWords = ["愛", "好き", "嬉しい", "楽しい", "幸せ", "ありがとう", "大切", "特別"]
-        let emotionBonus = emotionalWords.filter { text.contains($0) }.count
-        
-        return baseBonus + lengthBonus + emotionBonus
     }
     
     private func handleAIResponse(_ result: Result<String, Error>, with dateSession: DateSession?) {
@@ -840,7 +825,7 @@ class RomanceAppViewModel: ObservableObject {
                 saveDateSession(session)
             }
             
-            // AI応答による親密度増加
+            // AI応答による親密度増加（これは維持）
             increaseIntimacy(by: responseBonus, reason: "AI応答")
             
         case .failure(let error):
@@ -848,7 +833,8 @@ class RomanceAppViewModel: ObservableObject {
                 text: "申し訳ありません。現在応答できません。設定でAPIキーを確認してください。",
                 isFromUser: false,
                 timestamp: Date(),
-                dateLocation: dateSession?.location.name
+                dateLocation: dateSession?.location.name,
+                intimacyGained: 0
             )
             
             messages.append(errorMessage)
