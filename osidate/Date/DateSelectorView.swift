@@ -83,9 +83,7 @@ struct DateSelectorView: View {
     private var allDateLocations: [DateLocation] {
         var locations = DateLocation.availableDateLocations
         
-        // 無限モードが解放されている場合、動的に生成されたデートを追加
         if viewModel.character.unlockedInfiniteMode {
-            // 無限デートを3個まで表示
             for i in 0..<3 {
                 let infiniteDate = DateLocation.generateInfiniteDate(
                     for: viewModel.character.intimacyLevel,
@@ -215,39 +213,40 @@ struct DateSelectorView: View {
                         dateLocationsSection
                         
                         Spacer(minLength: 20)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                }
-            }
-            .navigationTitle("デートを選ぶ")
-            .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showingDateDetail) {
-                if let location = selectedLocation {
-                    DateDetailView(
-                        viewModel: viewModel,
-                        location: location,
-                        onStartDate: { dateLocation in
-                            // 親密度チェック
-                            if dateLocation.requiredIntimacy <= viewModel.character.intimacyLevel {
-                                viewModel.startDate(at: dateLocation)
-                                dismiss()
-                            }
-                        }
-                    )
-                }
-            }
-            .sheet(isPresented: $showingIntimacyFilter) {
-                IntimacyFilterView(
-                    selectedRange: $selectedIntimacyRange,
-                    locationCounts: locationCounts
-                )
-            }
-            .onAppear {
-                animateCardsAppearance()
-            }
-        }
-    }
+                     }
+                     .padding(.horizontal, 20)
+                     .padding(.top, 10)
+                 }
+             }
+             .navigationTitle("デートを選ぶ")
+             .navigationBarTitleDisplayMode(.inline)
+             .sheet(isPresented: $showingDateDetail) {
+                 if let location = selectedLocation {
+                     DateDetailView(
+                         viewModel: viewModel,
+                         location: location,
+                         onStartDate: { dateLocation in
+                             // 🔧 修正：デートを開始した場合はdismissしない
+                             if dateLocation.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                 viewModel.startDate(at: dateLocation)
+                                 // dismiss() を削除 - デート開始後はDetailViewを閉じるだけ
+                                 showingDateDetail = false
+                             }
+                         }
+                     )
+                 }
+             }
+             .sheet(isPresented: $showingIntimacyFilter) {
+                 IntimacyFilterView(
+                     selectedRange: $selectedIntimacyRange,
+                     locationCounts: locationCounts
+                 )
+             }
+             .onAppear {
+                 animateCardsAppearance()
+             }
+         }
+     }
     
     private var intimacyStatusSection: some View {
         VStack(spacing: 16) {
@@ -1203,7 +1202,7 @@ struct DateDetailView: View {
     @Environment(\.colorScheme) private var colorScheme
     
     @State private var showConfirmation = false
-    @State private var showUnlockMotivation = false  // 🌟 解放モチベーション表示
+    @State private var showUnlockMotivation = false
     
     private var primaryColor: Color {
         location.type.color
@@ -1213,12 +1212,10 @@ struct DateDetailView: View {
         colorScheme == .dark ? Color(.systemGray6) : Color.white
     }
     
-    // 🌟 デートスポットが利用可能かチェック
     private var isUnlocked: Bool {
         location.requiredIntimacy <= viewModel.character.intimacyLevel
     }
     
-    // 🌟 必要な親密度不足の値
     private var intimacyDeficit: Int {
         max(0, location.requiredIntimacy - viewModel.character.intimacyLevel)
     }
@@ -1266,19 +1263,12 @@ struct DateDetailView: View {
             .alert("デートを開始しますか？", isPresented: $showConfirmation) {
                 Button("キャンセル", role: .cancel) { }
                 Button("開始") {
+                    // 🔧 修正：デート開始後は自動的にDismissする
                     onStartDate(location)
-                    dismiss()
+                    dismiss() // DetailViewのみDismiss
                 }
             } message: {
                 Text("\(location.name)でのデートを開始します。\n約\(location.duration)分間の特別な時間をお楽しみください。\n\n親密度ボーナス: +\(location.intimacyBonus)")
-            }
-            .sheet(isPresented: $showUnlockMotivation) {
-                UnlockMotivationView(
-                    viewModel: viewModel,
-                    targetLocation: location,
-                    currentIntimacy: viewModel.character.intimacyLevel,
-                    requiredIntimacy: location.requiredIntimacy
-                )
             }
         }
     }
@@ -1701,7 +1691,6 @@ struct DateDetailView: View {
                     .font(.headline)
                     .fontWeight(.bold)
                 
-                // 🌟 親密度ボーナス表示
                 Text("(+\(location.intimacyBonus))")
                     .font(.subheadline)
                     .fontWeight(.medium)
@@ -1721,95 +1710,25 @@ struct DateDetailView: View {
         }
     }
     
-    // MARK: - 🌟 解放モチベーションセクション
+    // 既存の unlockMotivationSection は省略...
     private var unlockMotivationSection: some View {
         VStack(spacing: 16) {
-            // 解放までの情報
-            VStack(spacing: 12) {
-                HStack {
-                    Text("解放条件")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    Text("あと \(intimacyDeficit)")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.red)
-                }
-                
-                HStack {
-                    Text("必要な親密度")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("\(location.requiredIntimacy)")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                }
-                
-                HStack {
-                    Text("現在の親密度")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    Text("\(viewModel.character.intimacyLevel)")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
-                }
-            }
-            .padding()
-            .background(.orange.opacity(0.1))
-            .cornerRadius(12)
+            Text("解放条件を満たしていません")
+                .font(.headline)
+                .foregroundColor(.secondary)
             
-            // モチベーション向上ボタン
-            Button(action: {
+            Button("詳細を見る") {
                 showUnlockMotivation = true
-            }) {
-                HStack(spacing: 12) {
-                    Image(systemName: "target")
-                        .font(.system(size: 18, weight: .medium))
-                    
-                    Text("解放への道のりを見る")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    LinearGradient(
-                        colors: [.orange, .orange.opacity(0.8)],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .cornerRadius(16)
-                .shadow(color: .orange.opacity(0.3), radius: 12, x: 0, y: 6)
             }
-            
-            // ヒント
-            HStack(spacing: 8) {
-                Image(systemName: "lightbulb.fill")
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                
-                Text("💡 ヒント: 毎日の会話やデートで親密度を上げることができます")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.blue.opacity(0.1))
-            .cornerRadius(8)
+            .foregroundColor(primaryColor)
+        }
+        .sheet(isPresented: $showUnlockMotivation) {
+            UnlockMotivationView(
+                viewModel: viewModel,
+                targetLocation: location,
+                currentIntimacy: viewModel.character.intimacyLevel,
+                requiredIntimacy: location.requiredIntimacy
+            )
         }
     }
     

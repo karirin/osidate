@@ -496,7 +496,11 @@ struct ContentView: View {
                     }
                 }
                 .padding(20)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cardCornerRadius))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(session.location.type.color.opacity(0.3), lineWidth: 2)
+                )
                 .padding(.horizontal, 16)
                 .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                 .transition(.asymmetric(
