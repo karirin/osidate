@@ -23,6 +23,10 @@ class Character: ObservableObject, Codable {
     @Published var totalDateCount: Int = 0
     @Published var unlockedInfiniteMode: Bool = false
     
+    // 🌟 新機能: ユーザーの呼び名設定
+    @Published var userNickname: String = ""
+    @Published var useNickname: Bool = false
+    
     // 🌟 拡張された親密度タイトルシステム
     var intimacyTitle: String {
         switch intimacyLevel {
@@ -43,6 +47,14 @@ class Character: ObservableObject, Codable {
         case 4501...5000: return "究極の愛"
         default: return "無限の愛"
         }
+    }
+    
+    // 🌟 ユーザーを呼ぶときの名前を取得
+    var userDisplayName: String {
+        if useNickname && !userNickname.isEmpty {
+            return userNickname
+        }
+        return "あなた"
     }
     
     // 親密度レベルの段階を取得
@@ -107,11 +119,13 @@ class Character: ObservableObject, Codable {
         self.backgroundURL = nil
         self.totalDateCount = 0
         self.unlockedInfiniteMode = false
+        self.userNickname = ""
+        self.useNickname = false
     }
     
     // カスタムイニシャライザー
     init(name: String, personality: String, speakingStyle: String, iconName: String, backgroundName: String,
-         backgroundURL: String? = nil) {
+         backgroundURL: String? = nil, userNickname: String = "", useNickname: Bool = false) {
         self.id = UUID().uuidString
         self.name = name
         self.personality = personality
@@ -125,12 +139,15 @@ class Character: ObservableObject, Codable {
         self.backgroundURL = backgroundURL
         self.totalDateCount = 0
         self.unlockedInfiniteMode = false
+        self.userNickname = userNickname
+        self.useNickname = useNickname
     }
     
     // Codable用のCodingKeys
     enum CodingKeys: String, CodingKey {
         case id, name, personality, speakingStyle, intimacyLevel, birthday, anniversaryDate
         case iconURL, iconName, backgroundName, backgroundURL, totalDateCount, unlockedInfiniteMode
+        case userNickname, useNickname
     }
     
     required init(from decoder: Decoder) throws {
@@ -148,6 +165,8 @@ class Character: ObservableObject, Codable {
         backgroundURL = try container.decodeIfPresent(String.self, forKey: .backgroundURL)
         totalDateCount = try container.decodeIfPresent(Int.self, forKey: .totalDateCount) ?? 0
         unlockedInfiniteMode = try container.decodeIfPresent(Bool.self, forKey: .unlockedInfiniteMode) ?? false
+        userNickname = try container.decodeIfPresent(String.self, forKey: .userNickname) ?? ""
+        useNickname = try container.decodeIfPresent(Bool.self, forKey: .useNickname) ?? false
     }
     
     func encode(to encoder: Encoder) throws {
@@ -165,6 +184,8 @@ class Character: ObservableObject, Codable {
         try container.encodeIfPresent(backgroundURL, forKey: .backgroundURL)
         try container.encode(totalDateCount, forKey: .totalDateCount)
         try container.encode(unlockedInfiniteMode, forKey: .unlockedInfiniteMode)
+        try container.encode(userNickname, forKey: .userNickname)
+        try container.encode(useNickname, forKey: .useNickname)
     }
 }
 

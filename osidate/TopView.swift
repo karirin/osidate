@@ -29,9 +29,9 @@ struct TopView: View {
                     ContentView(viewModel: romanceViewModel)
                 }
                 .tabItem {
-                    Image(systemName: "rectangle.split.2x2")
+                    Image(systemName: "bubble.left.and.bubble.right")
                         .padding()
-                    Text("推しログ")
+                    Text("チャット")
                         .padding()
                 }
                 
@@ -40,7 +40,7 @@ struct TopView: View {
                     DateSelectorView(viewModel: romanceViewModel)
                 }
                 .tabItem {
-                    Image(systemName: "person.2")
+                    Image(systemName: "heart.circle.fill")
                         .frame(width:1,height:1)
                     Text("デート")
                 }
@@ -50,9 +50,9 @@ struct TopView: View {
                     SettingsView(viewModel: romanceViewModel)
                 }
                 .tabItem {
-                    Image(systemName: "gear")
+                    Image(systemName: "person.text.rectangle")
                         .frame(width:1,height:1)
-                    Text("設定")
+                    Text("推しの編集")
                 }
             }
         }

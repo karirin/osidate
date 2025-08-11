@@ -187,7 +187,7 @@ struct DateSelectorView: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    LazyVStack(spacing: 32) {
+                    LazyVStack(spacing: 20) {
                         
                         intimacyStatusSection
                         
@@ -281,7 +281,7 @@ struct DateSelectorView: View {
                 } else {
                     defaultIcon           // iconURL が無いとき
                 }
-                Text("あなたの親密度ステータス")
+                Text("関係性: \(viewModel.character.intimacyTitle)")
                     .font(.headline)
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
@@ -297,14 +297,14 @@ struct DateSelectorView: View {
                 // 進捗バー
                 VStack(spacing: 8) {
                     HStack {
-                        Text("現在のレベル")
+                        Text("現在の親密度: \(viewModel.character.intimacyLevel)")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                         
                         Spacer()
                         
                         if viewModel.character.intimacyToNextLevel > 0 {
-                            Text("次のレベルまで: \(viewModel.character.intimacyToNextLevel)")
+                            Text("次の関係性まで: \(viewModel.character.intimacyToNextLevel)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         } else {
@@ -320,30 +320,6 @@ struct DateSelectorView: View {
                         .frame(height: 8)
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(4)
-                }
-                
-                // 統計情報
-                HStack(spacing: 20) {
-                    StatCard(
-                        icon: "heart.fill",
-                        title: "親密度",
-                        value: "\(viewModel.character.intimacyLevel)",
-                        color: primaryColor
-                    )
-                    
-                    StatCard(
-                        icon: "calendar.badge.clock",
-                        title: "総デート回数",
-                        value: "\(viewModel.character.totalDateCount)",
-                        color: .orange
-                    )
-                    
-                    StatCard(
-                        icon: "sparkles",
-                        title: "段階",
-                        value: viewModel.character.intimacyTitle,
-                        color: accentColor
-                    )
                 }
             }
         }

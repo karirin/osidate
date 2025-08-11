@@ -841,6 +841,25 @@ class RomanceAppViewModel: ObservableObject {
             saveMessage(errorMessage)
         }
     }
+    
+    func sendSystemMessage(_ text: String) {
+        guard isAuthenticated else { return }
+        
+        let systemMessage = Message(
+            text: text,
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: currentDateSession?.location.name,
+            intimacyGained: 1
+        )
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.messages.append(systemMessage)
+        }
+        
+        saveMessage(systemMessage)
+        increaseIntimacy(by: 1, reason: "設定変更への反応")
+    }
 
     /// AI応答による親密度ボーナスを計算
     private func calculateAIResponseBonus(response: String, dateSession: DateSession?) -> Int {

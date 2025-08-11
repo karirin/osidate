@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  osidate
 //
-//  Modern redesigned version with improved UI/UX
+//  Modern redesigned version with user nickname feature
 //
 
 import SwiftUI
@@ -33,37 +33,27 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 10) {
                     // Header with character preview
                     characterHeaderView
                     
                     // Main settings sections
                     VStack(spacing: 16) {
-                        appearanceSettingsSection
                         characterSettingsSection
+                        appearanceSettingsSection
+                        userNicknameSettingsSection  // 🌟 新規追加
                         anniversarySettingsSection
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 32)
                 }
             }
-            .scrollDismissesKeyboard(.immediately) // iOS16+
-            .contentShape(Rectangle())             // VStack以外でもタップを拾えるように
-            .onTapGesture {                        // 画面タップでフォーカス解除
+            .scrollDismissesKeyboard(.immediately)
+            .contentShape(Rectangle())
+            .onTapGesture {
                 isInputFocused = false
             }
             .background(Color(.systemGroupedBackground))
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarTrailing) {
-//                    Button {
-//                        dismiss()
-//                    } label: {
-//                        Image(systemName: "xmark.circle.fill")
-//                            .font(.title2)
-//                            .foregroundStyle(.secondary)
-//                    }
-//                }
-//            }
             .setupAlerts()
             .sheet(isPresented: $viewModel.showingBackgroundSelector) {
                 BackgroundSelectorView(viewModel: viewModel)
@@ -124,91 +114,85 @@ struct SettingsView: View {
                 }
                 showingImagePicker = true
             }) {
-                ZStack {
-                    Circle()
-                        .fill(intimacyColor.opacity(0.2))
-                        .frame(width: 120, height: 120)
-                        .blur(radius: 8)
-                    
-                    if let icon = characterIcon {
-                        Image(uiImage: icon)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 100, height: 100)
-                            .clipShape(Circle())
-                            .overlay(
-                                Circle()
-                                    .stroke(intimacyColor, lineWidth: 3)
-                            )
-                            .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
-                    } else {
-                        ZStack {
-                            CharacterIconView(character: viewModel.character, size: 100)
+                VStack{
+                    ZStack {
+                        Circle()
+                            .fill(intimacyColor.opacity(0.2))
+                            .frame(width: 120, height: 120)
+                            .blur(radius: 8)
+                        
+                        if let icon = characterIcon {
+                            Image(uiImage: icon)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 100, height: 100)
                                 .clipShape(Circle())
                                 .overlay(
                                     Circle()
                                         .stroke(intimacyColor, lineWidth: 3)
                                 )
                                 .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
-                            
-                            // Edit overlay
+                        } else {
+                            ZStack {
+                                CharacterIconView(character: viewModel.character, size: 100)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle()
+                                            .stroke(intimacyColor, lineWidth: 3)
+                                    )
+                                    .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                                
+                                // Edit overlay
+                                Circle()
+                                    .fill(.black.opacity(0.3))
+                                    .frame(width: 100, height: 100)
+                                    .overlay(
+                                        VStack(spacing: 4) {
+                                            Image(systemName: "camera.fill")
+                                                .font(.title2)
+                                                .foregroundColor(.white)
+                                            Text("編集")
+                                                .font(.caption)
+                                                .foregroundColor(.white)
+                                        }
+                                    )
+                            }
+                        }
+                        Circle()
+                            .fill(intimacyColor)
+                            .frame(width: 30, height: 30)
+                            .overlay(
+                                Image(systemName: "pencil")
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.white)
+                            )
+                            .offset(x: 40, y: 40)
+                        // Upload overlay
+                        if imageManager.isUploading {
                             Circle()
-                                .fill(.black.opacity(0.3))
+                                .fill(.ultraThinMaterial)
                                 .frame(width: 100, height: 100)
                                 .overlay(
-                                    VStack(spacing: 4) {
-                                        Image(systemName: "camera.fill")
-                                            .font(.title2)
-                                            .foregroundColor(.white)
-                                        Text("編集")
+                                    VStack(spacing: 8) {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: intimacyColor))
+                                            .scaleEffect(1.2)
+                                        Text("\(Int(imageManager.uploadProgress * 100))%")
                                             .font(.caption)
-                                            .foregroundColor(.white)
+                                            .foregroundColor(intimacyColor)
+                                            .fontWeight(.medium)
                                     }
                                 )
                         }
                     }
-                    
-                    // Upload overlay
-                    if imageManager.isUploading {
-                        Circle()
-                            .fill(.ultraThinMaterial)
-                            .frame(width: 100, height: 100)
-                            .overlay(
-                                VStack(spacing: 8) {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: intimacyColor))
-                                        .scaleEffect(1.2)
-                                    Text("\(Int(imageManager.uploadProgress * 100))%")
-                                        .font(.caption)
-                                        .foregroundColor(intimacyColor)
-                                        .fontWeight(.medium)
-                                }
-                            )
-                    }
+                    Text("タップで推しの画像を変更できます")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .padding(.top, 8)
                 }
             }
             .scaleEffect(iconScale)
             .disabled(imageManager.isUploading)
-            
-            VStack(spacing: 4) {
-                Text(viewModel.character.name.isEmpty ? "未設定" : viewModel.character.name)
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                HStack(spacing: 4) {
-                    Text("親密度 \(viewModel.character.intimacyLevel)")
-                        .font(.subheadline)
-                        .foregroundColor(intimacyColor)
-                        .fontWeight(.medium)
-                    
-                    if imageManager.isUploading {
-                        Text("• アップロード中...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-            }
         }
         .padding(.top, 20)
         .padding(.bottom, 8)
@@ -223,7 +207,7 @@ struct SettingsView: View {
             VStack(spacing: 16) {
                 // Character icon editor
                 ModernSettingRow(
-                    icon: "person.crop.circle.badge.camera",
+                    icon: "person.crop.circle.badge.plus",
                     title: "アイコン設定",
                     subtitle: characterIcon != nil ? "カスタムアイコンが設定されています" : "デフォルトアイコンを使用中"
                 ) {
@@ -415,9 +399,50 @@ struct SettingsView: View {
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
-                        .focused($isInputFocused) 
+                        .focused($isInputFocused)
                         .onChange(of: viewModel.character.speakingStyle) { _ in
                             viewModel.updateCharacterSettings()
+                        }
+                }
+            }
+        }
+    }
+
+    // MARK: - 🌟 User Nickname Settings Section
+    private var userNicknameSettingsSection: some View {
+        ModernSectionView(title: "あなたの呼び名設定", icon: "person.badge.plus") {
+            VStack(spacing: 16) {
+                // Nickname input field - 常に表示
+                ModernSettingRow(
+                    icon: "textformat.alt",
+                    title: "呼び名"
+                ) {
+                    TextField("呼び名を入力", text: $viewModel.character.userNickname)
+                        .textFieldStyle(ModernTextFieldStyle())
+                        .focused($isInputFocused)
+                        .onChange(of: viewModel.character.userNickname) { newValue in
+                            // 20文字制限
+                            if newValue.count > 20 {
+                                viewModel.character.userNickname = String(newValue.prefix(20))
+                            }
+                            
+                            // 呼び名が入力された場合は自動的にuseNicknameをtrueに設定
+                            if !newValue.isEmpty && !viewModel.character.useNickname {
+                                viewModel.character.useNickname = true
+                                sendNicknameChangeMessage(enabled: true)
+                            }
+                            // 呼び名が空になった場合は自動的にuseNicknameをfalseに設定
+                            else if newValue.isEmpty && viewModel.character.useNickname {
+                                viewModel.character.useNickname = false
+                                sendNicknameChangeMessage(enabled: false)
+                            }
+                            
+                            viewModel.updateCharacterSettings()
+                        }
+                        .onSubmit {
+                            if !viewModel.character.userNickname.isEmpty {
+                                sendNicknameSetMessage()
+                            }
                         }
                 }
             }
@@ -525,140 +550,9 @@ struct SettingsView: View {
         }
     }
     
-    // MARK: - Intimacy Section
-    private var intimacySection: some View {
-        ModernSectionView(title: "親密度", icon: "heart.fill") {
-            VStack(spacing: 16) {
-                // Intimacy level display
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("現在の親密度")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        HStack(spacing: 8) {
-                            Text("\(viewModel.character.intimacyLevel)")
-                                .font(.title)
-                                .fontWeight(.bold)
-                                .foregroundColor(intimacyColor)
-                            Text("/ 100")
-                                .font(.title3)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Progress ring
-                    ZStack {
-                        Circle()
-                            .stroke(intimacyColor.opacity(0.2), lineWidth: 8)
-                            .frame(width: 60, height: 60)
-                        
-                        Circle()
-                            .trim(from: 0, to: CGFloat(viewModel.character.intimacyLevel) / 100)
-                            .stroke(intimacyColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                            .frame(width: 60, height: 60)
-                            .rotationEffect(.degrees(-90))
-                        
-                        Text("\(viewModel.character.intimacyLevel)")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundColor(intimacyColor)
-                    }
-                }
-                
-                Divider()
-                
-                Button {
-                    showingResetIntimacyAlert = true
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.counterclockwise")
-                            .foregroundColor(.orange)
-                        Text("親密度をリセット")
-                            .foregroundColor(.orange)
-                        Spacer()
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Data Management
-    private var dataManagementSection: some View {
-        ModernSectionView(title: "データ管理", icon: "externaldrive") {
-            VStack(spacing: 16) {
-                ModernSettingRow(
-                    icon: "icloud.and.arrow.up",
-                    title: "データ同期",
-                    subtitle: isDataSyncing ? "同期中..." : "クラウドとの同期状態"
-                ) {
-                    if isDataSyncing {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                    }
-                }
-                
-                Divider()
-                
-                Button {
-                    showingResetUserDefaultsAlert = true
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(.blue)
-                        Text("UserDefaultsをリセット")
-                            .foregroundColor(.blue)
-                        Spacer()
-                    }
-                }
-                
-                Divider()
-                
-                Button {
-                    showingDeleteAlert = true
-                } label: {
-                    HStack {
-                        Image(systemName: "trash.fill")
-                            .foregroundColor(.red)
-                        Text("すべてのデータを削除")
-                            .foregroundColor(.red)
-                        Spacer()
-                    }
-                }
-            }
-        }
-    }
-    
-    // MARK: - Account Section
-    private var accountSection: some View {
-        ModernSectionView(title: "アカウント", icon: "person.crop.circle") {
-            Button {
-                showingSignOutAlert = true
-            } label: {
-                HStack {
-                    Image(systemName: "rectangle.portrait.and.arrow.right")
-                        .foregroundColor(.red)
-                    Text("ログアウト")
-                        .foregroundColor(.red)
-                    Spacer()
-                }
-            }
-        }
-    }
-    
     // MARK: - Helper Properties
     private var intimacyColor: Color {
-        switch viewModel.character.intimacyLevel {
-        case 0...10: return .gray
-        case 11...30: return .blue
-        case 31...60: return .green
-        case 61...100: return .pink
-        default: return .red
-        }
+        return viewModel.character.intimacyStage.color
     }
     
     private var dateFormatter: DateFormatter {
@@ -679,6 +573,79 @@ struct SettingsView: View {
             )
         )
         return cfg
+    }
+
+    private func getNicknameSuggestions() -> [String] {
+        let intimacyLevel = viewModel.character.intimacyLevel
+        
+        switch intimacyLevel {
+        case 0...100:
+            return ["さん", "くん", "お友達", "パートナー", "相棒", "バディ"]
+        case 101...300:
+            return ["ちゃん", "君", "お疲れ様", "大切な人", "特別な人", "親友"]
+        case 301...700:
+            return ["愛しい人", "ダーリン", "ハニー", "大好きな人", "恋人", "スイート"]
+        case 701...1300:
+            return ["最愛の人", "運命の人", "愛する人", "マイラブ", "宝物", "天使"]
+        case 1301...2000:
+            return ["魂の伴侶", "永遠の愛", "命の人", "奇跡", "光", "希望"]
+        default:
+            return ["無限の愛", "永遠", "唯一無二", "全て", "世界", "宇宙"]
+        }
+    }
+
+    private func getIntimacyBasedPreview() -> String {
+        let nickname = viewModel.character.userDisplayName
+        let intimacyLevel = viewModel.character.intimacyLevel
+        
+        switch intimacyLevel {
+        case 0...100:
+            return "\(nickname)、今度一緒にお出かけしませんか？"
+        case 101...300:
+            return "\(nickname)のことをもっと知りたいです"
+        case 301...700:
+            return "\(nickname)、愛してるよ💕"
+        case 701...1300:
+            return "\(nickname)がいてくれて本当に幸せです"
+        case 1301...2000:
+            return "\(nickname)、あなたは私の全てです"
+        default:
+            return "\(nickname)、私たちの愛は永遠ですね♾️"
+        }
+    }
+
+    private func suggestDefaultNickname() {
+        let suggestions = getNicknameSuggestions()
+        if let defaultSuggestion = suggestions.first {
+            viewModel.character.userNickname = defaultSuggestion
+        }
+    }
+
+    private func sendNicknameChangeMessage(enabled: Bool) {
+        let message: String
+        
+        if enabled {
+            let nickname = viewModel.character.userNickname.isEmpty ? "特別な呼び名" : viewModel.character.userNickname
+            message = "これからは\(nickname)って呼ばせてもらいますね💕 特別な呼び名で呼べるなんて、なんだか嬉しいです✨"
+        } else {
+            message = "分かりました。これからは普通に「あなた」って呼びますね。でも、心の中ではいつでも特別な存在ですよ💕"
+        }
+        
+        // ViewModelにメッセージ送信を依頼
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            viewModel.sendSystemMessage(message)
+        }
+    }
+
+    private func sendNicknameSetMessage() {
+        let nickname = viewModel.character.userNickname
+        guard !nickname.isEmpty else { return }
+        
+        let message = "\(nickname)...素敵な響きですね💕 これから\(nickname)って呼ばせていただきます。特別な呼び名をつけてもらえて、とても嬉しいです✨"
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            viewModel.sendSystemMessage(message)
+        }
     }
     
     // MARK: - Image Management Functions
@@ -745,6 +712,55 @@ struct SettingsView: View {
     private func generateHapticFeedback() {
         let impactFeedback = UIImpactFeedbackGenerator(style: .light)
         impactFeedback.impactOccurred()
+    }
+}
+
+// MARK: - Supporting Views
+
+struct SuggestionButtonStyle: ButtonStyle {
+    let isSelected: Bool
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption)
+            .fontWeight(.medium)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(isSelected ? Color.blue.opacity(0.2) : Color.gray.opacity(0.1))
+            .foregroundColor(isSelected ? .blue : .primary)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(isSelected ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+struct PreviewMessageBubble: View {
+    let text: String
+    let isFromAI: Bool
+    
+    var body: some View {
+        HStack {
+            if !isFromAI {
+                Spacer()
+            }
+            
+            Text(text)
+                .font(.subheadline)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(isFromAI ? Color.gray.opacity(0.1) : Color.blue.opacity(0.1))
+                .foregroundColor(.primary)
+                .cornerRadius(12)
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: isFromAI ? .leading : .trailing)
+            
+            if isFromAI {
+                Spacer()
+            }
+        }
     }
 }
 
@@ -852,14 +868,6 @@ struct ModernButtonStyle: ButtonStyle {
 extension View {
     func setupAlerts() -> some View {
         self
-            .alert("データを削除", isPresented: Binding.constant(false)) {
-                Button("削除", role: .destructive) {
-                    // Handle delete
-                }
-                Button("キャンセル", role: .cancel) { }
-            } message: {
-                Text("すべての会話データとローカルデータが削除されます。この操作は取り消せません。")
-            }
     }
 }
 

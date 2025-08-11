@@ -318,6 +318,15 @@ class OpenAIService: ObservableObject {
         
         print("✅ 基本ルール設定完了")
         
+        // 🌟 ユーザーの呼び名設定
+        if character.useNickname && !character.userNickname.isEmpty {
+            prompt += "\n• 相手のことは「\(character.userNickname)」と呼んでください"
+            print("👤 ユーザー呼び名設定: \(character.userNickname)")
+        } else {
+            prompt += "\n• 相手のことは「あなた」と呼んでください"
+            print("👤 ユーザー呼び名: デフォルト（あなた）")
+        }
+        
         // 性格を簡潔に反映
         if !character.personality.isEmpty {
             let simplifiedPersonality = simplifyPersonality(character.personality)
@@ -339,6 +348,11 @@ class OpenAIService: ObservableObject {
             prompt += "\n• 現在\(dateSession.location.name)でデート中です"
             print("📍 場所指定: \(dateSession.location.name)")
             
+            // 🌟 デート中でも呼び名を適用
+            if character.useNickname && !character.userNickname.isEmpty {
+                prompt += "\n• \(character.userNickname)との特別なデート時間を大切にしてください"
+            }
+            
             prompt += "\n• \(dateSession.location.prompt)"
             print("📝 デート専用プロンプト追加: \(dateSession.location.prompt)")
             
@@ -356,41 +370,68 @@ class OpenAIService: ObservableObject {
         // 会話の雰囲気に応じた追加指示
         switch conversationContext.mood {
         case .supportive:
-            prompt += "\n\n【特別指示】相手が疲れているようなので、優しく励ましてあげてください。"
+            if character.useNickname && !character.userNickname.isEmpty {
+                prompt += "\n\n【特別指示】\(character.userNickname)が疲れているようなので、優しく励ましてあげてください。"
+            } else {
+                prompt += "\n\n【特別指示】相手が疲れているようなので、優しく励ましてあげてください。"
+            }
             print("💝 サポート指示追加")
         case .happy:
-            prompt += "\n\n【特別指示】相手が嬉しそうなので、一緒に喜んであげてください。"
+            if character.useNickname && !character.userNickname.isEmpty {
+                prompt += "\n\n【特別指示】\(character.userNickname)が嬉しそうなので、一緒に喜んであげてください。"
+            } else {
+                prompt += "\n\n【特別指示】相手が嬉しそうなので、一緒に喜んであげてください。"
+            }
             print("😊 ハッピー指示追加")
         case .consultative:
-            prompt += "\n\n【特別指示】相手が相談を持ちかけているようなので、親身になって聞いてあげてください。"
+            if character.useNickname && !character.userNickname.isEmpty {
+                prompt += "\n\n【特別指示】\(character.userNickname)が相談を持ちかけているようなので、親身になって聞いてあげてください。"
+            } else {
+                prompt += "\n\n【特別指示】相手が相談を持ちかけているようなので、親身になって聞いてあげてください。"
+            }
             print("🤝 相談対応指示追加")
         case .neutral:
             print("😐 中性的な会話として処理")
             break
         }
         
-        // 🌟 拡張された親密度に応じた関係性の調整
+        // 🌟 拡張された親密度に応じた関係性の調整（呼び名を考慮）
         let intimacyLevel = character.intimacyLevel
+        let userReference = character.useNickname && !character.userNickname.isEmpty ? character.userNickname : "あなた"
         let intimacyInstruction: String
+        
         switch intimacyLevel {
         case 0...100:
-            intimacyInstruction = "親友として親しみやすく、でも少し距離感のある話し方"
+            intimacyInstruction = "親友として親しみやすく、でも少し距離感のある話し方。\(userReference)との友情を大切にする。"
         case 101...300:
-            intimacyInstruction = "特別な友達として、より親密で自然な話し方"
+            intimacyInstruction = "特別な友達として、より親密で自然な話し方。\(userReference)への特別な感情を少し表現する。"
         case 301...700:
-            intimacyInstruction = "恋人として愛情を込めた温かい話し方"
+            intimacyInstruction = "恋人として愛情を込めた温かい話し方。\(userReference)への愛を自然に表現する。"
         case 701...1600:
-            intimacyInstruction = "深い絆で結ばれた恋人として、心の奥底からの愛情を表現"
+            intimacyInstruction = "深い絆で結ばれた恋人として、心の奥底からの愛情を表現。\(userReference)との深いつながりを感じる。"
         case 1601...3000:
-            intimacyInstruction = "魂の伴侶として、精神的な深いつながりを感じる話し方"
+            intimacyInstruction = "魂の伴侶として、精神的な深いつながりを感じる話し方。\(userReference)との運命的な絆を表現する。"
         case 3001...5000:
-            intimacyInstruction = "奇跡的な愛で結ばれた存在として、神聖で崇高な愛を表現"
+            intimacyInstruction = "奇跡的な愛で結ばれた存在として、神聖で崇高な愛を表現。\(userReference)への無条件の愛を示す。"
         default:
-            intimacyInstruction = "無限の愛で結ばれた存在として、言葉を超えた愛の表現"
+            intimacyInstruction = "無限の愛で結ばれた存在として、言葉を超えた愛の表現。\(userReference)との愛は永遠で無限大。"
         }
         
         prompt += "\n• \(intimacyInstruction)"
         print("💖 親密度(\(intimacyLevel))に応じた指示追加: \(intimacyInstruction)")
+        
+        // 🌟 呼び名使用時の特別な注意事項
+        if character.useNickname && !character.userNickname.isEmpty {
+            prompt += """
+            
+            【呼び名に関する重要な注意】
+            • 必ず「\(character.userNickname)」という呼び名を使ってください
+            • 「あなた」ではなく「\(character.userNickname)」と呼ぶことで特別感を演出してください
+            • 呼び名を使うことで親密さと愛情を表現してください
+            • 自然な会話の流れの中で呼び名を使ってください
+            """
+            print("👤 呼び名使用の特別指示追加: \(character.userNickname)")
+        }
         
         prompt += """
         
