@@ -1,8 +1,8 @@
 //
-//  DateSelectorView.swift - 全デートスポット表示対応版
+//  DateSelectorView.swift - ボタン式検索・フィルター対応版
 //  osidate
 //
-//  親密度不足のスポットもロック状態で表示
+//  検索とフィルターをボタンクリックで表示
 //
 
 import SwiftUI
@@ -21,7 +21,14 @@ struct DateSelectorView: View {
     @State private var shimmerOffset: CGFloat = -100
     @State private var showingIntimacyFilter = false
     @State private var selectedIntimacyRange: IntimacyRange = .all
-    @State private var showUnlockedOnly = false  // 🌟 新しいフィルター
+    @State private var showUnlockedOnly = false
+    
+    // 🌟 新しい状態変数（表示制御用）
+    @State private var showingSearchBar = false
+    @State private var showingFilters = false
+    @State private var showingUnlockFilter = false
+    @State private var showingIntimacyRangeFilter = false
+    @State private var showingDateTypeFilter = false
     
     // 🌟 親密度範囲フィルター
     enum IntimacyRange: String, CaseIterable {
@@ -156,6 +163,16 @@ struct DateSelectorView: View {
         return (available: available, locked: locked)
     }
     
+    // 🌟 アクティブなフィルター数を計算
+    private var activeFilterCount: Int {
+        var count = 0
+        if !searchText.isEmpty { count += 1 }
+        if showUnlockedOnly { count += 1 }
+        if selectedIntimacyRange != .all { count += 1 }
+        if selectedDateType != nil { count += 1 }
+        return count
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -174,26 +191,20 @@ struct DateSelectorView: View {
                 ScrollView {
                     LazyVStack(spacing: 32) {
                         
-                        // 検索バー
-                        searchSection
-                        
-                        // 🌟 拡張された親密度ステータス
                         intimacyStatusSection
                         
-                        // 🌟 利用可能性統計セクション
-                        availabilityStatsSection
+                        // 🌟 新しい検索・フィルターボタンセクション
+                        searchAndFilterButtonsSection
                         
-                        // 🌟 解放済みフィルター
-                        unlockFilterSection
+                        // 🌟 検索バー（条件付き表示）
+                        if showingSearchBar {
+                            searchSection
+                        }
                         
-                        // 🌟 親密度範囲フィルター
-                        intimacyRangeFilterSection
-                        
-                        // デートタイプフィルター
-                        dateTypeFilterSection
-                        
-                        // 現在の季節表示
-                        currentSeasonSection
+                        // 🌟 フィルターセクション（条件付き表示）
+                        if showingFilters {
+                            filterSectionsContainer
+                        }
                         
                         // 🌟 無限モードセクション
                         if viewModel.character.unlockedInfiniteMode {
@@ -211,23 +222,6 @@ struct DateSelectorView: View {
             }
             .navigationTitle("デートを選ぶ")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("閉じる") {
-                        dismiss()
-                    }
-                    .foregroundColor(primaryColor)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingIntimacyFilter.toggle()
-                    } label: {
-                        Image(systemName: "slider.horizontal.3")
-                            .foregroundColor(primaryColor)
-                    }
-                }
-            }
             .sheet(isPresented: $showingDateDetail) {
                 if let location = selectedLocation {
                     DateDetailView(
@@ -255,35 +249,39 @@ struct DateSelectorView: View {
         }
     }
     
-    // MARK: - Search Section
-    private var searchSection: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            
-            TextField("デートスポットを検索...", text: $searchText)
-                .textFieldStyle(PlainTextFieldStyle())
-            
-            if !searchText.isEmpty {
-                Button(action: { searchText = "" }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding()
-        .background(cardColor)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        .offset(y: cardAppearOffset)
-        .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.2), value: cardAppearOffset)
-    }
-    
-    // MARK: - 🌟 拡張された親密度ステータス
     private var intimacyStatusSection: some View {
         VStack(spacing: 16) {
             HStack {
+                if let urlString = viewModel.character.iconURL,
+                   let url = URL(string: urlString),
+                   !urlString.isEmpty {
+                    
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 30, height: 30)
+                                .clipShape(Circle())
+                        case .failure(_):
+                            defaultIcon   // 読み込み失敗時
+                            
+                        case .empty:
+                            Circle()      // 読み込み中
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 30, height: 30)
+                                .overlay(ProgressView().scaleEffect(0.8))
+                            
+                        @unknown default:
+                            defaultIcon
+                        }
+                    }
+                    .id(urlString)
+                    
+                } else {
+                    defaultIcon           // iconURL が無いとき
+                }
                 Text("あなたの親密度ステータス")
                     .font(.headline)
                     .fontWeight(.bold)
@@ -359,81 +357,213 @@ struct DateSelectorView: View {
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.3), value: cardAppearOffset)
     }
     
-    // MARK: - 🌟 利用可能性統計セクション
-    private var availabilityStatsSection: some View {
-        HStack(spacing: 16) {
-            VStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.green)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("利用可能")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        
-                        Text("\(availabilityStats.available) スポット")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Text("今すぐデートできます")
-                    .font(.caption)
-                    .foregroundColor(.green)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(.green.opacity(0.1))
-            .cornerRadius(12)
-            
-            VStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.circle.fill")
-                        .font(.title2)
-                        .foregroundColor(.orange)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("未解放")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.primary)
-                        
-                        Text("\(availabilityStats.locked) スポット")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Text("親密度を上げると解放")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(.orange.opacity(0.1))
-            .cornerRadius(12)
-        }
-        .offset(y: cardAppearOffset)
-        .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.35), value: cardAppearOffset)
+    private var defaultIcon: some View {
+        Circle()
+            .fill(Color.brown)
+            .frame(width: 30, height: 30)
+            .overlay(
+                Image(systemName: viewModel.character.iconName)
+                    .font(.system(size: 30 * 0.4))
+                    .foregroundColor(.white)
+            )
     }
     
-    // MARK: - 🌟 解放済みフィルター
-    private var unlockFilterSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("表示フィルター")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+    // MARK: - 🌟 新しい検索・フィルターボタンセクション
+    private var searchAndFilterButtonsSection: some View {
+        VStack(spacing: 16) {
+            // メインボタン行
+            HStack(spacing: 12) {
+                // 検索ボタン
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showingSearchBar.toggle()
+                        if showingSearchBar {
+                            showingFilters = false
+                        }
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("検索")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        // 検索中インジケーター
+                        if !searchText.isEmpty {
+                            Text("•")
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .foregroundColor(showingSearchBar ? .white : primaryColor)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        showingSearchBar
+                        ? primaryColor
+                        : primaryColor.opacity(0.1)
+                    )
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(primaryColor.opacity(0.3), lineWidth: 1)
+                    )
+                }
+                
+                // フィルターボタン
+                Button(action: {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        showingFilters.toggle()
+                        if showingFilters {
+                            showingSearchBar = false
+                        }
+                    }
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 16, weight: .medium))
+                        Text("フィルター")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        
+                        // アクティブフィルター数
+                        if activeFilterCount > 0 {
+                            Text("\(activeFilterCount)")
+                                .font(.caption)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                                .frame(width: 16, height: 16)
+                                .background(.red)
+                                .clipShape(Circle())
+                        }
+                    }
+                    .foregroundColor(showingFilters ? .white : accentColor)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(
+                        showingFilters
+                        ? accentColor
+                        : accentColor.opacity(0.1)
+                    )
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(accentColor.opacity(0.3), lineWidth: 1)
+                    )
+                }
                 
                 Spacer()
             }
+            
+            // アクティブフィルターの表示
+            if activeFilterCount > 0 {
+                activeFiltersDisplay
+            }
+        }
+        .offset(y: cardAppearOffset)
+        .opacity(cardAppearOpacity)
+        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.2), value: cardAppearOffset)
+    }
+    
+    // MARK: - アクティブフィルター表示
+    private var activeFiltersDisplay: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                if !searchText.isEmpty {
+                    ActiveFilterChip(
+                        icon: "magnifyingglass",
+                        text: "「\(searchText)」",
+                        color: primaryColor
+                    ) {
+                        searchText = ""
+                    }
+                }
+                
+                if showUnlockedOnly {
+                    ActiveFilterChip(
+                        icon: "checkmark.circle",
+                        text: "解放済みのみ",
+                        color: .green
+                    ) {
+                        showUnlockedOnly = false
+                    }
+                }
+                
+                if selectedIntimacyRange != .all {
+                    ActiveFilterChip(
+                        icon: "heart.fill",
+                        text: selectedIntimacyRange.displayName,
+                        color: .pink
+                    ) {
+                        selectedIntimacyRange = .all
+                    }
+                }
+                
+                if let selectedType = selectedDateType {
+                    ActiveFilterChip(
+                        icon: selectedType.icon,
+                        text: selectedType.displayName,
+                        color: selectedType.color
+                    ) {
+                        selectedDateType = nil
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+    
+    // MARK: - フィルターセクションコンテナ
+    private var filterSectionsContainer: some View {
+        VStack(spacing: 20) {
+            // 解放済みフィルター
+            unlockFilterSection
+            
+            // 親密度範囲フィルター
+            intimacyRangeFilterSection
+            
+            // デートタイプフィルター
+            dateTypeFilterSection
+        }
+        .padding()
+        .background(cardColor)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+    }
+    
+    // MARK: - Search Section (既存)
+    private var searchSection: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            
+            TextField("デートスポットを検索...", text: $searchText)
+                .textFieldStyle(PlainTextFieldStyle())
+            
+            if !searchText.isEmpty {
+                Button(action: {
+                    searchText = ""
+                    showingSearchBar = false
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding()
+        .background(cardColor)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .transition(.move(edge: .top).combined(with: .opacity))
+    }
+    
+    // MARK: - 🌟 解放済みフィルター（レイアウト調整）
+    private var unlockFilterSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("表示設定")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
             
             HStack(spacing: 12) {
                 Button(action: {
@@ -441,34 +571,11 @@ struct DateSelectorView: View {
                         showUnlockedOnly = false
                     }
                 }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "eye")
-                            .font(.caption)
-                        Text("すべて表示")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        !showUnlockedOnly
-                        ? primaryColor.opacity(0.2)
-                        : Color.gray.opacity(0.1)
-                    )
-                    .foregroundColor(
-                        !showUnlockedOnly
-                        ? primaryColor
-                        : .secondary
-                    )
-                    .cornerRadius(20)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(
-                                !showUnlockedOnly
-                                ? primaryColor.opacity(0.5)
-                                : Color.clear,
-                                lineWidth: 1
-                            )
+                    FilterChip(
+                        icon: "eye",
+                        text: "すべて表示",
+                        isSelected: !showUnlockedOnly,
+                        color: primaryColor
                     )
                 }
                 
@@ -477,263 +584,127 @@ struct DateSelectorView: View {
                         showUnlockedOnly = true
                     }
                 }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle")
-                            .font(.caption)
-                        Text("解放済みのみ")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        showUnlockedOnly
-                        ? .green.opacity(0.2)
-                        : Color.gray.opacity(0.1)
-                    )
-                    .foregroundColor(
-                        showUnlockedOnly
-                        ? .green
-                        : .secondary
-                    )
-                    .cornerRadius(20)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(
-                                showUnlockedOnly
-                                ? .green.opacity(0.5)
-                                : Color.clear,
-                                lineWidth: 1
-                            )
+                    FilterChip(
+                        icon: "checkmark.circle",
+                        text: "解放済みのみ",
+                        isSelected: showUnlockedOnly,
+                        color: .green
                     )
                 }
                 
                 Spacer()
-                
-                Text("\(filteredLocations.count)件")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(.ultraThinMaterial)
-                    .cornerRadius(12)
             }
         }
-        .offset(y: cardAppearOffset)
-        .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.4), value: cardAppearOffset)
     }
     
-    // MARK: - 🌟 親密度範囲フィルター
+    // MARK: - 親密度範囲フィルター（レイアウト調整）
     private var intimacyRangeFilterSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("親密度レベル別")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                if selectedIntimacyRange != .all {
-                    Button("すべて表示") {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            selectedIntimacyRange = .all
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundColor(primaryColor)
-                }
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("親密度レベル")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     ForEach(IntimacyRange.allCases, id: \.self) { range in
                         if range != .infinite || viewModel.character.unlockedInfiniteMode {
-                            intimacyRangeChip(range: range)
+                            Button(action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    selectedIntimacyRange = selectedIntimacyRange == range ? .all : range
+                                }
+                            }) {
+                                VStack(spacing: 4) {
+                                    Text(range.displayName)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                    
+                                    if let count = locationCounts[range] {
+                                        Text("(\(count))")
+                                            .font(.caption2)
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    selectedIntimacyRange == range
+                                    ? .pink.opacity(0.2)
+                                    : Color.gray.opacity(0.1)
+                                )
+                                .foregroundColor(
+                                    selectedIntimacyRange == range
+                                    ? .pink
+                                    : .secondary
+                                )
+                                .cornerRadius(12)
+                            }
                         }
                     }
                 }
                 .padding(.horizontal, 4)
             }
         }
-        .offset(y: cardAppearOffset)
-        .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.45), value: cardAppearOffset)
     }
     
-    private func intimacyRangeChip(range: IntimacyRange) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedIntimacyRange = selectedIntimacyRange == range ? .all : range
-            }
-        }) {
-            VStack(spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(range.displayName)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                    
-                    if let count = locationCounts[range] {
-                        Text("(\(count))")
-                            .font(.caption2)
-                    }
-                }
-                
-                if range == .infinite && viewModel.character.unlockedInfiniteMode {
-                    HStack(spacing: 2) {
-                        Image(systemName: "infinity")
-                            .font(.caption2)
-                        Text("無限")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.purple)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                selectedIntimacyRange == range
-                ? primaryColor.opacity(0.2)
-                : Color.gray.opacity(0.1)
-            )
-            .foregroundColor(
-                selectedIntimacyRange == range
-                ? primaryColor
-                : .secondary
-            )
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        selectedIntimacyRange == range
-                        ? primaryColor.opacity(0.5)
-                        : Color.clear,
-                        lineWidth: 1
-                    )
-            )
-        }
-        .scaleEffect(selectedIntimacyRange == range ? 1.05 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedIntimacyRange)
-    }
-    
-    // MARK: - Date Type Filter Section (継続使用)
+    // MARK: - Date Type Filter Section (レイアウト調整)
     private var dateTypeFilterSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("カテゴリで絞り込み")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-                
-                if selectedDateType != nil {
-                    Button("すべて表示") {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            selectedDateType = nil
-                        }
-                    }
-                    .font(.caption)
-                    .foregroundColor(primaryColor)
-                }
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            Text("カテゴリ")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
             
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     ForEach(DateType.allCases, id: \.self) { type in
                         if type != .infinite || viewModel.character.unlockedInfiniteMode {
-                            dateTypeChip(type: type)
+                            Button(action: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    selectedDateType = selectedDateType == type ? nil : type
+                                }
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: type.icon)
+                                        .font(.caption)
+                                    Text(type.displayName)
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(
+                                    selectedDateType == type
+                                    ? type.color.opacity(0.2)
+                                    : Color.gray.opacity(0.1)
+                                )
+                                .foregroundColor(
+                                    selectedDateType == type
+                                    ? type.color
+                                    : .secondary
+                                )
+                                .cornerRadius(12)
+                            }
                         }
                     }
                 }
                 .padding(.horizontal, 4)
             }
         }
-        .offset(y: cardAppearOffset)
-        .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.5), value: cardAppearOffset)
     }
     
-    private func dateTypeChip(type: DateType) -> some View {
-        Button(action: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                selectedDateType = selectedDateType == type ? nil : type
-            }
-        }) {
-            HStack(spacing: 8) {
-                Image(systemName: type.icon)
-                    .font(.system(size: 14, weight: .medium))
-                
-                Text(type.displayName)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .background(
-                selectedDateType == type
-                ? type.color.opacity(0.2)
-                : Color.gray.opacity(0.1)
-            )
-            .foregroundColor(
-                selectedDateType == type
-                ? type.color
-                : .secondary
-            )
-            .cornerRadius(20)
-            .overlay(
-                RoundedRectangle(cornerRadius: 20)
-                    .stroke(
-                        selectedDateType == type
-                        ? type.color.opacity(0.5)
-                        : Color.clear,
-                        lineWidth: 1
-                    )
-            )
-            .fixedSize(horizontal: true, vertical: false)
+    // MARK: - Helper Functions
+    private func clearAllFilters() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            searchText = ""
+            showUnlockedOnly = false
+            selectedIntimacyRange = .all
+            selectedDateType = nil
+            showingSearchBar = false
+            showingFilters = false
         }
-        .scaleEffect(selectedDateType == type ? 1.05 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedDateType)
     }
     
-    // MARK: - Current Season Section (継続使用)
-    private var currentSeasonSection: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Image(systemName: "leaf.fill")
-                        .foregroundColor(.green)
-                    Text("現在の季節: \(DateLocation.currentSeason.displayName)")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                }
-                
-                Text("季節限定のデートも楽しめます")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            Image(systemName: "sparkles")
-                .font(.title3)
-                .foregroundColor(accentColor)
-                .rotationEffect(.degrees(shimmerOffset / 10))
-                .animation(.linear(duration: 2).repeatForever(autoreverses: false), value: shimmerOffset)
-        }
-        .padding()
-        .background(cardColor)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-        .offset(y: cardAppearOffset)
-        .opacity(cardAppearOpacity)
-        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.6), value: cardAppearOffset)
-    }
-    
+    // 残りのセクション（無限モード、デートロケーション等）は元のコードと同じ
     // MARK: - 🌟 無限モードセクション
     private var infiniteModeSection: some View {
         VStack(spacing: 16) {
@@ -816,7 +787,7 @@ struct DateSelectorView: View {
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.8), value: cardAppearOffset)
     }
     
-    // MARK: - 🌟 拡張されたデートロケーションカード（全スポット表示対応）
+    // 元のdateLocationCard関数はそのまま使用...
     private func dateLocationCard(location: DateLocation) -> some View {
         Button(action: {
             selectedLocation = location
@@ -1118,6 +1089,111 @@ struct DateSelectorView: View {
         }
     }
 }
+
+// MARK: - 🌟 新しいヘルパーコンポーネント
+
+// 統計バッジコンポーネント
+struct StatBadge: View {
+    let icon: String
+    let count: Int
+    let color: Color
+    let label: String
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption2)
+                Text("\(count)")
+                    .font(.caption)
+                    .fontWeight(.bold)
+            }
+            .foregroundColor(color)
+            
+            Text(label)
+                .font(.system(size: 8))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.1))
+        .cornerRadius(8)
+    }
+}
+
+// アクティブフィルターチップコンポーネント
+struct ActiveFilterChip: View {
+    let icon: String
+    let text: String
+    let color: Color
+    let onRemove: () -> Void
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption2)
+            
+            Text(text)
+                .font(.caption)
+                .fontWeight(.medium)
+                .lineLimit(1)
+            
+            Button(action: onRemove) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+            }
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(color.opacity(0.15))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(color.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+// フィルターチップコンポーネント
+struct FilterChip: View {
+    let icon: String
+    let text: String
+    let isSelected: Bool
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.caption)
+            Text(text)
+                .font(.caption)
+                .fontWeight(.medium)
+        }
+        .foregroundColor(isSelected ? color : .secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            isSelected
+            ? color.opacity(0.2)
+            : Color.gray.opacity(0.1)
+        )
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    isSelected
+                    ? color.opacity(0.5)
+                    : Color.clear,
+                    lineWidth: 1
+                )
+        )
+    }
+}
+
+// 🌟 元のコンポーネントも含める（DateDetailView, UnlockMotivationView, StatCard, IntimacyFilterView）
+// 元のコードのこれらのコンポーネントはそのまま保持
 
 struct DateDetailView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
@@ -1770,7 +1846,6 @@ struct DateDetailView: View {
     }
 }
 
-// MARK: - 🌟 解放モチベーションビュー
 struct UnlockMotivationView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
     let targetLocation: DateLocation
@@ -1930,7 +2005,6 @@ struct UnlockMotivationView: View {
     }
 }
 
-// MARK: - 🌟 統計カードコンポーネント
 struct StatCard: View {
     let icon: String
     let title: String
@@ -1962,7 +2036,6 @@ struct StatCard: View {
     }
 }
 
-// MARK: - 🌟 親密度フィルタービュー
 struct IntimacyFilterView: View {
     @Binding var selectedRange: DateSelectorView.IntimacyRange
     let locationCounts: [DateSelectorView.IntimacyRange: Int]
