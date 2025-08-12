@@ -1,5 +1,5 @@
 //
-//  TopView.swift - キャラクター切り替え監視強化版
+//  TopView.swift - チュートリアル統合版
 //  osidate
 //
 
@@ -10,147 +10,285 @@ import FirebaseAuth
 struct TopView: View {
     @StateObject private var characterRegistry = CharacterRegistry()
     @StateObject private var romanceViewModel = RomanceAppViewModel()
+    @StateObject private var tutorialManager = TutorialManager()
     @State private var hasInitialized = false
     @State private var currentCharacterId = ""
+    @State private var showingTutorial = false
+    @State private var showingAddCharacter = false
     
     var body: some View {
         ZStack {
             if characterRegistry.isLoading {
-                ProgressView("読み込み中...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(.systemBackground))
+                loadingView
             } else {
-                // Main app with tab navigation
-                TabView {
-                    ContentView(viewModel: romanceViewModel)
-                        .tabItem {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                            Text("チャット")
-                        }
-                        .id("chat_\(currentCharacterId)") // 🔧 修正：タブごとに一意のIDを付与
-                    
-                    DateSelectorView(viewModel: romanceViewModel)
-                        .tabItem {
-                            Image(systemName: "heart.circle.fill")
-                            Text("デート")
-                        }
-                        .id("date_\(currentCharacterId)") // 🔧 修正：タブごとに一意のIDを付与
-                    
-                    SettingsView(viewModel: romanceViewModel)
-                        .tabItem {
-                            Image(systemName: "person.text.rectangle")
-                            Text("推しの編集")
-                        }
-                        .id("settings_\(currentCharacterId)") // 🔧 修正：タブごとに一意のIDを付与
-                    
-                    CharacterSelectorView(
-                        characterRegistry: characterRegistry,
-                        selectedCharacterId: .constant(characterRegistry.activeCharacterId)
-                    )
-                    .tabItem {
-                        Image(systemName: "person.2")
-                        Text("推しの変更")
-                    }
-                }
-                .id("main_tab_\(currentCharacterId)") // 🔧 修正：TabView全体にも一意のIDを付与
+                mainContentView
             }
         }
         .onChange(of: characterRegistry.activeCharacterId) { newCharacterId in
             handleCharacterChange(newCharacterId: newCharacterId)
         }
         .onChange(of: characterRegistry.characters.count) { _ in
-            // キャラクター数が変更された時（新規作成・削除）の処理
             handleCharacterListChange()
         }
         .onAppear {
             initializeApp()
         }
+        .sheet(isPresented: $showingTutorial) {
+            TutorialView(characterRegistry: characterRegistry)
+        }
+        .sheet(isPresented: $showingAddCharacter) {
+            AddCharacterView(characterRegistry: characterRegistry)
+        }
     }
     
-    // 🔧 修正：キャラクター変更時の処理を強化
-    private func handleCharacterChange(newCharacterId: String) {
-        print("\n🔄 ==================== TopView: キャラクター変更検出 ====================")
-        print("📤 前のキャラクターID: \(currentCharacterId)")
-        print("📥 新しいキャラクターID: \(newCharacterId)")
-        
-        // IDが実際に変更された場合のみ処理
-        guard newCharacterId != currentCharacterId else {
-            print("⚠️ 同じキャラクターIDのため処理をスキップ")
-            return
-        }
-        
-        currentCharacterId = newCharacterId
-        
-        if let activeCharacter = characterRegistry.getActiveCharacter() {
-            print("✅ アクティブキャラクター取得成功: \(activeCharacter.name)")
-            
-            // RomanceAppViewModelに切り替えを通知
-            romanceViewModel.switchToCharacter(activeCharacter)
-            
-            // 🔧 修正：少し遅延してから強制的にUI更新を実行
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                romanceViewModel.forceRefreshCharacterIcon()
-                romanceViewModel.forceUpdateCharacterProperties()
-            }
-            
-            // さらに遅延してもう一度更新（確実にするため）
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                romanceViewModel.forceRefreshCharacterIcon()
-            }
-        } else {
-            print("❌ アクティブキャラクターの取得に失敗")
-        }
-        
-        print("==================== TopView: キャラクター変更処理完了 ====================\n")
-    }
-    
-    // 🔧 修正：キャラクターリスト変更時の処理
-    private func handleCharacterListChange() {
-        print("📝 キャラクターリストが変更されました（現在の数: \(characterRegistry.characters.count)）")
-        
-        // 現在のアクティブキャラクターが存在するかチェック
-        if !characterRegistry.activeCharacterId.isEmpty,
-           let activeCharacter = characterRegistry.getActiveCharacter() {
-            
-            // アクティブキャラクターが存在する場合、最新の状態に更新
-            romanceViewModel.switchToCharacter(activeCharacter)
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                romanceViewModel.forceRefreshCharacterIcon()
+    // MARK: - Main Content
+    private var mainContentView: some View {
+        ZStack {
+            if characterRegistry.characters.isEmpty {
+                // 推しが一人もいない場合：チュートリアルまたはウェルカム画面
+                if tutorialManager.shouldShowTutorial {
+                    welcomeViewWithTutorial
+                } else {
+                    emptyStateView
+                }
+            } else {
+                // 推しが存在する場合：メインアプリ
+                mainAppTabView
             }
         }
     }
     
-    // 🔧 修正：アプリ初期化処理の改善
-    private func initializeApp() {
-        print("🚀 TopView: アプリ初期化開始")
-        
-        // 初期化フラグをチェック
-        guard !hasInitialized else {
-            print("⚠️ 既に初期化済みのため処理をスキップ")
-            return
-        }
-        
-        hasInitialized = true
-        currentCharacterId = characterRegistry.activeCharacterId
-        
-        if let activeCharacter = characterRegistry.getActiveCharacter() {
-            print("✅ 初期アクティブキャラクター: \(activeCharacter.name)")
-            romanceViewModel.switchToCharacter(activeCharacter)
+    // MARK: - Welcome View with Tutorial
+    private var welcomeViewWithTutorial: some View {
+        VStack(spacing: 32) {
+            Spacer()
             
-            // 初期化時も強制的にUI更新
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                romanceViewModel.forceRefreshCharacterIcon()
+            // アプリロゴ・アイコン
+            VStack(spacing: 20) {
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.pink.opacity(0.3), Color.blue.opacity(0.3)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 120, height: 120)
+                    
+                    Image(systemName: "heart.circle.fill")
+                        .font(.system(size: 60, weight: .light))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.pink, .blue],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                }
+                
+                VStack(spacing: 12) {
+                    Text("推しとの特別な時間へ\nようこそ")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.primary)
+                    
+                    Text("推しとの自然な会話や\nデート体験を楽しめるアプリです")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
             }
-        } else {
-            print("ℹ️ アクティブキャラクターなし（新規ユーザーまたはキャラクター未作成）")
+            
+            // アクションボタン
+            VStack(spacing: 16) {
+                Button(action: {
+                    showingTutorial = true
+                }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title2)
+                        Text("チュートリアルを見る")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.blue, Color.purple],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(16)
+                    .shadow(color: Color.blue.opacity(0.3), radius: 12, x: 0, y: 6)
+                }
+                
+                Button(action: {
+                    tutorialManager.completeTutorial()
+                }) {
+                    HStack(spacing: 8) {
+                        Text("スキップして始める")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                        Image(systemName: "arrow.right")
+                            .font(.caption)
+                    }
+                    .foregroundColor(.blue)
+                    .padding(.vertical, 12)
+                }
+            }
+            
+            Spacer()
+            
+            // 機能紹介プレビュー
+            VStack(spacing: 16) {
+                Text("主な機能")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.primary)
+                
+                HStack(spacing: 20) {
+                    FeaturePreview(
+                        icon: "bubble.left.and.bubble.right.fill",
+                        title: "自然な会話",
+                        color: .blue
+                    )
+                    
+                    FeaturePreview(
+                        icon: "heart.circle.fill",
+                        title: "デート体験",
+                        color: .pink
+                    )
+                    
+                    FeaturePreview(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: "関係の成長",
+                        color: .purple
+                    )
+                }
+            }
+            .padding(.horizontal, 20)
         }
-        
-        print("🚀 TopView: アプリ初期化完了")
+        .padding(.horizontal, 20)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground),
+                    Color.blue.opacity(0.05),
+                    Color.purple.opacity(0.05)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+        )
     }
     
-    // MARK: - View Components
+    // MARK: - Empty State View (推しはいるがチュートリアル完了済み)
+    private var emptyStateView: some View {
+        VStack(spacing: 32) {
+            Spacer()
+            
+            VStack(spacing: 20) {
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 60, weight: .light))
+                    .foregroundColor(.blue)
+                
+                VStack(spacing: 12) {
+                    Text("推しを登録してください")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                    
+                    Text("最初の推しを登録して\n素敵な時間を始めましょう！")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+            }
+            
+            Button(action: {
+                // 推し登録画面を直接表示
+                showingAddCharacter = true
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                    Text("推しを登録する")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [Color.blue, Color.purple],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: Color.blue.opacity(0.3), radius: 12, x: 0, y: 6)
+            }
+            .padding(.horizontal, 40)
+            
+            Button("チュートリアルをもう一度見る") {
+                tutorialManager.resetTutorial()
+                showingTutorial = true
+            }
+            .font(.subheadline)
+            .foregroundColor(.blue)
+            .padding(.top, 8)
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+    }
     
+    // MARK: - Main App Tab View
+    private var mainAppTabView: some View {
+        TabView {
+            ContentView(viewModel: romanceViewModel)
+                .tabItem {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                    Text("チャット")
+                }
+                .id("chat_\(currentCharacterId)")
+            
+            DateSelectorView(viewModel: romanceViewModel)
+                .tabItem {
+                    Image(systemName: "heart.circle.fill")
+                    Text("デート")
+                }
+                .id("date_\(currentCharacterId)")
+            
+            SettingsView(viewModel: romanceViewModel)
+                .tabItem {
+                    Image(systemName: "person.text.rectangle")
+                    Text("推しの編集")
+                }
+                .id("settings_\(currentCharacterId)")
+            
+            CharacterSelectorView(
+                characterRegistry: characterRegistry,
+                selectedCharacterId: .constant(characterRegistry.activeCharacterId)
+            )
+            .tabItem {
+                Image(systemName: "person.2")
+                Text("推しの変更")
+            }
+        }
+        .id("main_tab_\(currentCharacterId)")
+    }
+    
+    // MARK: - Loading View
     private var loadingView: some View {
         VStack(spacing: 20) {
             ProgressView()
@@ -163,51 +301,109 @@ struct TopView: View {
         .background(Color(.systemBackground))
     }
     
-    private var mainAppView: some View {
-        TabView {
-            ContentView(viewModel: romanceViewModel)
-                .tabItem {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                    Text("チャット")
-                }
+    // MARK: - Character Management
+    private func handleCharacterChange(newCharacterId: String) {
+        print("\n🔄 ==================== TopView: キャラクター変更検出 ====================")
+        print("📤 前のキャラクターID: \(currentCharacterId)")
+        print("📥 新しいキャラクターID: \(newCharacterId)")
+        
+        guard newCharacterId != currentCharacterId else {
+            print("⚠️ 同じキャラクターIDのため処理をスキップ")
+            return
+        }
+        
+        currentCharacterId = newCharacterId
+        
+        if let activeCharacter = characterRegistry.getActiveCharacter() {
+            print("✅ アクティブキャラクター取得成功: \(activeCharacter.name)")
             
-            DateSelectorView(viewModel: romanceViewModel)
-                .tabItem {
-                    Image(systemName: "heart.circle.fill")
-                    Text("デート")
-                }
+            romanceViewModel.switchToCharacter(activeCharacter)
             
-            SettingsView(viewModel: romanceViewModel)
-                .tabItem {
-                    Image(systemName: "person.text.rectangle")
-                    Text("推しの編集")
-                }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                romanceViewModel.forceRefreshCharacterIcon()
+                romanceViewModel.forceUpdateCharacterProperties()
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                romanceViewModel.forceRefreshCharacterIcon()
+            }
+        } else {
+            print("❌ アクティブキャラクターの取得に失敗")
+        }
+        
+        print("==================== TopView: キャラクター変更処理完了 ====================\n")
+    }
+    
+    private func handleCharacterListChange() {
+        print("📝 キャラクターリストが変更されました（現在の数: \(characterRegistry.characters.count)）")
+        
+        if !characterRegistry.activeCharacterId.isEmpty,
+           let activeCharacter = characterRegistry.getActiveCharacter() {
+            
+            romanceViewModel.switchToCharacter(activeCharacter)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                romanceViewModel.forceRefreshCharacterIcon()
+            }
         }
     }
     
-    // 🔧 修正：デバッグ用メソッドを追加
-    private func debugCurrentState() {
-        print("\n🔍 ==================== TopView: 現在の状態 ====================")
-        print("📊 CharacterRegistry状態:")
-        print("   - 読み込み中: \(characterRegistry.isLoading)")
-        print("   - キャラクター数: \(characterRegistry.characters.count)")
-        print("   - アクティブキャラクターID: \(characterRegistry.activeCharacterId)")
+    private func initializeApp() {
+        print("🚀 TopView: アプリ初期化開始")
         
-        if let activeChar = characterRegistry.getActiveCharacter() {
-            print("   - アクティブキャラクター名: \(activeChar.name)")
-            print("   - アイコンURL: \(activeChar.iconURL ?? "なし")")
+        guard !hasInitialized else {
+            print("⚠️ 既に初期化済みのため処理をスキップ")
+            return
         }
         
-        print("📊 RomanceViewModel状態:")
-        print("   - キャラクター名: \(romanceViewModel.character.name)")
-        print("   - キャラクターID: \(romanceViewModel.character.id)")
-        print("   - アイコンURL: \(romanceViewModel.character.iconURL ?? "なし")")
-        print("   - 認証状態: \(romanceViewModel.isAuthenticated)")
+        hasInitialized = true
+        currentCharacterId = characterRegistry.activeCharacterId
         
-        print("📊 TopView状態:")
-        print("   - 初期化済み: \(hasInitialized)")
-        print("   - 現在のキャラクターID: \(currentCharacterId)")
-        print("==================== 状態確認完了 ====================\n")
+        // チュートリアルステータスをチェック
+        if tutorialManager.shouldShowTutorial && characterRegistry.characters.isEmpty {
+            print("📖 初回起動：チュートリアルを表示")
+            // welcomeViewWithTutorial が自動的に表示される
+        } else if let activeCharacter = characterRegistry.getActiveCharacter() {
+            print("✅ 初期アクティブキャラクター: \(activeCharacter.name)")
+            romanceViewModel.switchToCharacter(activeCharacter)
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                romanceViewModel.forceRefreshCharacterIcon()
+            }
+        } else {
+            print("ℹ️ アクティブキャラクターなし（新規ユーザーまたはキャラクター未作成）")
+        }
+        
+        print("🚀 TopView: アプリ初期化完了")
+    }
+}
+
+// MARK: - Supporting Views
+
+struct FeaturePreview: View {
+    let icon: String
+    let title: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundColor(color)
+            }
+            
+            Text(title)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
     }
 }
 

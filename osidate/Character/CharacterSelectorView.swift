@@ -88,8 +88,7 @@ struct CharacterSelectorView: View {
                         } else if filteredCharacters.isEmpty && !searchText.isEmpty {
                             noSearchResultsView
                         } else {
-//                            characterGridView
-                            emptyStateView
+                            characterGridView
                         }
                     }
                 }
