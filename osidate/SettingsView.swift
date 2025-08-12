@@ -134,7 +134,8 @@ struct SettingsView: View {
                                 .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
                         } else {
                             ZStack {
-                                CharacterIconView(character: viewModel.character, size: 100)
+                                // 🌟 アニメーションを無効にしてCharacterIconViewを使用
+                                CharacterIconView(character: viewModel.character, size: 100, enableFloating: false)
                                     .clipShape(Circle())
                                     .overlay(
                                         Circle()
@@ -839,11 +840,13 @@ struct ModernSettingRow<Content: View>: View {
 struct ModernTextFieldStyle: TextFieldStyle {
     func _body(configuration: TextField<Self._Label>) -> some View {
         configuration
-            .padding(12)
+            .font(.body)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background(Color(.systemGray6))
-            .cornerRadius(8)
+            .cornerRadius(12)
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 12)
                     .stroke(Color(.systemGray4), lineWidth: 1)
             )
     }

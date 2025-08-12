@@ -10,10 +10,18 @@ import SwiftUI
 struct CharacterIconView: View {
     let character: Character
     let size: CGFloat
+    let enableFloating: Bool // 🌟 新規追加：アニメーション制御パラメータ
 
     @State private var isFloating = false
     @State private var iconImage: UIImage? = nil
     @State private var isLoading = false
+    
+    // デフォルトでアニメーションを有効にするイニシャライザ
+    init(character: Character, size: CGFloat, enableFloating: Bool = true) {
+        self.character = character
+        self.size = size
+        self.enableFloating = enableFloating
+    }
     
     var body: some View {
         ZStack {
@@ -24,16 +32,18 @@ struct CharacterIconView: View {
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
                     .clipShape(Circle())
-                    .offset(y: isFloating ? -8 : 8)
+                    .offset(y: enableFloating && isFloating ? -8 : enableFloating ? 8 : 0) // 🌟 アニメーション制御
                     .animation(
-                        .easeInOut(duration: 2.5)
-                            .repeatForever(autoreverses: true),
+                        enableFloating ? .easeInOut(duration: 2.5)
+                            .repeatForever(autoreverses: true) : .none, // 🌟 アニメーション制御
                         value: isFloating
                     )
                     .onAppear {
-                        withAnimation(.easeInOut(duration: 2.5)
-                                        .repeatForever(autoreverses: true)) {
-                            isFloating = true
+                        if enableFloating {
+                            withAnimation(.easeInOut(duration: 2.5)
+                                            .repeatForever(autoreverses: true)) {
+                                isFloating = true
+                            }
                         }
                     }
             } else if isLoading {
@@ -48,16 +58,18 @@ struct CharacterIconView: View {
             } else {
                 // デフォルトアイコン
                 defaultIcon
-                    .offset(y: isFloating ? -8 : 8)
+                    .offset(y: enableFloating && isFloating ? -8 : enableFloating ? 8 : 0) // 🌟 アニメーション制御
                     .animation(
-                        .easeInOut(duration: 2.5)
-                            .repeatForever(autoreverses: true),
+                        enableFloating ? .easeInOut(duration: 2.5)
+                            .repeatForever(autoreverses: true) : .none, // 🌟 アニメーション制御
                         value: isFloating
                     )
                     .onAppear {
-                        withAnimation(.easeInOut(duration: 2.5)
-                                        .repeatForever(autoreverses: true)) {
-                            isFloating = true
+                        if enableFloating {
+                            withAnimation(.easeInOut(duration: 2.5)
+                                            .repeatForever(autoreverses: true)) {
+                                isFloating = true
+                            }
                         }
                     }
             }
@@ -131,6 +143,7 @@ struct CharacterIconView: View {
         }
     }
 }
+
 
 #Preview {
     ContentView(viewModel: RomanceAppViewModel())
