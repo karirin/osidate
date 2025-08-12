@@ -189,7 +189,7 @@ struct CharacterSelectorView: View {
         .background(.ultraThinMaterial)
         .cornerRadius(16)
         .padding(.horizontal, 20)
-        .padding(.bottom, 16)
+        .padding(.vertical, 16)
     }
     
     // MARK: - モダンローディングビュー
@@ -895,7 +895,7 @@ struct AddCharacterView: View {
         let image: UIImage
     }
     
-    private let steps = ["基本情報", "アイコン設定", "性格設定", "話し方設定"]
+    private let steps = ["基本情報", "アイコン", "性格設定", "話し方設定"]
     
     private var isCurrentStepValid: Bool {
         switch currentStep {
@@ -1046,6 +1046,16 @@ struct AddCharacterView: View {
             }
             
             Spacer()
+            Button(action: {
+                dismiss()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.title3)
+                    .foregroundColor(.secondary)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
+            .opacity(0)
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
