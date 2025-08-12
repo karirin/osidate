@@ -88,7 +88,8 @@ struct CharacterSelectorView: View {
                         } else if filteredCharacters.isEmpty && !searchText.isEmpty {
                             noSearchResultsView
                         } else {
-                            characterGridView
+//                            characterGridView
+                            emptyStateView
                         }
                     }
                 }
@@ -302,14 +303,22 @@ struct CharacterSelectorView: View {
                 .scaleEffect(shimmerOffset > 0 ? 1.02 : 1.0)
                 .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: shimmerOffset)
             }
-            
             Spacer()
-            
-            // 追加ボタン（フローティング）
-            floatingAddButton
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 40)
+        .overlay(
+            // フローティング追加ボタン
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    floatingAddButton
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 30)
+                }
+            }
+        )
         .offset(y: animationOffset)
         .opacity(animationOpacity)
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.3), value: animationOffset)
