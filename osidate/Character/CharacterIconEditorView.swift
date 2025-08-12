@@ -19,9 +19,14 @@ struct CharacterIconEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
+    private struct CroppingItem: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
+    
     // クロップ機能用の状態
     @State private var selectedImageForCropping: UIImage?
-    @State private var croppingImage: UIImage?
+    @State private var croppingItem: CroppingItem?
     
     // アニメーション用の状態
     @State private var iconScale: CGFloat = 1.0
@@ -281,12 +286,13 @@ struct CharacterIconEditorView: View {
             }
             .onChange(of: selectedImageForCropping) { img in
                 guard let img else { return }
-                croppingImage = img
+                guard croppingItem == nil else { return }
+                croppingItem = CroppingItem(image: img)
             }
-            .fullScreenCover(item: $croppingImage) { img in
+            .fullScreenCover(item: $croppingItem) { item in
                 NavigationView {
                     SwiftyCropView(
-                        imageToCrop: img,
+                        imageToCrop: item.image,
                         maskShape: .circle,
                         configuration: cropConfig
                     ) { cropped in
@@ -297,7 +303,7 @@ struct CharacterIconEditorView: View {
                             }
                             uploadImage()
                         }
-                        croppingImage = nil
+                        croppingItem = nil
                     }
                     .drawingGroup()
                 }

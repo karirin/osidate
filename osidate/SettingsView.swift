@@ -24,11 +24,16 @@ struct SettingsView: View {
     @State private var showingImagePicker = false
     @State private var selectedImage: UIImage?
     @State private var selectedImageForCropping: UIImage?
-    @State private var croppingImage: UIImage?
+    @State private var croppingItem: CroppingItem?
     @State private var characterIcon: UIImage?
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var iconScale: CGFloat = 1.0
+    
+    private struct CroppingItem: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
     
     var body: some View {
         NavigationView {
@@ -65,12 +70,13 @@ struct SettingsView: View {
             }
             .onChange(of: selectedImageForCropping) { img in
                 guard let img else { return }
-                croppingImage = img
+                guard croppingItem == nil else { return }
+                croppingItem = CroppingItem(image: img)
             }
-            .fullScreenCover(item: $croppingImage) { img in
+            .fullScreenCover(item: $croppingItem) { item in
                 NavigationView {
                     SwiftyCropView(
-                        imageToCrop: img,
+                        imageToCrop: item.image,
                         maskShape: .circle,
                         configuration: cropConfig
                     ) { cropped in
@@ -81,7 +87,7 @@ struct SettingsView: View {
                             }
                             uploadImage()
                         }
-                        croppingImage = nil
+                        croppingItem = nil
                     }
                     .drawingGroup()
                 }
@@ -871,13 +877,6 @@ struct ModernButtonStyle: ButtonStyle {
 extension View {
     func setupAlerts() -> some View {
         self
-    }
-}
-
-// MARK: - UIImage extension for Identifiable protocol
-extension UIImage: Identifiable {
-    public var id: String {
-        return UUID().uuidString
     }
 }
 

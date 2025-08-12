@@ -19,7 +19,7 @@ struct BackgroundSelectorView: View {
     @State private var showingImagePicker        = false
     @State private var selectedImage: UIImage?   = nil
     @State private var selectedImageForCropping: UIImage? = nil
-    @State private var croppingImage: UIImage?   = nil
+    @State private var croppingItem: CroppingItem? = nil
     @State private var customBackgroundImage: UIImage? = nil
     
     // MARK: - UI State
@@ -34,6 +34,12 @@ struct BackgroundSelectorView: View {
     @State private var shimmerOffset: CGFloat = -100
     @State private var cardAppearOffset: CGFloat = 50
     @State private var cardAppearOpacity: Double = 0
+    
+    // 画像クロップ用の安定IDラッパー
+    private struct CroppingItem: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
     
     // MARK: - Preset Backgrounds
     private let presetBackgrounds = PresetBackground.availableBackgrounds
@@ -114,12 +120,13 @@ struct BackgroundSelectorView: View {
             }
             .onChange(of: selectedImageForCropping) { img in
                 guard let img else { return }
-                croppingImage = img
+                guard croppingItem == nil else { return }
+                croppingItem = CroppingItem(image: img)
             }
-            .fullScreenCover(item: $croppingImage) { img in
+            .fullScreenCover(item: $croppingItem) { item in
                 NavigationView {
                     SwiftyCropView(
-                        imageToCrop: img,
+                        imageToCrop: item.image,
                         maskShape: .rectangle,
                         configuration: cropConfig
                     ) { cropped in
@@ -130,7 +137,7 @@ struct BackgroundSelectorView: View {
                             }
                             uploadBackground()
                         }
-                        croppingImage = nil
+                        croppingItem = nil
                     }
                     .navigationBarHidden(true)
                     .drawingGroup()
