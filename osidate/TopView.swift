@@ -27,11 +27,6 @@ struct TopView: View {
                             Image(systemName: "bubble.left.and.bubble.right")
                             Text("チャット")
                         }
-                    CharacterSelectorView(characterRegistry: characterRegistry, selectedCharacterId: .constant(characterRegistry.activeCharacterId))
-                        .tabItem {
-                            Image(systemName: "bubble.left.and.bubble.right")
-                            Text("チャット")
-                        }
                     DateSelectorView(viewModel: romanceViewModel)
                         .tabItem {
                             Image(systemName: "heart.circle.fill")
@@ -43,6 +38,12 @@ struct TopView: View {
                             Image(systemName: "person.text.rectangle")
                             Text("推しの編集")
                         }
+                    
+                CharacterSelectorView(characterRegistry: characterRegistry, selectedCharacterId: .constant(characterRegistry.activeCharacterId))
+                    .tabItem {
+                        Image(systemName: "person.2")
+                        Text("推しの変更")
+                    }
                 }
             }
         }

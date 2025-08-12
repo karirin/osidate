@@ -299,25 +299,30 @@ struct ContentView: View {
                 ZStack {
                     backgroundView(geometry: geometry)
                         .blur(radius: backgroundBlur)
-                        // 従来のLINE形式
+                    
                     VStack(spacing: 0) {
-                        // Date status
-                        if viewModel.currentDateSession != nil {
-                            modernDateStatusView
-                                .padding(.top)
+                        // デート中の場合のステータス表示
+                        if let dateSession = viewModel.currentDateSession {
+                            dateStatusBadge(for: dateSession)
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
+                                .padding(.horizontal)
+                                .padding(.vertical)
+                                .opacity(isInputFocused ? 0 : 1)
+                                .frame(height: isInputFocused ? 0 : geometry.size.height * 0.1)
                         }
                         speechBubbleArea
-                            .frame(height: geometry.size.height * 0.15)
-                        // Floating character icon
-                        modernFloatingIconView
+                            .frame(height: geometry.size.height * 0.2)
+                        
+                        modernFloatingIconWithDateStatus
                             .frame(height: geometry.size.height * 0.25)
-                        // Enhanced chat area
                         modernChatView
-                            .frame(height: geometry.size.height * 0.49)
-                        // Modern input area
+                            .frame(height: (viewModel.currentDateSession != nil) ? geometry.size.height * 0.35 : geometry.size.height * 0.45)
+                        
                         modernInputView
-                            .frame(height: geometry.size.height * 0.01)
-                            .padding(.bottom, keyboardHeight > 0 ? 0 : 8)
+                            .frame(height: geometry.size.height * 0.1)
                     }
                 }
             }
@@ -332,6 +337,128 @@ struct ContentView: View {
     
     @State private var showingMessage = false
     @State private var isTyping = false
+    
+    private var modernFloatingIconWithDateStatus: some View {
+        VStack(spacing: 16) {
+            // キャラクターアイコン
+            ZStack {
+                CharacterIconView(character: viewModel.character, size: isInputFocused ? 110 : 150)
+                    .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
+                    .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
+                    .overlay(
+                        Group {
+                            if characterTalkingAnimation {
+                                ForEach(0..<3) { index in
+                                    Circle()
+                                        .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
+                                        .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
+                                        .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
+                                        .opacity(characterTalkingAnimation ? 0 : 0.7)
+                                        .animation(
+                                            .easeOut(duration: 1.0)
+                                            .delay(Double(index) * 0.2)
+                                            .repeatForever(autoreverses: false),
+                                            value: characterTalkingAnimation
+                                        )
+                                }
+                            }
+                        }
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
+                    .id(viewModel.character.iconURL ?? "default")
+            }
+            .padding(.vertical, 20)
+            .offset(y: iconOffset)
+            .onAppear {
+                showFloatingIcon = true
+            }
+        }
+        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.currentDateSession != nil)
+    }
+    
+    private func dateStatusBadge(for session: DateSession) -> some View {
+        HStack(spacing: 12) {
+            // 場所アイコン
+            ZStack {
+                Circle()
+                    .fill(session.location.type.color.opacity(0.2))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: session.location.type.icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(session.location.type.color)
+            }
+            
+            // デート情報
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("\(session.location.name)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+                    
+                    Text("でデート中")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                HStack(spacing: 8) {
+                    Text("開始: \(timeString(from: session.startTime))")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Text("経過: \(timeElapsedString(from: session.startTime))")
+                        .font(.caption2)
+                        .foregroundColor(session.location.type.color)
+                        .fontWeight(.medium)
+                }
+            }
+            
+            Spacer()
+            
+            // 終了ボタン（小さめ）
+            Button("終了") {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                    viewModel.endDate()
+                }
+            }
+            .font(.caption)
+            .fontWeight(.medium)
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(.red, in: Capsule())
+            .shadow(color: .red.opacity(0.3), radius: 4, x: 0, y: 2)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(session.location.type.color.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+    }
+    
+    private func timeString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private func timeElapsedString(from startTime: Date) -> String {
+        let elapsed = Date().timeIntervalSince(startTime)
+        let minutes = Int(elapsed / 60)
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        
+        if hours > 0 {
+            return "\(hours)時間\(remainingMinutes)分"
+        } else {
+            return "\(remainingMinutes)分"
+        }
+    }
     
     private var speechBubbleArea: some View {
         ZStack {
@@ -590,18 +717,18 @@ struct ContentView: View {
         }
     }
     
-    private func timeElapsedString(from startTime: Date) -> String {
-        let elapsed = Date().timeIntervalSince(startTime)
-        let minutes = Int(elapsed / 60)
-        let hours = minutes / 60
-        let remainingMinutes = minutes % 60
-        
-        if hours > 0 {
-            return "\(hours)時間\(remainingMinutes)分"
-        } else {
-            return "\(remainingMinutes)分"
-        }
-    }
+//    private func timeElapsedString(from startTime: Date) -> String {
+//        let elapsed = Date().timeIntervalSince(startTime)
+//        let minutes = Int(elapsed / 60)
+//        let hours = minutes / 60
+//        let remainingMinutes = minutes % 60
+//        
+//        if hours > 0 {
+//            return "\(hours)時間\(remainingMinutes)分"
+//        } else {
+//            return "\(remainingMinutes)分"
+//        }
+//    }
     
     // MARK: - Modern Floating Icon with Message Animation
     @State private var showMessageBubble = false
