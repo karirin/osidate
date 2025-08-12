@@ -10,6 +10,7 @@ import Combine
 
 struct ContentView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
+    @ObservedObject var characterRegistry: CharacterRegistry
     @State private var showFloatingIcon = false
     @State private var pulseAnimation = false
     @State private var messageText = ""
@@ -18,8 +19,10 @@ struct ContentView: View {
     @State private var backgroundBlur: CGFloat = 0
     @State private var headerOpacity: Double = 1.0
     @State private var showingFullChatHistory = false
+    @State private var showingCharacterSelector = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @State private var currentCharacterId = ""
     
     // Design Constants
     private let cardCornerRadius: CGFloat = 20
@@ -43,6 +46,18 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: characterRegistry.activeCharacterId) { newCharacterId in
+             currentCharacterId = newCharacterId
+             if let activeCharacter = characterRegistry.getActiveCharacter() {
+                 viewModel.switchToCharacter(activeCharacter)
+             }
+         }
+         .onAppear {
+             currentCharacterId = characterRegistry.activeCharacterId
+             if let activeCharacter = characterRegistry.getActiveCharacter() {
+                 viewModel.switchToCharacter(activeCharacter)
+             }
+         }
         .simultaneousGesture(
             TapGesture().onEnded { _ in
                 if isInputFocused {
@@ -69,10 +84,85 @@ struct ContentView: View {
                 currentLevel: viewModel.character.intimacyLevel
             )
         }
+        .sheet(isPresented: $showingCharacterSelector) {
+            CharacterSelectorView(
+                characterRegistry: characterRegistry,
+                selectedCharacterId: $currentCharacterId
+            )
+        }
+        .overlay(
+            // Character switcher button
+            VStack {
+                HStack {
+                    Spacer()
+                    characterSwitcherButton
+                }
+                Spacer()
+            }
+            .padding(.top, 20)
+            .padding(.trailing, 20)
+        )
         .onReceive(Publishers.keyboardHeight) { height in
             withAnimation(.easeInOut(duration: 0.3)) {
                 keyboardHeight = height
             }
+        }
+    }
+
+    private var characterSwitcherButton: some View {
+        Button(action: {
+            showingCharacterSelector = true
+        }) {
+            HStack(spacing: 8) {
+                Text("推し変更")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.black).opacity(0.8)
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+//                if let activeCharacter = characterRegistry.getActiveCharacter() {
+//                    // アイコン表示
+//                    if let iconURL = activeCharacter.iconURL,
+//                       let url = URL(string: iconURL) {
+//                        AsyncImage(url: url) { image in
+//                            image
+//                                .resizable()
+//                                .aspectRatio(contentMode: .fill)
+//                                .frame(width: 28, height: 28)
+//                                .clipShape(Circle())
+//                        } placeholder: {
+//                            Circle()
+//                                .fill(.gray.opacity(0.3))
+//                                .frame(width: 28, height: 28)
+//                                .overlay(ProgressView().scaleEffect(0.6))
+//                        }
+//                    } else {
+//                        Circle()
+//                            .fill(.blue.opacity(0.2))
+//                            .frame(width: 28, height: 28)
+//                            .overlay(
+//                                Image(systemName: activeCharacter.iconName)
+//                                    .font(.system(size: 14))
+//                                    .foregroundColor(.blue)
+//                            )
+//                    }
+//                    
+//                    Text(activeCharacter.name)
+//                        .font(.caption)
+//                        .fontWeight(.medium)
+//                        .foregroundColor(.primary)
+//                        .lineLimit(1)
+//                }
+//                
+//                Image(systemName: "chevron.down")
+//                    .font(.caption2)
+//                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.ultraThinMaterial)
+            .cornerRadius(16)
+            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -682,7 +772,7 @@ struct ContentView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.vertical, 16)
+                .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 25)
                         .fill(.ultraThinMaterial)
@@ -704,7 +794,7 @@ struct ContentView: View {
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 50, height: 50)
+                            .frame(width: 40, height: 40)
                             .shadow(
                                 color: messageText.isEmpty ? Color.clear : .green.opacity(0.3),
                                 radius: messageText.isEmpty ? 0 : 8,
@@ -724,8 +814,8 @@ struct ContentView: View {
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: messageText.isEmpty)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: pulseAnimation)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 8)
         }
     }
     
@@ -1075,5 +1165,5 @@ struct InfoRow: View {
 }
 
 #Preview {
-    ContentView(viewModel: RomanceAppViewModel())
+    ContentView(viewModel: RomanceAppViewModel(), characterRegistry: CharacterRegistry())
 }

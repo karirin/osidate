@@ -2,7 +2,7 @@
 //  RomanceAppViewModel.swift
 //  osidate
 //
-//  拡張された親密度システムと50箇所のデートスポット対応版
+//  複数推し対応・自動登録停止版の最終コード
 //
 
 import SwiftUI
@@ -45,6 +45,13 @@ class RomanceAppViewModel: ObservableObject {
     private let characterId: String
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
+    // MARK: - ✅ 新規プロパティ（複数推し対応）
+    
+    /// キャラクターが有効かどうかをチェック
+    var hasValidCharacter: Bool {
+        return character.isValidCharacter
+    }
+
     // MARK: - Init / Deinit
     init() {
         // キャラクターIDを生成または取得
@@ -55,6 +62,7 @@ class RomanceAppViewModel: ObservableObject {
             UserDefaults.standard.set(characterId, forKey: "characterId")
         }
 
+        // ✅ 修正：空のキャラクターで初期化（自動作成しない）
         character = Character()
         setupAuthStateListener()
     }
@@ -62,6 +70,50 @@ class RomanceAppViewModel: ObservableObject {
     deinit {
         if let h = authStateListener {
             Auth.auth().removeStateDidChangeListener(h)
+        }
+    }
+
+    // MARK: - ✅ キャラクター切り替えメソッド（複数推し対応）
+    
+    /// 推しを切り替える
+    func switchToCharacter(_ newCharacter: Character) {
+        print("\n🔄 ==================== キャラクター切り替え開始 ====================")
+        print("📤 切り替え前: \(character.name)")
+        print("📥 切り替え後: \(newCharacter.name)")
+        
+        // 現在の状態を保存（有効なキャラクターの場合のみ）
+        if character.isValidCharacter {
+            saveCurrentCharacterState()
+        }
+        
+        // 新しいキャラクターに切り替え
+        self.character = newCharacter
+        
+        // 新しいキャラクターのデータを読み込み
+        loadCharacterSpecificData()
+        
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
+        
+        print("✅ キャラクター切り替え完了")
+        print("==================== キャラクター切り替え終了 ====================\n")
+    }
+    
+    private func saveCurrentCharacterState() {
+        if character.isValidCharacter {
+            updateCharacterSettings()
+            saveUserData()
+        }
+    }
+    
+    private func loadCharacterSpecificData() {
+        if character.isValidCharacter {
+            loadMessages()
+            loadDateHistory()
+            loadIntimacyMilestones()
+            loadActiveDateSession()
+            updateAvailableLocations()
         }
     }
 
@@ -95,7 +147,9 @@ class RomanceAppViewModel: ObservableObject {
         database.child("users").child(userId).removeValue()
         
         // キャラクターデータ削除
-        database.child("characters").child(characterId).removeValue()
+        if character.isValidCharacter {
+            database.child("characters").child(character.id).removeValue()
+        }
         
         // メッセージ削除
         database.child("messages")
@@ -123,9 +177,7 @@ class RomanceAppViewModel: ObservableObject {
             self.dateHistory.removeAll()
             self.intimacyMilestones.removeAll()
             self.currentDateSession = nil
-            self.character.intimacyLevel = 0
-            self.character.totalDateCount = 0
-            self.character.unlockedInfiniteMode = false
+            self.character = Character() // 空のキャラクターに戻す
             self.infiniteDateCount = 0
             self.updateAvailableLocations()
         }
@@ -148,7 +200,7 @@ class RomanceAppViewModel: ObservableObject {
     
     /// 親密度リセット
     func resetIntimacyLevel() {
-        guard isAuthenticated else { return }
+        guard isAuthenticated && hasValidCharacter else { return }
         
         character.intimacyLevel = 0
         character.totalDateCount = 0
@@ -201,6 +253,7 @@ class RomanceAppViewModel: ObservableObject {
         print("🔑 OpenAI API状態: \(openAIService.hasValidAPIKey ? "✅ 設定済み" : "❌ 未設定")")
         print("📈 デート履歴: \(dateHistory.count)回")
         print("♾️ 無限モード: \(character.unlockedInfiniteMode ? "✅ 解放済み" : "❌ 未解放")")
+        print("✅ 有効なキャラクター: \(hasValidCharacter ? "YES" : "NO")")
         
         if let dateSession = currentDateSession {
             print("🏖️ デート中: \(dateSession.location.name)")
@@ -225,6 +278,11 @@ class RomanceAppViewModel: ObservableObject {
         
         guard isAuthenticated else {
             print("❌ 認証が必要です")
+            return
+        }
+        
+        guard hasValidCharacter else {
+            print("❌ 有効なキャラクターが設定されていません")
             return
         }
         
@@ -263,11 +321,13 @@ class RomanceAppViewModel: ObservableObject {
 
                 self.setupInitialData()
                 self.loadUserData()
-                self.loadCharacterData()
-                self.loadMessages()
-                self.loadDateHistory()
-                self.loadIntimacyMilestones()
-                self.loadActiveDateSession()
+                if self.hasValidCharacter {
+                    self.loadCharacterData()
+                    self.loadMessages()
+                    self.loadDateHistory()
+                    self.loadIntimacyMilestones()
+                    self.loadActiveDateSession()
+                }
                 self.updateAvailableLocations()
                 self.scheduleTimeBasedEvents()
             } else {
@@ -280,7 +340,8 @@ class RomanceAppViewModel: ObservableObject {
                 self.intimacyMilestones.removeAll()
                 self.currentDateSession = nil
                 
-                self.character.intimacyLevel = 0
+                // ✅ 修正：空のキャラクターに戻す（自動作成しない）
+                self.character = Character()
                 self.updateAvailableLocations()
                 self.signInAnonymously()
             }
@@ -303,6 +364,11 @@ class RomanceAppViewModel: ObservableObject {
 
     /// 親密度を増加させる（レベルアップチェック付き）
     func increaseIntimacy(by amount: Int, reason: String = "") {
+        guard hasValidCharacter else {
+            print("❌ 無効なキャラクターのため親密度を増加できません")
+            return
+        }
+        
         let oldLevel = character.intimacyLevel
         let oldStage = character.intimacyStage
         
@@ -462,6 +528,11 @@ class RomanceAppViewModel: ObservableObject {
             return
         }
         
+        guard hasValidCharacter else {
+            print("❌ 有効なキャラクターが設定されていません")
+            return
+        }
+        
         // 既存のデートセッションがある場合は終了
         if let existingSession = currentDateSession {
             print("⚠️ 既存のデートセッションを終了: \(existingSession.location.name)")
@@ -493,7 +564,7 @@ class RomanceAppViewModel: ObservableObject {
             isFromUser: false,
             timestamp: Date(),
             dateLocation: location.name,
-            intimacyGained: 0  // 修正: デート開始メッセージに親密度を付与しない
+            intimacyGained: 0
         )
         
         DispatchQueue.main.async { [weak self] in
@@ -502,9 +573,6 @@ class RomanceAppViewModel: ObservableObject {
         }
         
         saveMessage(startMessage)
-        
-        // 修正: デート開始時の基本親密度増加を削除
-        // increaseIntimacy(by: 3, reason: "デート開始: \(location.name)") // この行を削除
         
         // デートカウント増加
         character.totalDateCount += 1
@@ -525,6 +593,11 @@ class RomanceAppViewModel: ObservableObject {
     func endDate() {
         guard let session = currentDateSession, isAuthenticated else {
             print("❌ endDate: デートセッションなしまたは未認証")
+            return
+        }
+        
+        guard hasValidCharacter else {
+            print("❌ 有効なキャラクターが設定されていません")
             return
         }
         
@@ -596,13 +669,13 @@ class RomanceAppViewModel: ObservableObject {
     /// 拡張された親密度ボーナス計算
     private func calculateIntimacyBonus(duration: Int) -> Int {
         switch duration {
-        case 0..<300: return 0       // 修正: 5分未満は0pt
-        case 300..<600: return 2     // 5-10分: 2pt（元は4pt）
-        case 600..<1200: return 4    // 10-20分: 4pt（元は6pt）
-        case 1200..<1800: return 6   // 20-30分: 6pt（元は8pt）
-        case 1800..<3600: return 8   // 30分-1時間: 8pt（元は10pt）
-        case 3600..<7200: return 12  // 1-2時間: 12pt（元は15pt）
-        default: return 15           // 2時間以上: 15pt（元は20pt）
+        case 0..<300: return 0       // 5分未満は0pt
+        case 300..<600: return 2     // 5-10分: 2pt
+        case 600..<1200: return 4    // 10-20分: 4pt
+        case 1200..<1800: return 6   // 20-30分: 6pt
+        case 1800..<3600: return 8   // 30分-1時間: 8pt
+        case 3600..<7200: return 12  // 1-2時間: 12pt
+        default: return 15           // 2時間以上: 15pt
         }
     }
 
@@ -620,6 +693,8 @@ class RomanceAppViewModel: ObservableObject {
 
     /// 利用可能な全デートスポットを取得（既存メソッド - 親密度制限あり）
     func getAllAvailableLocations() -> [DateLocation] {
+        guard hasValidCharacter else { return [] }
+        
         var locations = DateLocation.availableLocations(for: character.intimacyLevel)
         
         // 無限モードが解放されている場合、動的に生成されたデートを追加
@@ -668,7 +743,7 @@ class RomanceAppViewModel: ObservableObject {
     }
 
     private func saveUserData() {
-        guard let uid = userId else { return }
+        guard let uid = userId, hasValidCharacter else { return }
         let data: [String:Any] = [
             "intimacyLevel": character.intimacyLevel,
             "birthday": character.birthday?.timeIntervalSince1970 as Any,
@@ -684,7 +759,7 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - 親密度マイルストーン管理
 
     private func loadIntimacyMilestones() {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID, hasValidCharacter else { return }
         
         database.child("intimacyMilestones").child(userId).observe(.value) { [weak self] snapshot in
             guard let self = self else { return }
@@ -708,7 +783,7 @@ class RomanceAppViewModel: ObservableObject {
     }
 
     private func saveIntimacyMilestone(_ milestone: IntimacyMilestone) {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID, hasValidCharacter else { return }
         
         let milestoneData: [String: Any] = [
             "id": milestone.id.uuidString,
@@ -756,6 +831,11 @@ class RomanceAppViewModel: ObservableObject {
             return
         }
         
+        guard hasValidCharacter else {
+            print("❌ 有効なキャラクターが設定されていません")
+            return
+        }
+        
         loadCurrentDateSessionForMessage { [weak self] dateSession in
             self?.processSendMessage(text, with: dateSession)
         }
@@ -768,7 +848,7 @@ class RomanceAppViewModel: ObservableObject {
             isFromUser: true,
             timestamp: Date(),
             dateLocation: dateSession?.location.name,
-            intimacyGained: 0  // 修正: ユーザーメッセージには親密度を付与しない
+            intimacyGained: 0
         )
         
         DispatchQueue.main.async { [weak self] in
@@ -785,9 +865,6 @@ class RomanceAppViewModel: ObservableObject {
             }
             saveDateSession(session)
         }
-        
-        // 修正: ユーザーメッセージによる親密度増加を削除
-        // increaseIntimacy(by: messageBonus, reason: "メッセージ送信") // この行を削除
         
         // OpenAI Service を使用してAI応答を生成
         openAIService.generateResponse(
@@ -825,7 +902,7 @@ class RomanceAppViewModel: ObservableObject {
                 saveDateSession(session)
             }
             
-            // AI応答による親密度増加（これは維持）
+            // AI応答による親密度増加
             increaseIntimacy(by: responseBonus, reason: "AI応答")
             
         case .failure(let error):
@@ -843,7 +920,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func sendSystemMessage(_ text: String) {
-        guard isAuthenticated else { return }
+        guard isAuthenticated && hasValidCharacter else { return }
         
         let systemMessage = Message(
             text: text,
@@ -879,21 +956,20 @@ class RomanceAppViewModel: ObservableObject {
         guard let uid = userId else { return }
         
         database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
-            if !(snap.exists()) { self?.createInitialUserData() }
+            if !(snap.exists()) {
+                self?.createInitialUserDataOnly() // ✅ 修正：キャラクター作成なし
+            }
         }
         
-        database.child("characters").child(characterId).observeSingleEvent(of: .value) { [weak self] snap in
-            if !(snap.exists()) { self?.createInitialCharacterData() }
-        }
-        
+        // ✅ 修正：初期キャラクターデータは作成しない
         loadActiveDateSession()
     }
 
-    private func createInitialUserData() {
+    // ✅ 修正：ユーザーデータのみ作成（キャラクター作成なし）
+    private func createInitialUserDataOnly() {
         guard let uid = userId else { return }
         let data: [String:Any] = [
             "id": uid,
-            "characterId": characterId,
             "intimacyLevel": 0,
             "totalDateCount": 0,
             "unlockedInfiniteMode": false,
@@ -904,23 +980,10 @@ class RomanceAppViewModel: ObservableObject {
         database.child("users").child(uid).setValue(data)
     }
 
-    private func createInitialCharacterData() {
-        let data: [String:Any] = [
-            "id": characterId,
-            "name": character.name,
-            "personality": character.personality,
-            "speakingStyle": character.speakingStyle,
-            "iconName": character.iconName,
-            "iconURL": character.iconURL as Any,
-            "backgroundName": character.backgroundName,
-            "backgroundURL": character.backgroundURL as Any,
-            "createdAt": Date().timeIntervalSince1970
-        ]
-        database.child("characters").child(characterId).setValue(data)
-    }
-
     private func loadCharacterData() {
-        database.child("characters").child(characterId).observe(.value) { [weak self] snap in
+        guard hasValidCharacter else { return }
+        
+        database.child("characters").child(character.id).observe(.value) { [weak self] snap in
             guard let self = self, let dict = snap.value as? [String:Any] else { return }
             var changed = false
 
@@ -931,12 +994,16 @@ class RomanceAppViewModel: ObservableObject {
             if let v = dict["iconURL"] as? String, v != character.iconURL { character.iconURL = v; changed = true }
             if let v = dict["backgroundName"] as? String, v != character.backgroundName { character.backgroundName = v; changed = true }
             if let v = dict["backgroundURL"] as? String, v != character.backgroundURL { character.backgroundURL = v; changed = true }
+            if let v = dict["userNickname"] as? String, v != character.userNickname { character.userNickname = v; changed = true }
+            if let v = dict["useNickname"] as? Bool, v != character.useNickname { character.useNickname = v; changed = true }
 
             if changed { self.objectWillChange.send() }
         }
     }
 
     private func saveCharacterData() {
+        guard hasValidCharacter else { return }
+        
         let data: [String:Any] = [
             "name": character.name,
             "personality": character.personality,
@@ -945,13 +1012,15 @@ class RomanceAppViewModel: ObservableObject {
             "iconURL": character.iconURL as Any,
             "backgroundName": character.backgroundName,
             "backgroundURL": character.backgroundURL as Any,
+            "userNickname": character.userNickname,
+            "useNickname": character.useNickname,
             "updatedAt": Date().timeIntervalSince1970
         ]
-        database.child("characters").child(characterId).updateChildValues(data)
+        database.child("characters").child(character.id).updateChildValues(data)
     }
     
     private func loadMessages() {
-        guard let conversationId = getConversationId() else { return }
+        guard let conversationId = getConversationId(), hasValidCharacter else { return }
         
         database.child("messages")
             .queryOrdered(byChild: "conversationId")
@@ -979,13 +1048,14 @@ class RomanceAppViewModel: ObservableObject {
     
     private func saveMessage(_ message: Message) {
         guard let userId = self.userId,
-              let conversationId = getConversationId() else { return }
+              let conversationId = getConversationId(),
+              hasValidCharacter else { return }
         
         let messageData: [String: Any] = [
             "id": message.id.uuidString,
             "conversationId": conversationId,
-            "senderId": message.isFromUser ? userId : characterId,
-            "receiverId": message.isFromUser ? characterId : userId,
+            "senderId": message.isFromUser ? userId : character.id,
+            "receiverId": message.isFromUser ? character.id : userId,
             "text": message.text,
             "isFromUser": message.isFromUser,
             "timestamp": message.timestamp.timeIntervalSince1970,
@@ -1021,14 +1091,14 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func getConversationId() -> String? {
-        guard let userId = self.userId else { return nil }
-        return "\(userId)_\(characterId)"
+        guard let userId = self.userId, hasValidCharacter else { return nil }
+        return "\(userId)_\(character.id)"
     }
 
     // MARK: - デートセッション管理（継続使用）
     
     private func saveDateSession(_ session: DateSession) {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID, hasValidCharacter else { return }
         
         let sessionData: [String: Any] = [
             "locationName": session.location.name,
@@ -1044,7 +1114,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func loadActiveDateSession() {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID, hasValidCharacter else { return }
         
         database.child("dateSessions").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
             guard let self = self,
@@ -1081,7 +1151,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func loadCurrentDateSessionForMessage(completion: @escaping (DateSession?) -> Void) {
-        guard let userId = currentUserID else {
+        guard let userId = currentUserID, hasValidCharacter else {
             completion(nil)
             return
         }
@@ -1136,7 +1206,7 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - デート履歴管理（継続使用）
     
     func loadDateHistory() {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID, hasValidCharacter else { return }
         
         database.child("dateHistory").child(userId).observe(.value) { [weak self] snapshot in
             guard let self = self else { return }
@@ -1160,7 +1230,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func saveCompletedDate(_ completedDate: CompletedDate) {
-        guard let userId = currentUserID else { return }
+        guard let userId = currentUserID, hasValidCharacter else { return }
         
         let completedDateData: [String: Any] = [
             "id": completedDate.id.uuidString,
@@ -1276,6 +1346,7 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - その他のメソッド
 
     func updateCharacterSettings() {
+        guard hasValidCharacter else { return }
         saveCharacterData()
         saveUserData()
         
@@ -1291,6 +1362,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func updateBackgroundURL(_ url: String?) {
+        guard hasValidCharacter else { return }
         character.backgroundURL = url
         saveCharacterData()
         objectWillChange.send()
@@ -1303,7 +1375,7 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func checkForTimeBasedEvents() {
-        guard isAuthenticated else { return }
+        guard isAuthenticated && hasValidCharacter else { return }
         
         let now = Date()
         let calendar = Calendar.current
@@ -1342,6 +1414,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     func getAllDateLocations() -> [DateLocation] {
+        guard hasValidCharacter else { return [] }
+        
         var locations = DateLocation.availableDateLocations
         
         // 無限モードが解放されている場合、動的に生成されたデートを追加
@@ -1361,12 +1435,15 @@ class RomanceAppViewModel: ObservableObject {
     
     /// 解放済みデートスポットの数を取得
     func getUnlockedLocationCount() -> Int {
+        guard hasValidCharacter else { return 0 }
         return DateLocation.availableLocations(for: character.intimacyLevel).count +
                (character.unlockedInfiniteMode ? 3 : 0)
     }
     
     /// ロック済みデートスポットの数を取得
     func getLockedLocationCount() -> Int {
+        guard hasValidCharacter else { return DateLocation.availableDateLocations.count }
+        
         let totalCount = DateLocation.availableDateLocations.count +
                         (character.unlockedInfiniteMode ? 3 : 0)
         return totalCount - getUnlockedLocationCount()
@@ -1381,6 +1458,8 @@ class RomanceAppViewModel: ObservableObject {
     
     /// 次に解放されるデートスポットを取得（モチベーション向上用）
     func getNextUnlockableLocation() -> DateLocation? {
+        guard hasValidCharacter else { return DateLocation.availableDateLocations.first }
+        
         return DateLocation.availableDateLocations
             .filter { $0.requiredIntimacy > character.intimacyLevel }
             .min { $0.requiredIntimacy < $1.requiredIntimacy }
@@ -1388,6 +1467,17 @@ class RomanceAppViewModel: ObservableObject {
     
     /// デートスポットの解放状況統計を取得
     func getLocationUnlockStats() -> LocationUnlockStats {
+        guard hasValidCharacter else {
+            return LocationUnlockStats(
+                totalLocations: DateLocation.availableDateLocations.count,
+                unlockedLocations: 0,
+                lockedLocations: DateLocation.availableDateLocations.count,
+                unlockedByType: [:],
+                lockedByType: [:],
+                unlockProgress: 0.0
+            )
+        }
+        
         let allLocations = DateLocation.availableDateLocations
         let unlockedCount = getUnlockedLocationCount()
         let totalCount = allLocations.count + (character.unlockedInfiniteMode ? 999 : 0)

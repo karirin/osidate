@@ -8,7 +8,7 @@
 import SwiftUI
 import Foundation
 
-class Character: ObservableObject, Codable {
+class Character: ObservableObject, Codable, Identifiable {
     @Published var id: String
     @Published var name: String
     @Published var personality: String
@@ -22,13 +22,57 @@ class Character: ObservableObject, Codable {
     @Published var backgroundURL: String?
     @Published var totalDateCount: Int = 0
     @Published var unlockedInfiniteMode: Bool = false
-    
-    // 🌟 新機能: ユーザーの呼び名設定
     @Published var userNickname: String = ""
     @Published var useNickname: Bool = false
     
-    // 🌟 拡張された親密度タイトルシステム
+    // ✅ 修正：完全に空の初期化（自動作成を防ぐ）
+    init() {
+        self.id = UUID().uuidString
+        self.name = ""                          // ← 空文字列
+        self.personality = ""                   // ← 空文字列
+        self.speakingStyle = ""                 // ← 空文字列
+        self.intimacyLevel = 0
+        self.birthday = nil
+        self.anniversaryDate = nil
+        self.iconURL = nil
+        self.iconName = "person.circle.fill"
+        self.backgroundName = "defaultBG"
+        self.backgroundURL = nil
+        self.totalDateCount = 0
+        self.unlockedInfiniteMode = false
+        self.userNickname = ""
+        self.useNickname = false
+    }
+    
+    // ✅ 明示的な作成用イニシャライザー（ユーザーが意図的に作成する場合のみ）
+    init(name: String, personality: String, speakingStyle: String, iconName: String = "person.circle.fill", backgroundName: String = "defaultBG") {
+        self.id = UUID().uuidString
+        self.name = name
+        self.personality = personality
+        self.speakingStyle = speakingStyle
+        self.intimacyLevel = 0
+        self.birthday = nil
+        self.anniversaryDate = nil
+        self.iconURL = nil
+        self.iconName = iconName
+        self.backgroundName = backgroundName
+        self.backgroundURL = nil
+        self.totalDateCount = 0
+        self.unlockedInfiniteMode = false
+        self.userNickname = ""
+        self.useNickname = false
+    }
+    
+    // ✅ キャラクターが有効かどうかをチェック
+    var isValidCharacter: Bool {
+        return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !personality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    // 残りのプロパティとメソッドは既存のまま...
     var intimacyTitle: String {
+        guard isValidCharacter else { return "未設定" }
         switch intimacyLevel {
         case 0...100: return "親友"
         case 101...200: return "特別な友達"
@@ -104,44 +148,7 @@ class Character: ObservableObject, Codable {
         return 1.0 // 最高レベル
     }
     
-    // デフォルトイニシャライザー
-    init() {
-        self.id = UUID().uuidString
-        self.name = "あい"
-        self.personality = "優しくて思いやりがある"
-        self.speakingStyle = "丁寧で温かい"
-        self.intimacyLevel = 0
-        self.birthday = nil
-        self.anniversaryDate = nil
-        self.iconURL = nil
-        self.iconName = "person.circle.fill"
-        self.backgroundName = "defaultBG"
-        self.backgroundURL = nil
-        self.totalDateCount = 0
-        self.unlockedInfiniteMode = false
-        self.userNickname = ""
-        self.useNickname = false
-    }
-    
-    // カスタムイニシャライザー
-    init(name: String, personality: String, speakingStyle: String, iconName: String, backgroundName: String,
-         backgroundURL: String? = nil, userNickname: String = "", useNickname: Bool = false) {
-        self.id = UUID().uuidString
-        self.name = name
-        self.personality = personality
-        self.speakingStyle = speakingStyle
-        self.intimacyLevel = 0
-        self.birthday = nil
-        self.anniversaryDate = nil
-        self.iconURL = nil
-        self.iconName = iconName
-        self.backgroundName = backgroundName
-        self.backgroundURL = backgroundURL
-        self.totalDateCount = 0
-        self.unlockedInfiniteMode = false
-        self.userNickname = userNickname
-        self.useNickname = useNickname
-    }
+    // MARK: - Codable 実装
     
     // Codable用のCodingKeys
     enum CodingKeys: String, CodingKey {
