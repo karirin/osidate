@@ -15,25 +15,19 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - Published State
     @Published var character: Character
     @Published var messages: [Message] = []
-
     @Published var currentDateLocation: DateLocation?
     @Published var availableLocations: [DateLocation] = []
-
-    @Published var showingDateView            = false
-    @Published var showingSettings            = false
-    @Published var showingBackgroundSelector  = false
-    @Published var showingDateSelector        = false
-
+    @Published var showingDateView = false
+    @Published var showingSettings = false
+    @Published var showingBackgroundSelector = false
+    @Published var showingDateSelector = false
     @Published var isAuthenticated = false
-    @Published var isLoading       = true
-
+    @Published var isLoading = true
     @Published var openAIService = OpenAIService()
 
     // MARK: - Date System Properties
     @Published var currentDateSession: DateSession? = nil
     @Published var dateHistory: [CompletedDate] = []
-    
-    // 🌟 拡張された親密度システム
     @Published var intimacyMilestones: [IntimacyMilestone] = []
     @Published var showingIntimacyLevelUp = false
     @Published var newIntimacyStage: IntimacyStage? = nil
@@ -45,9 +39,6 @@ class RomanceAppViewModel: ObservableObject {
     private let characterId: String
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
-    // MARK: - ✅ 新規プロパティ（複数推し対応）
-    
-    /// キャラクターが有効かどうかをチェック
     var hasValidCharacter: Bool {
         return character.isValidCharacter
     }
@@ -58,31 +49,25 @@ class RomanceAppViewModel: ObservableObject {
                let mode = ChatDisplayMode(rawValue: modeString) {
                 return mode
             }
-            return .traditional // デフォルトは従来形式
+            return .traditional
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: "chatDisplayMode")
             UserDefaults.standard.synchronize()
-            
-            // 設定変更のシステムメッセージを送信
             let message = getChatModeChangeMessage(newMode: newValue)
             sendSystemMessage(message)
-            
             print("🔄 チャット表示モードを変更: \(newValue.displayName)")
         }
     }
 
     // MARK: - Init / Deinit
     init() {
-        // キャラクターIDを生成または取得
         if let storedId = UserDefaults.standard.string(forKey: "characterId") {
             characterId = storedId
         } else {
             characterId = UUID().uuidString
             UserDefaults.standard.set(characterId, forKey: "characterId")
         }
-
-        // ✅ 修正：空のキャラクターで初期化（自動作成しない）
         character = Character()
         setupAuthStateListener()
     }
@@ -93,7 +78,6 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    /// チャット表示モード変更時のシステムメッセージを取得
     private func getChatModeChangeMessage(newMode: ChatDisplayMode) -> String {
         switch newMode {
         case .traditional:
@@ -103,47 +87,100 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
-    /// チャット表示モードを切り替え
     func toggleChatDisplayMode() {
         let newMode: ChatDisplayMode = chatDisplayMode == .traditional ? .floating : .traditional
         chatDisplayMode = newMode
     }
     
-    /// チャット表示モードの設定をリセット
-    func resetChatDisplayMode() {
-        chatDisplayMode = .traditional
-    }
-    
-    /// デバッグ用：現在のチャット表示モードを出力
-    func debugChatDisplayMode() {
-        print("🎨 現在のチャット表示モード: \(chatDisplayMode.displayName) (\(chatDisplayMode.rawValue))")
-    }
-    
-    /// 推しを切り替える
+    /// 🔧 最適化：推しを切り替える（charactersテーブル直接管理）
     func switchToCharacter(_ newCharacter: Character) {
         print("\n🔄 ==================== キャラクター切り替え開始 ====================")
-        print("📤 切り替え前: \(character.name)")
-        print("📥 切り替え後: \(newCharacter.name)")
+        print("📤 切り替え前: \(character.name) (ID: \(character.id))")
+        print("📥 切り替え後: \(newCharacter.name) (ID: \(newCharacter.id))")
         
         // 現在の状態を保存（有効なキャラクターの場合のみ）
         if character.isValidCharacter {
             saveCurrentCharacterState()
         }
         
-        // 新しいキャラクターに切り替え
-        self.character = newCharacter
-        
-        // 新しいキャラクターのデータを読み込み
-        loadCharacterSpecificData()
-        
-        DispatchQueue.main.async {
+        // 🔧 修正：メインスレッドで確実に更新
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // キャラクターを切り替え
+            self.character = newCharacter
+            
+            // 🔧 修正：明示的に更新通知を送信
             self.objectWillChange.send()
+            
+            // 新しいキャラクターのデータを読み込み
+            self.loadCharacterSpecificData()
+            
+            print("✅ キャラクター切り替え完了")
+            print("🎭 新キャラクター情報:")
+            print("   - 名前: \(self.character.name)")
+            print("   - ID: \(self.character.id)")
+            print("   - アイコンURL: \(self.character.iconURL ?? "なし")")
+            print("   - 親密度: \(self.character.intimacyLevel)")
+            print("==================== キャラクター切り替え終了 ====================\n")
         }
-        
-        print("✅ キャラクター切り替え完了")
-        print("==================== キャラクター切り替え終了 ====================\n")
     }
     
+    func forceUpdateCharacterProperties() {
+        DispatchQueue.main.async { [weak self] in
+            self?.objectWillChange.send()
+        }
+    }
+    
+    /// キャラクターアイコンを強制リフレッシュ（修正版）
+    func forceRefreshCharacterIcon() {
+        print("🔄 キャラクターアイコンを強制リフレッシュ")
+        print("   - キャラクター名: \(character.name)")
+        print("   - アイコンURL: \(character.iconURL ?? "なし")")
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            // 明示的に更新を通知
+            self.objectWillChange.send()
+            
+            // 少し遅延を入れてもう一度更新を通知（確実に反映させるため）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.objectWillChange.send()
+            }
+        }
+    }
+    
+    /// キャラクター設定更新時の処理（修正版）
+    func updateCharacterSettings() {
+        guard hasValidCharacter else {
+            print("❌ updateCharacterSettings: 無効なキャラクター")
+            return
+        }
+        
+        print("💾 キャラクター設定を更新中...")
+        print("   - 名前: \(character.name)")
+        print("   - アイコンURL: \(character.iconURL ?? "なし")")
+        
+        saveCharacterData()
+        saveUserData()
+        
+        // 🔧 修正：確実にUI更新を通知
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            
+            self.objectWillChange.send()
+            
+            // 少し遅延してもう一度更新（Viewの再描画を確実にするため）
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self.objectWillChange.send()
+            }
+        }
+        
+        print("✅ キャラクター設定更新完了")
+    }
+    
+    // 既存のメソッドはそのまま保持...
     private func saveCurrentCharacterState() {
         if character.isValidCharacter {
             updateCharacterSettings()
@@ -158,233 +195,151 @@ class RomanceAppViewModel: ObservableObject {
             loadIntimacyMilestones()
             loadActiveDateSession()
             updateAvailableLocations()
+            
+            // キャラクターデータも再読み込み
+            loadCharacterData()
+        }
+    }
+    
+    /// デバッグ用：現在のキャラクター状態を出力
+    func debugCharacterState() {
+        print("\n🔍 ==================== キャラクター状態デバッグ ====================")
+        print("🎭 キャラクター名: \(character.name)")
+        print("🆔 キャラクターID: \(character.id)")
+        print("🖼️ アイコンURL: \(character.iconURL ?? "未設定")")
+        print("📊 親密度: \(character.intimacyLevel)")
+        print("✅ 有効なキャラクター: \(hasValidCharacter ? "YES" : "NO")")
+        print("🔐 認証状態: \(isAuthenticated ? "認証済み" : "未認証")")
+        print("==================== デバッグ情報終了 ====================\n")
+    }
+    
+    /// 🔧 最適化：キャラクターの全データを保存（親密度含む）
+    private func saveCharacterDataComplete() {
+        guard character.isValidCharacter else {
+            print("❌ 保存条件不足: キャラクター無効")
+            return
+        }
+        
+        print("💾 === キャラクター完全データ保存開始 ===")
+        print("🎭 対象キャラクター: \(character.name) (ID: \(character.id))")
+        print("📊 保存する親密度: \(character.intimacyLevel)")
+        print("📅 デート回数: \(character.totalDateCount)")
+        print("♾️ 無限モード: \(character.unlockedInfiniteMode)")
+        print("🔢 無限デート回数: \(infiniteDateCount)")
+        
+        // 🔧 最適化：charactersテーブルで全て管理（親密度含む）
+        let characterData: [String: Any] = [
+            "id": character.id,
+            "name": character.name,
+            "personality": character.personality,
+            "speakingStyle": character.speakingStyle,
+            "iconName": character.iconName,
+            "iconURL": character.iconURL as Any,
+            "backgroundName": character.backgroundName,
+            "backgroundURL": character.backgroundURL as Any,
+            "userNickname": character.userNickname,
+            "useNickname": character.useNickname,
+            // 🔧 最適化：親密度データもcharactersテーブルに含める
+            "intimacyLevel": character.intimacyLevel,
+            "totalDateCount": character.totalDateCount,
+            "unlockedInfiniteMode": character.unlockedInfiniteMode,
+            "infiniteDateCount": infiniteDateCount,
+            "lastUpdated": Date().timeIntervalSince1970
+        ]
+        
+        database.child("characters").child(character.id).updateChildValues(characterData) { error, _ in
+            if let error = error {
+                print("❌ キャラクターデータ保存失敗: \(error.localizedDescription)")
+            } else {
+                print("✅ キャラクターデータ保存成功")
+            }
+        }
+        
+        print("💾 === キャラクター完全データ保存完了 ===")
+    }
+    
+    /// 🔧 最適化：キャラクターの全データを読み込み（親密度含む）
+    private func loadCharacterDataComplete() {
+        guard character.isValidCharacter else {
+            print("❌ 読み込み条件不足: キャラクター無効")
+            return
+        }
+        
+        print("📥 === キャラクター完全データ読み込み開始 ===")
+        print("🎭 対象キャラクター: \(character.name) (ID: \(character.id))")
+        
+        database.child("characters").child(character.id).observeSingleEvent(of: .value) { [weak self] snapshot in
+            guard let self = self,
+                  let data = snapshot.value as? [String: Any] else {
+                print("❌ キャラクターデータが見つかりません")
+                return
+            }
+            
+            print("📥 キャラクターデータ読み込み中...")
+            
+            // 基本プロパティを更新
+            if let name = data["name"] as? String { self.character.name = name }
+            if let personality = data["personality"] as? String { self.character.personality = personality }
+            if let speakingStyle = data["speakingStyle"] as? String { self.character.speakingStyle = speakingStyle }
+            if let iconName = data["iconName"] as? String { self.character.iconName = iconName }
+            if let iconURL = data["iconURL"] as? String { self.character.iconURL = iconURL }
+            if let backgroundName = data["backgroundName"] as? String { self.character.backgroundName = backgroundName }
+            if let backgroundURL = data["backgroundURL"] as? String { self.character.backgroundURL = backgroundURL }
+            if let userNickname = data["userNickname"] as? String { self.character.userNickname = userNickname }
+            if let useNickname = data["useNickname"] as? Bool { self.character.useNickname = useNickname }
+            
+            // 🔧 最適化：親密度データもcharactersテーブルから読み込み
+            if let intimacyLevel = data["intimacyLevel"] as? Int {
+                self.character.intimacyLevel = intimacyLevel
+                print("📊 親密度読み込み: \(intimacyLevel)")
+            }
+            if let totalDateCount = data["totalDateCount"] as? Int {
+                self.character.totalDateCount = totalDateCount
+                print("📅 デート回数読み込み: \(totalDateCount)")
+            }
+            if let unlockedInfiniteMode = data["unlockedInfiniteMode"] as? Bool {
+                self.character.unlockedInfiniteMode = unlockedInfiniteMode
+                print("♾️ 無限モード読み込み: \(unlockedInfiniteMode)")
+            }
+            if let infiniteDateCount = data["infiniteDateCount"] as? Int {
+                self.infiniteDateCount = infiniteDateCount
+                print("🔢 無限デート回数読み込み: \(infiniteDateCount)")
+            }
+            
+            print("✅ キャラクターデータ読み込み完了")
+            print("📊 最終的な親密度: \(self.character.intimacyLevel)")
+            
+            // 関連データを読み込み
+            DispatchQueue.main.async {
+                self.loadCharacterSpecificData()
+                self.objectWillChange.send()
+            }
+            
+            print("📥 === キャラクター完全データ読み込み完了 ===")
         }
     }
 
     // MARK: - Auth
-    private func setupAuthStateListener() {
-        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            self?.handleAuthStateChange(user: user)
-        }
-    }
-    
-    /// メッセージ送信時のデートセッション更新
-    func updateDateSessionOnMessage(_ message: Message) {
-        guard var session = currentDateSession else { return }
-        
-        session.messagesExchanged += 1
-        
-        if !message.isFromUser {
-            session.intimacyGained += 1
-        }
-        
-        currentDateSession = session
-        saveDateSession(session)
-    }
-    
-    /// データ削除（テスト用）
-    func clearAllData() {
-        guard let userId = self.userId,
-              let conversationId = getConversationId() else { return }
-        
-        // ユーザーデータ削除
-        database.child("users").child(userId).removeValue()
-        
-        // キャラクターデータ削除
-        if character.isValidCharacter {
-            database.child("characters").child(character.id).removeValue()
-        }
-        
-        // メッセージ削除
-        database.child("messages")
-            .queryOrdered(byChild: "conversationId")
-            .queryEqual(toValue: conversationId)
-            .observeSingleEvent(of: .value) { snapshot in
-                if let messagesData = snapshot.value as? [String: Any] {
-                    for (messageId, _) in messagesData {
-                        self.database.child("messages").child(messageId).removeValue()
-                    }
-                }
-            }
-        
-        // デート履歴削除
-        database.child("dateHistory").child(userId).removeValue()
-        database.child("dateSessions").child(userId).removeValue()
-        database.child("intimacyMilestones").child(userId).removeValue()
-        
-        // UserDefaultsからキャラクターIDを削除
-        UserDefaults.standard.removeObject(forKey: "characterId")
-        UserDefaults.standard.synchronize()
-        
-        DispatchQueue.main.async {
-            self.messages.removeAll()
-            self.dateHistory.removeAll()
-            self.intimacyMilestones.removeAll()
-            self.currentDateSession = nil
-            self.character = Character() // 空のキャラクターに戻す
-            self.infiniteDateCount = 0
-            self.updateAvailableLocations()
-        }
-    }
-    
-    /// UserDefaults リセット機能
-    func resetUserDefaults() {
-        UserDefaults.standard.removeObject(forKey: "characterId")
-        UserDefaults.standard.synchronize()
-        print("UserDefaultsがリセットされました")
-    }
-    
-    func resetAllUserDefaults() {
-        if let bundleID = Bundle.main.bundleIdentifier {
-            UserDefaults.standard.removePersistentDomain(forName: bundleID)
-            UserDefaults.standard.synchronize()
-            print("全てのUserDefaultsがリセットされました")
-        }
-    }
-    
-    /// 親密度リセット
-    func resetIntimacyLevel() {
-        guard isAuthenticated && hasValidCharacter else { return }
-        
-        character.intimacyLevel = 0
-        character.totalDateCount = 0
-        character.unlockedInfiniteMode = false
-        infiniteDateCount = 0
-        updateAvailableLocations()
-        saveUserData()
-        
-        let resetMessage = Message(
-            text: "親密度がリセットされました。また一から関係を築いていきましょう！",
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: nil
-        )
-        saveMessage(resetMessage)
-    }
-    
-    /// 統計メソッド
-    func getMessageCount() -> Int {
-        return messages.count
-    }
-    
-    func getUserMessageCount() -> Int {
-        return messages.filter { $0.isFromUser }.count
-    }
-    
-    func getAIMessageCount() -> Int {
-        return messages.filter { !$0.isFromUser }.count
-    }
-    
-    func getTotalConversationDays() -> Int {
-        guard let firstMessage = messages.first else { return 0 }
-        let daysBetween = Calendar.current.dateComponents([.day], from: firstMessage.timestamp, to: Date()).day ?? 0
-        return max(daysBetween, 1)
-    }
-    
-    func getAverageMessagesPerDay() -> Double {
-        let totalDays = getTotalConversationDays()
-        return totalDays > 0 ? Double(messages.count) / Double(totalDays) : 0
-    }
-    
-    /// デバッグ用ヘルパーメソッド
-    func debugCurrentState() {
-        print("\n🔍 ==================== 現在の状態 ====================")
-        print("👤 認証状態: \(isAuthenticated ? "✅ 認証済み" : "❌ 未認証")")
-        print("🆔 ユーザーID: \(currentUserID ?? "未設定")")
-        print("🎭 キャラクター名: \(character.name)")
-        print("📊 親密度: \(character.intimacyLevel) (\(character.intimacyTitle))")
-        print("💬 メッセージ数: \(messages.count)")
-        print("🔑 OpenAI API状態: \(openAIService.hasValidAPIKey ? "✅ 設定済み" : "❌ 未設定")")
-        print("📈 デート履歴: \(dateHistory.count)回")
-        print("♾️ 無限モード: \(character.unlockedInfiniteMode ? "✅ 解放済み" : "❌ 未解放")")
-        print("✅ 有効なキャラクター: \(hasValidCharacter ? "YES" : "NO")")
-        
-        if let dateSession = currentDateSession {
-            print("🏖️ デート中: \(dateSession.location.name)")
-            print("⏰ デート時間: \(Int(Date().timeIntervalSince(dateSession.startTime)) / 60)分")
-            print("💬 デート中メッセージ: \(dateSession.messagesExchanged)回")
-        }
-        
-        if messages.count > 0 {
-            print("📝 最新のメッセージ:")
-            for (index, message) in messages.suffix(3).enumerated() {
-                let sender = message.isFromUser ? "👤 ユーザー" : "🤖 AI"
-                let time = DateFormatter.localizedString(from: message.timestamp, dateStyle: .none, timeStyle: .short)
-                let location = message.dateLocation != nil ? " 📍\(message.dateLocation!)" : ""
-                print("   \(index + 1). [\(time)]\(location) \(sender): \(message.text.prefix(50))...")
-            }
-        }
-        print("==================== 状態確認完了 ====================\n")
-    }
-
-    func testAIConnection() {
-        print("\n🧪 ==================== AI接続テスト ====================")
-        
-        guard isAuthenticated else {
-            print("❌ 認証が必要です")
-            return
-        }
-        
-        guard hasValidCharacter else {
-            print("❌ 有効なキャラクターが設定されていません")
-            return
-        }
-        
-        guard openAIService.hasValidAPIKey else {
-            print("❌ APIキーが設定されていません")
-            return
-        }
-        
-        let testMessage = "こんにちは、テストメッセージです"
-        print("📤 テストメッセージ送信: \(testMessage)")
-        
-        openAIService.generateResponse(
-            for: testMessage,
-            character: character,
-            conversationHistory: [],
-            currentDateSession: currentDateSession
-        ) { result in
-            switch result {
-            case .success(let response):
-                print("🎉 AI接続テスト成功!")
-                print("📝 AI応答: \(response)")
-            case .failure(let error):
-                print("❌ AI接続テスト失敗: \(error.localizedDescription)")
-            }
-        }
-        
-        print("==================== AI接続テスト完了 ====================\n")
-    }
-
     private func handleAuthStateChange(user: User?) {
         DispatchQueue.main.async {
             if let u = user {
-                self.userId         = u.uid
+                self.userId = u.uid
                 self.isAuthenticated = true
-                self.isLoading       = false
-
+                self.isLoading = false
                 self.setupInitialData()
-                self.loadUserData()
                 if self.hasValidCharacter {
-                    self.loadCharacterData()
-                    self.loadMessages()
-                    self.loadDateHistory()
-                    self.loadIntimacyMilestones()
-                    self.loadActiveDateSession()
+                    self.loadCharacterDataComplete() // 🔧 最適化版メソッドを使用
                 }
                 self.updateAvailableLocations()
                 self.scheduleTimeBasedEvents()
             } else {
-                self.userId          = nil
+                self.userId = nil
                 self.isAuthenticated = false
-                self.isLoading       = false
-
+                self.isLoading = false
                 self.messages.removeAll()
                 self.dateHistory.removeAll()
                 self.intimacyMilestones.removeAll()
                 self.currentDateSession = nil
-                
-                // ✅ 修正：空のキャラクターに戻す（自動作成しない）
                 self.character = Character()
                 self.updateAvailableLocations()
                 self.signInAnonymously()
@@ -392,19 +347,13 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    func signInAnonymously() {
-        isLoading = true
-        Auth.auth().signInAnonymously { [weak self] _, error in
-            DispatchQueue.main.async { self?.isLoading = false }
-            if let e = error { print("匿名ログイン失敗: \(e)") }
+    private func setupAuthStateListener() {
+        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            self?.handleAuthStateChange(user: user)
         }
     }
 
-    func signOut() {
-        try? Auth.auth().signOut()
-    }
-
-    // MARK: - 拡張された親密度システム
+    // MARK: - 親密度システム
 
     /// 親密度を増加させる（レベルアップチェック付き）
     func increaseIntimacy(by amount: Int, reason: String = "") {
@@ -435,8 +384,8 @@ class RomanceAppViewModel: ObservableObject {
         // マイルストーン記録
         recordIntimacyMilestone(oldLevel: oldLevel, newLevel: character.intimacyLevel, reason: reason)
         
-        // データ保存
-        saveUserData()
+        // 🔧 最適化：親密度変更時に即座に保存
+        saveCharacterDataComplete()
         updateAvailableLocations()
     }
 
@@ -444,7 +393,6 @@ class RomanceAppViewModel: ObservableObject {
     private func handleIntimacyLevelUp(from oldStage: IntimacyStage, to newStage: IntimacyStage, gainedIntimacy: Int) {
         print("🎉 レベルアップ! \(oldStage.displayName) -> \(newStage.displayName)")
         
-        // レベルアップメッセージを送信
         let levelUpMessage = createLevelUpMessage(newStage: newStage)
         let message = Message(
             text: levelUpMessage,
@@ -558,32 +506,88 @@ class RomanceAppViewModel: ObservableObject {
         saveIntimacyMilestone(milestone)
     }
 
-    // MARK: - Date System Implementation (拡張版)
+    // MARK: - データ管理（最適化）
 
-    /// デートを開始する（親密度ボーナス対応）
+    /// 🔧 最適化：ユーザーデータ読み込み（親密度は除外）
+    private func loadUserData() {
+        guard let uid = userId else { return }
+        database.child("users").child(uid).observe(.value) { [weak self] snap in
+            guard let self = self, let dict = snap.value as? [String:Any] else { return }
+            
+            // 共通のユーザーデータのみ管理（親密度はcharactersテーブルで管理）
+            if let bday = dict["birthday"] as? TimeInterval {
+                self.character.birthday = Date(timeIntervalSince1970: bday)
+            }
+            if let ann = dict["anniversaryDate"] as? TimeInterval {
+                self.character.anniversaryDate = Date(timeIntervalSince1970: ann)
+            }
+        }
+    }
+
+    /// 🔧 最適化：ユーザーデータ保存（親密度は除外）
+    private func saveUserData() {
+        guard let uid = userId, hasValidCharacter else { return }
+        let data: [String:Any] = [
+            "birthday": character.birthday?.timeIntervalSince1970 as Any,
+            "anniversaryDate": character.anniversaryDate?.timeIntervalSince1970 as Any,
+            "lastActiveAt": Date().timeIntervalSince1970
+        ]
+        database.child("users").child(uid).updateChildValues(data)
+    }
+
+    // MARK: - 既存のキャラクターデータ管理メソッドを統合
+
+    private func loadCharacterData() {
+        loadCharacterDataComplete()
+    }
+
+    private func saveCharacterData() {
+        saveCharacterDataComplete()
+    }
+
+    // MARK: - その他のメソッド
+
+    func updateAvailableLocations() {
+        availableLocations = getAllAvailableLocations()
+    }
+
+    func getAllAvailableLocations() -> [DateLocation] {
+        guard hasValidCharacter else { return [] }
+        
+        var locations = DateLocation.availableLocations(for: character.intimacyLevel)
+        
+        if character.unlockedInfiniteMode {
+            for i in 0..<3 {
+                let infiniteDate = DateLocation.generateInfiniteDate(
+                    for: character.intimacyLevel,
+                    dateCount: infiniteDateCount + i
+                )
+                locations.append(infiniteDate)
+            }
+        }
+        
+        return locations
+    }
+
+    // MARK: - デートシステム
+
+    /// デートを開始する
     func startDate(at location: DateLocation) {
-        print("\n🏖️ ==================== 拡張デート開始処理 ====================")
+        print("\n🏖️ ==================== デート開始処理 ====================")
         print("📍 開始場所: \(location.name)")
         print("🏷️ タイプ: \(location.type.displayName)")
         print("💖 親密度ボーナス: +\(location.intimacyBonus)")
         
-        guard isAuthenticated else {
-            print("❌ 認証されていません")
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ 認証またはキャラクター無効")
             return
         }
         
-        guard hasValidCharacter else {
-            print("❌ 有効なキャラクターが設定されていません")
-            return
-        }
-        
-        // 既存のデートセッションがある場合は終了
         if let existingSession = currentDateSession {
             print("⚠️ 既存のデートセッションを終了: \(existingSession.location.name)")
             endDate()
         }
         
-        // 現在のデートセッションを作成
         let session = DateSession(
             location: location,
             startTime: Date(),
@@ -592,17 +596,13 @@ class RomanceAppViewModel: ObservableObject {
         
         DispatchQueue.main.async { [weak self] in
             self?.currentDateSession = session
-            print("✅ currentDateSession設定完了: \(session.location.name)")
         }
         
-        // 背景を変更
         if !location.backgroundImage.isEmpty {
             character.backgroundName = location.backgroundImage
             updateCharacterSettings()
-            print("🖼️ 背景変更: \(location.backgroundImage)")
         }
         
-        // デート開始メッセージを送信（親密度ボーナスなし）
         let startMessage = Message(
             text: location.getStartMessage(characterName: character.name),
             isFromUser: false,
@@ -613,27 +613,23 @@ class RomanceAppViewModel: ObservableObject {
         
         DispatchQueue.main.async { [weak self] in
             self?.messages.append(startMessage)
-            print("📝 デート開始メッセージ追加: \(startMessage.text)")
         }
         
         saveMessage(startMessage)
         
-        // デートカウント増加
         character.totalDateCount += 1
         
-        // 無限モードの場合、カウンターを増加
         if location.type == .infinite {
             infiniteDateCount += 1
         }
         
-        // デートセッションをFirebaseに保存
         saveDateSession(session)
         
         print("🏖️ デート開始: \(location.name)")
-        print("==================== 拡張デート開始処理完了 ====================\n")
+        print("==================== デート開始処理完了 ====================\n")
     }
     
-    /// デートを終了する（親密度ボーナス対応）
+    /// デートを終了する
     func endDate() {
         guard let session = currentDateSession, isAuthenticated else {
             print("❌ endDate: デートセッションなしまたは未認証")
@@ -645,14 +641,13 @@ class RomanceAppViewModel: ObservableObject {
             return
         }
         
-        print("\n🏁 ==================== 拡張デート終了処理 ====================")
+        print("\n🏁 ==================== デート終了処理 ====================")
         print("📍 終了場所: \(session.location.name)")
         print("💖 デートスポット親密度ボーナス: +\(session.location.intimacyBonus)")
         
         let endTime = Date()
         let duration = Int(endTime.timeIntervalSince(session.startTime))
         
-        // 完了したデートを作成
         let completedDate = CompletedDate(
             location: session.location,
             startTime: session.startTime,
@@ -662,10 +657,8 @@ class RomanceAppViewModel: ObservableObject {
             intimacyGained: session.intimacyGained + session.location.intimacyBonus
         )
         
-        // デート履歴に追加
         dateHistory.append(completedDate)
         
-        // デート終了メッセージを送信
         let endMessage = Message(
             text: session.location.getEndMessage(
                 characterName: character.name,
@@ -683,200 +676,47 @@ class RomanceAppViewModel: ObservableObject {
         
         saveMessage(endMessage)
         
-        // 親密度を増加（デート時間とスポットのボーナス）
         let timeBonus = calculateIntimacyBonus(duration: duration)
         let totalBonus = timeBonus + session.location.intimacyBonus
         
         increaseIntimacy(by: totalBonus, reason: "デート完了: \(session.location.name) (時間:\(timeBonus) + スポット:\(session.location.intimacyBonus))")
         
-        // 完了したデートをFirebaseに保存
         saveCompletedDate(completedDate)
-        
-        // デート完了イベントをチェック
         checkDateCompletionEvents(completedDate)
         
-        // Firebaseのセッションを非アクティブに
         if let userId = currentUserID {
             database.child("dateSessions").child(userId).child("isActive").setValue(false)
         }
         
-        // 現在のセッションをクリア
         DispatchQueue.main.async { [weak self] in
             self?.currentDateSession = nil
-            print("✅ currentDateSession をクリアしました")
         }
         
         print("🏁 デート終了: \(session.location.name), 総親密度ボーナス: +\(totalBonus)")
-        print("==================== 拡張デート終了処理完了 ====================\n")
+        print("==================== デート終了処理完了 ====================\n")
     }
 
-    /// 拡張された親密度ボーナス計算
     private func calculateIntimacyBonus(duration: Int) -> Int {
         switch duration {
-        case 0..<300: return 0       // 5分未満は0pt
-        case 300..<600: return 2     // 5-10分: 2pt
-        case 600..<1200: return 4    // 10-20分: 4pt
-        case 1200..<1800: return 6   // 20-30分: 6pt
-        case 1800..<3600: return 8   // 30分-1時間: 8pt
-        case 3600..<7200: return 12  // 1-2時間: 12pt
-        default: return 15           // 2時間以上: 15pt
+        case 0..<300: return 0
+        case 300..<600: return 2
+        case 600..<1200: return 4
+        case 1200..<1800: return 6
+        case 1800..<3600: return 8
+        case 3600..<7200: return 12
+        default: return 15
         }
     }
 
-    // MARK: - 無限モード対応
-
-    /// 無限モード用の新しいデートスポットを生成
-    func generateNewInfiniteDate() -> DateLocation? {
-        guard character.unlockedInfiniteMode else { return nil }
-        
-        return DateLocation.generateInfiniteDate(
-            for: character.intimacyLevel,
-            dateCount: infiniteDateCount
-        )
-    }
-
-    /// 利用可能な全デートスポットを取得（既存メソッド - 親密度制限あり）
-    func getAllAvailableLocations() -> [DateLocation] {
-        guard hasValidCharacter else { return [] }
-        
-        var locations = DateLocation.availableLocations(for: character.intimacyLevel)
-        
-        // 無限モードが解放されている場合、動的に生成されたデートを追加
-        if character.unlockedInfiniteMode {
-            // 無限デートを3個まで表示
-            for i in 0..<3 {
-                let infiniteDate = DateLocation.generateInfiniteDate(
-                    for: character.intimacyLevel,
-                    dateCount: infiniteDateCount + i
-                )
-                locations.append(infiniteDate)
-            }
-        }
-        
-        return locations
-    }
-
-    // MARK: - データ管理（拡張版）
-
-    private func loadUserData() {
-        guard let uid = userId else { return }
-        database.child("users").child(uid).observe(.value) { [weak self] snap in
-            guard let self = self, let dict = snap.value as? [String:Any] else { return }
-            
-            if let level = dict["intimacyLevel"] as? Int {
-                self.character.intimacyLevel = level
-            }
-            if let bday = dict["birthday"] as? TimeInterval {
-                self.character.birthday = Date(timeIntervalSince1970: bday)
-            }
-            if let ann = dict["anniversaryDate"] as? TimeInterval {
-                self.character.anniversaryDate = Date(timeIntervalSince1970: ann)
-            }
-            if let dateCount = dict["totalDateCount"] as? Int {
-                self.character.totalDateCount = dateCount
-            }
-            if let infiniteMode = dict["unlockedInfiniteMode"] as? Bool {
-                self.character.unlockedInfiniteMode = infiniteMode
-            }
-            if let infiniteCount = dict["infiniteDateCount"] as? Int {
-                self.infiniteDateCount = infiniteCount
-            }
-            
-            self.updateAvailableLocations()
-        }
-    }
-
-    private func saveUserData() {
-        guard let uid = userId, hasValidCharacter else { return }
-        let data: [String:Any] = [
-            "intimacyLevel": character.intimacyLevel,
-            "birthday": character.birthday?.timeIntervalSince1970 as Any,
-            "anniversaryDate": character.anniversaryDate?.timeIntervalSince1970 as Any,
-            "totalDateCount": character.totalDateCount,
-            "unlockedInfiniteMode": character.unlockedInfiniteMode,
-            "infiniteDateCount": infiniteDateCount,
-            "lastActiveAt": Date().timeIntervalSince1970
-        ]
-        database.child("users").child(uid).updateChildValues(data)
-    }
-
-    // MARK: - 親密度マイルストーン管理
-
-    private func loadIntimacyMilestones() {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        database.child("intimacyMilestones").child(userId).observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            var loadedMilestones: [IntimacyMilestone] = []
-            
-            if let milestonesData = snapshot.value as? [String: [String: Any]] {
-                for (_, milestoneData) in milestonesData {
-                    if let milestone = self.intimacyMilestoneFromFirebaseData(milestoneData) {
-                        loadedMilestones.append(milestone)
-                    }
-                }
-                
-                loadedMilestones.sort { $0.achievedAt > $1.achievedAt }
-                
-                DispatchQueue.main.async {
-                    self.intimacyMilestones = loadedMilestones
-                }
-            }
-        }
-    }
-
-    private func saveIntimacyMilestone(_ milestone: IntimacyMilestone) {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        let milestoneData: [String: Any] = [
-            "id": milestone.id.uuidString,
-            "achievedLevel": milestone.achievedLevel,
-            "previousLevel": milestone.previousLevel,
-            "achievedAt": milestone.achievedAt.timeIntervalSince1970,
-            "reason": milestone.reason
-        ]
-        
-        database.child("intimacyMilestones").child(userId).child(milestone.id.uuidString).setValue(milestoneData)
-    }
-
-    private func intimacyMilestoneFromFirebaseData(_ data: [String: Any]) -> IntimacyMilestone? {
-        guard let idString = data["id"] as? String,
-              let id = UUID(uuidString: idString),
-              let achievedLevel = data["achievedLevel"] as? Int,
-              let previousLevel = data["previousLevel"] as? Int,
-              let achievedAtInterval = data["achievedAt"] as? TimeInterval,
-              let reason = data["reason"] as? String else {
-            return nil
-        }
-        
-        return IntimacyMilestone(
-            id: id,
-            achievedLevel: achievedLevel,
-            previousLevel: previousLevel,
-            achievedAt: Date(timeIntervalSince1970: achievedAtInterval),
-            reason: reason
-        )
-    }
-
-    // MARK: - その他のメソッド
-
-    func updateAvailableLocations() {
-        availableLocations = getAllAvailableLocations()
-    }
+    // MARK: - メッセージシステム
 
     func sendMessage(_ text: String) {
-        print("\n💬 ==================== 拡張メッセージ送信開始 ====================")
+        print("\n💬 ==================== メッセージ送信開始 ====================")
         print("📤 送信メッセージ: \(text)")
         print("📊 現在の親密度: \(character.intimacyLevel) (\(character.intimacyTitle))")
         
-        guard isAuthenticated else {
-            print("❌ 認証されていません")
-            return
-        }
-        
-        guard hasValidCharacter else {
-            print("❌ 有効なキャラクターが設定されていません")
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ 認証またはキャラクター無効")
             return
         }
         
@@ -886,7 +726,6 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func processSendMessage(_ text: String, with dateSession: DateSession?) {
-        // ユーザーメッセージを作成（親密度ボーナスを0に設定）
         let userMessage = Message(
             text: text,
             isFromUser: true,
@@ -994,75 +833,39 @@ class RomanceAppViewModel: ObservableObject {
         return baseBonus + lengthBonus + min(emotionBonus, 3)
     }
 
-    // MARK: - Firebase関連メソッド（既存のものを継続使用）
+    // MARK: - Firebase関連メソッド
     
     private func setupInitialData() {
         guard let uid = userId else { return }
         
         database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
             if !(snap.exists()) {
-                self?.createInitialUserDataOnly() // ✅ 修正：キャラクター作成なし
+                self?.createInitialUserDataOnly()
             }
         }
         
-        // ✅ 修正：初期キャラクターデータは作成しない
         loadActiveDateSession()
     }
 
-    // ✅ 修正：ユーザーデータのみ作成（キャラクター作成なし）
     private func createInitialUserDataOnly() {
         guard let uid = userId else { return }
         let data: [String:Any] = [
             "id": uid,
-            "intimacyLevel": 0,
-            "totalDateCount": 0,
-            "unlockedInfiniteMode": false,
-            "infiniteDateCount": 0,
             "createdAt": Date().timeIntervalSince1970,
             "lastActiveAt": Date().timeIntervalSince1970
         ]
         database.child("users").child(uid).setValue(data)
     }
-
-    private func loadCharacterData() {
-        guard hasValidCharacter else { return }
-        
-        database.child("characters").child(character.id).observe(.value) { [weak self] snap in
-            guard let self = self, let dict = snap.value as? [String:Any] else { return }
-            var changed = false
-
-            if let v = dict["name"] as? String, v != character.name { character.name = v; changed = true }
-            if let v = dict["personality"] as? String, v != character.personality { character.personality = v; changed = true }
-            if let v = dict["speakingStyle"] as? String, v != character.speakingStyle { character.speakingStyle = v; changed = true }
-            if let v = dict["iconName"] as? String, v != character.iconName { character.iconName = v; changed = true }
-            if let v = dict["iconURL"] as? String, v != character.iconURL { character.iconURL = v; changed = true }
-            if let v = dict["backgroundName"] as? String, v != character.backgroundName { character.backgroundName = v; changed = true }
-            if let v = dict["backgroundURL"] as? String, v != character.backgroundURL { character.backgroundURL = v; changed = true }
-            if let v = dict["userNickname"] as? String, v != character.userNickname { character.userNickname = v; changed = true }
-            if let v = dict["useNickname"] as? Bool, v != character.useNickname { character.useNickname = v; changed = true }
-
-            if changed { self.objectWillChange.send() }
-        }
-    }
-
-    private func saveCharacterData() {
-        guard hasValidCharacter else { return }
-        
-        let data: [String:Any] = [
-            "name": character.name,
-            "personality": character.personality,
-            "speakingStyle": character.speakingStyle,
-            "iconName": character.iconName,
-            "iconURL": character.iconURL as Any,
-            "backgroundName": character.backgroundName,
-            "backgroundURL": character.backgroundURL as Any,
-            "userNickname": character.userNickname,
-            "useNickname": character.useNickname,
-            "updatedAt": Date().timeIntervalSince1970
-        ]
-        database.child("characters").child(character.id).updateChildValues(data)
-    }
     
+    func updateBackgroundURL(_ url: String?) {
+        guard hasValidCharacter else { return }
+        character.backgroundURL = url
+        saveCharacterDataComplete()
+        objectWillChange.send()
+    }
+
+    // MARK: - メッセージ管理
+
     private func loadMessages() {
         guard let conversationId = getConversationId(), hasValidCharacter else { return }
         
@@ -1139,7 +942,7 @@ class RomanceAppViewModel: ObservableObject {
         return "\(userId)_\(character.id)"
     }
 
-    // MARK: - デートセッション管理（継続使用）
+    // MARK: - デートセッション管理
     
     private func saveDateSession(_ session: DateSession) {
         guard let userId = currentUserID, hasValidCharacter else { return }
@@ -1247,7 +1050,7 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    // MARK: - デート履歴管理（継続使用）
+    // MARK: - デート履歴管理
     
     func loadDateHistory() {
         guard let userId = currentUserID, hasValidCharacter else { return }
@@ -1319,6 +1122,65 @@ class RomanceAppViewModel: ObservableObject {
         )
     }
 
+    // MARK: - 親密度マイルストーン管理
+
+    private func loadIntimacyMilestones() {
+        guard let userId = currentUserID, hasValidCharacter else { return }
+        
+        database.child("intimacyMilestones").child(userId).observe(.value) { [weak self] snapshot in
+            guard let self = self else { return }
+            
+            var loadedMilestones: [IntimacyMilestone] = []
+            
+            if let milestonesData = snapshot.value as? [String: [String: Any]] {
+                for (_, milestoneData) in milestonesData {
+                    if let milestone = self.intimacyMilestoneFromFirebaseData(milestoneData) {
+                        loadedMilestones.append(milestone)
+                    }
+                }
+                
+                loadedMilestones.sort { $0.achievedAt > $1.achievedAt }
+                
+                DispatchQueue.main.async {
+                    self.intimacyMilestones = loadedMilestones
+                }
+            }
+        }
+    }
+
+    private func saveIntimacyMilestone(_ milestone: IntimacyMilestone) {
+        guard let userId = currentUserID, hasValidCharacter else { return }
+        
+        let milestoneData: [String: Any] = [
+            "id": milestone.id.uuidString,
+            "achievedLevel": milestone.achievedLevel,
+            "previousLevel": milestone.previousLevel,
+            "achievedAt": milestone.achievedAt.timeIntervalSince1970,
+            "reason": milestone.reason
+        ]
+        
+        database.child("intimacyMilestones").child(userId).child(milestone.id.uuidString).setValue(milestoneData)
+    }
+
+    private func intimacyMilestoneFromFirebaseData(_ data: [String: Any]) -> IntimacyMilestone? {
+        guard let idString = data["id"] as? String,
+              let id = UUID(uuidString: idString),
+              let achievedLevel = data["achievedLevel"] as? Int,
+              let previousLevel = data["previousLevel"] as? Int,
+              let achievedAtInterval = data["achievedAt"] as? TimeInterval,
+              let reason = data["reason"] as? String else {
+            return nil
+        }
+        
+        return IntimacyMilestone(
+            id: id,
+            achievedLevel: achievedLevel,
+            previousLevel: previousLevel,
+            achievedAt: Date(timeIntervalSince1970: achievedAtInterval),
+            reason: reason
+        )
+    }
+
     // MARK: - イベント管理
 
     func checkDateCompletionEvents(_ completedDate: CompletedDate) {
@@ -1387,31 +1249,6 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    // MARK: - その他のメソッド
-
-    func updateCharacterSettings() {
-        guard hasValidCharacter else { return }
-        saveCharacterData()
-        saveUserData()
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.objectWillChange.send()
-        }
-    }
-
-    func forceRefreshCharacterIcon() {
-        DispatchQueue.main.async { [weak self] in
-            self?.objectWillChange.send()
-        }
-    }
-    
-    func updateBackgroundURL(_ url: String?) {
-        guard hasValidCharacter else { return }
-        character.backgroundURL = url
-        saveCharacterData()
-        objectWillChange.send()
-    }
-    
     private func scheduleTimeBasedEvents() {
         Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
             self.checkForTimeBasedEvents()
@@ -1451,115 +1288,126 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    // MARK: - 統計とデバッグ
+    // MARK: - 認証メソッド
 
-    func getDateStatistics() -> DateStatistics {
-        return DateStatistics(completedDates: dateHistory)
+    func signInAnonymously() {
+        isLoading = true
+        Auth.auth().signInAnonymously { [weak self] _, error in
+            DispatchQueue.main.async { self?.isLoading = false }
+            if let e = error { print("匿名ログイン失敗: \(e)") }
+        }
+    }
+
+    func signOut() {
+        try? Auth.auth().signOut()
+    }
+
+    // MARK: - デバッグ・管理メソッド
+
+    /// メッセージ送信時のデートセッション更新
+    func updateDateSessionOnMessage(_ message: Message) {
+        guard var session = currentDateSession else { return }
+        
+        session.messagesExchanged += 1
+        
+        if !message.isFromUser {
+            session.intimacyGained += 1
+        }
+        
+        currentDateSession = session
+        saveDateSession(session)
     }
     
-    func getAllDateLocations() -> [DateLocation] {
-        guard hasValidCharacter else { return [] }
+    /// データ削除（テスト用）
+    func clearAllData() {
+        guard let userId = self.userId,
+              let conversationId = getConversationId() else { return }
         
-        var locations = DateLocation.availableDateLocations
+        // ユーザーデータ削除
+        database.child("users").child(userId).removeValue()
         
-        // 無限モードが解放されている場合、動的に生成されたデートを追加
-        if character.unlockedInfiniteMode {
-            // 無限デートを3個まで表示
-            for i in 0..<3 {
-                let infiniteDate = DateLocation.generateInfiniteDate(
-                    for: character.intimacyLevel,
-                    dateCount: infiniteDateCount + i
-                )
-                locations.append(infiniteDate)
+        // キャラクターデータ削除
+        if character.isValidCharacter {
+            database.child("characters").child(character.id).removeValue()
+        }
+        
+        // メッセージ削除
+        database.child("messages")
+            .queryOrdered(byChild: "conversationId")
+            .queryEqual(toValue: conversationId)
+            .observeSingleEvent(of: .value) { snapshot in
+                if let messagesData = snapshot.value as? [String: Any] {
+                    for (messageId, _) in messagesData {
+                        self.database.child("messages").child(messageId).removeValue()
+                    }
+                }
             }
-        }
         
-        return locations
-    }
-    
-    /// 解放済みデートスポットの数を取得
-    func getUnlockedLocationCount() -> Int {
-        guard hasValidCharacter else { return 0 }
-        return DateLocation.availableLocations(for: character.intimacyLevel).count +
-               (character.unlockedInfiniteMode ? 3 : 0)
-    }
-    
-    /// ロック済みデートスポットの数を取得
-    func getLockedLocationCount() -> Int {
-        guard hasValidCharacter else { return DateLocation.availableDateLocations.count }
+        // デート履歴削除
+        database.child("dateHistory").child(userId).removeValue()
+        database.child("dateSessions").child(userId).removeValue()
+        database.child("intimacyMilestones").child(userId).removeValue()
         
-        let totalCount = DateLocation.availableDateLocations.count +
-                        (character.unlockedInfiniteMode ? 3 : 0)
-        return totalCount - getUnlockedLocationCount()
-    }
-    
-    /// 特定の親密度レベルで解放されるデートスポットを取得
-    func getLocationsUnlockedAtLevel(_ intimacyLevel: Int) -> [DateLocation] {
-        return DateLocation.availableDateLocations.filter {
-            $0.requiredIntimacy == intimacyLevel
+        // UserDefaultsからキャラクターIDを削除
+        UserDefaults.standard.removeObject(forKey: "characterId")
+        UserDefaults.standard.synchronize()
+        
+        DispatchQueue.main.async {
+            self.messages.removeAll()
+            self.dateHistory.removeAll()
+            self.intimacyMilestones.removeAll()
+            self.currentDateSession = nil
+            self.character = Character()
+            self.infiniteDateCount = 0
+            self.updateAvailableLocations()
         }
     }
     
-    /// 次に解放されるデートスポットを取得（モチベーション向上用）
-    func getNextUnlockableLocation() -> DateLocation? {
-        guard hasValidCharacter else { return DateLocation.availableDateLocations.first }
+    /// 親密度リセット
+    func resetIntimacyLevel() {
+        guard isAuthenticated && hasValidCharacter else { return }
         
-        return DateLocation.availableDateLocations
-            .filter { $0.requiredIntimacy > character.intimacyLevel }
-            .min { $0.requiredIntimacy < $1.requiredIntimacy }
-    }
-    
-    /// デートスポットの解放状況統計を取得
-    func getLocationUnlockStats() -> LocationUnlockStats {
-        guard hasValidCharacter else {
-            return LocationUnlockStats(
-                totalLocations: DateLocation.availableDateLocations.count,
-                unlockedLocations: 0,
-                lockedLocations: DateLocation.availableDateLocations.count,
-                unlockedByType: [:],
-                lockedByType: [:],
-                unlockProgress: 0.0
-            )
-        }
+        character.intimacyLevel = 0
+        character.totalDateCount = 0
+        character.unlockedInfiniteMode = false
+        infiniteDateCount = 0
+        updateAvailableLocations()
+        saveCharacterDataComplete()
         
-        let allLocations = DateLocation.availableDateLocations
-        let unlockedCount = getUnlockedLocationCount()
-        let totalCount = allLocations.count + (character.unlockedInfiniteMode ? 999 : 0)
-        
-        let unlockedByType = Dictionary(grouping: allLocations.filter {
-            $0.requiredIntimacy <= character.intimacyLevel
-        }, by: { $0.type }).mapValues { $0.count }
-        
-        let lockedByType = Dictionary(grouping: allLocations.filter {
-            $0.requiredIntimacy > character.intimacyLevel
-        }, by: { $0.type }).mapValues { $0.count }
-        
-        return LocationUnlockStats(
-            totalLocations: totalCount,
-            unlockedLocations: unlockedCount,
-            lockedLocations: totalCount - unlockedCount,
-            unlockedByType: unlockedByType,
-            lockedByType: lockedByType,
-            unlockProgress: Double(unlockedCount) / Double(totalCount)
+        let resetMessage = Message(
+            text: "親密度がリセットされました。また一から関係を築いていきましょう！",
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil
         )
+        saveMessage(resetMessage)
     }
     
-    var mostPopularDateType: DateType? {
-        let typeCount = Dictionary(grouping: dateHistory, by: { $0.location.type })
-            .mapValues { $0.count }
-        return typeCount.max(by: { $0.value < $1.value })?.key
+    /// 統計メソッド
+    func getMessageCount() -> Int {
+        return messages.count
     }
     
-    var totalDateTime: Int {
-        return dateHistory.reduce(0) { $0 + $1.duration }
+    func getUserMessageCount() -> Int {
+        return messages.filter { $0.isFromUser }.count
     }
     
-    var averageDateDuration: Int {
-        guard !dateHistory.isEmpty else { return 0 }
-        return totalDateTime / dateHistory.count
+    func getAIMessageCount() -> Int {
+        return messages.filter { !$0.isFromUser }.count
+    }
+    
+    func getTotalConversationDays() -> Int {
+        guard let firstMessage = messages.first else { return 0 }
+        let daysBetween = Calendar.current.dateComponents([.day], from: firstMessage.timestamp, to: Date()).day ?? 0
+        return max(daysBetween, 1)
+    }
+    
+    func getAverageMessagesPerDay() -> Double {
+        let totalDays = getTotalConversationDays()
+        return totalDays > 0 ? Double(messages.count) / Double(totalDays) : 0
     }
 
-    // MARK: - その他の公開プロパティ
+    // MARK: - 公開プロパティ
 
     var currentUserID: String? {
         return userId

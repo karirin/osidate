@@ -12,55 +12,69 @@ struct CharacterIconView: View {
     let size: CGFloat
 
     @State private var isFloating = false
+    @State private var iconImage: UIImage? = nil
+    @State private var isLoading = false
     
     var body: some View {
-        ZStack{
-            if let urlString = character.iconURL,
-               let url = URL(string: urlString),
-               !urlString.isEmpty {
-                
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: size, height: size)
-                            .clipShape(Circle())
-                            .offset(y: isFloating ? -8 : 8)
-                            .animation(
-                                .easeInOut(duration: 2.5)
-                                    .repeatForever(autoreverses: true),
-                                value: isFloating
-                            )
-                        
-                        
-                        .onAppear {                              // ← 変更：既存 onAppear を置き換え
-                            print("character.iconURL : \(character.iconURL ?? "nil")")
-                            withAnimation(.easeInOut(duration: 2.5)        // 振幅・速度はお好みで
-                                            .repeatForever(autoreverses: true)) {
-                                isFloating = true
-                            }
+        ZStack {
+            if let iconImage = iconImage {
+                // カスタムアイコン画像を表示
+                Image(uiImage: iconImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: size, height: size)
+                    .clipShape(Circle())
+                    .offset(y: isFloating ? -8 : 8)
+                    .animation(
+                        .easeInOut(duration: 2.5)
+                            .repeatForever(autoreverses: true),
+                        value: isFloating
+                    )
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 2.5)
+                                        .repeatForever(autoreverses: true)) {
+                            isFloating = true
                         }
-                    case .failure(_):
-                        defaultIcon   // 読み込み失敗時
-                        
-                    case .empty:
-                        Circle()      // 読み込み中
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: size, height: size)
-                            .overlay(ProgressView().scaleEffect(0.8))
-                        
-                    @unknown default:
-                        defaultIcon
                     }
-                }
-                .id(urlString)
-                
+            } else if isLoading {
+                // ローディング中
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: size, height: size)
+                    .overlay(
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    )
             } else {
-                defaultIcon           // iconURL が無いとき
+                // デフォルトアイコン
+                defaultIcon
+                    .offset(y: isFloating ? -8 : 8)
+                    .animation(
+                        .easeInOut(duration: 2.5)
+                            .repeatForever(autoreverses: true),
+                        value: isFloating
+                    )
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 2.5)
+                                        .repeatForever(autoreverses: true)) {
+                            isFloating = true
+                        }
+                    }
             }
         }
+        .onAppear {
+            loadIconIfNeeded()
+        }
+        .onChange(of: character.iconURL) { newIconURL in
+            // アイコンURLが変更された時に再読み込み
+            loadIconIfNeeded()
+        }
+        .onChange(of: character.id) { newCharacterId in
+            // キャラクターIDが変更された時に再読み込み
+            iconImage = nil
+            loadIconIfNeeded()
+        }
+        .id("\(character.id)_\(character.iconURL ?? "default")") // 一意のIDを生成
     }
     
     private var defaultIcon: some View {
@@ -74,14 +88,47 @@ struct CharacterIconView: View {
             )
     }
     
-    private func loadImageIfNeeded() {
+    private func loadIconIfNeeded() {
+        // アイコンURLがない、または空の場合はデフォルトアイコンを使用
         guard let iconURL = character.iconURL,
-              !iconURL.isEmpty else {
-            print("CharacterIconView: アイコンURLが空 - デフォルトアイコンを表示")
+              !iconURL.isEmpty,
+              let url = URL(string: iconURL) else {
+            print("CharacterIconView: アイコンURLが空またはキャラクターが無効 - デフォルトアイコンを表示")
+            iconImage = nil
+            return
+        }
+        
+        // 既に同じURLの画像を読み込み済みの場合はスキップ
+        if iconImage != nil && character.iconURL == iconURL {
             return
         }
         
         print("CharacterIconView: アイコン画像を読み込み中 - \(iconURL)")
+        isLoading = true
+        
+        // 非同期でアイコンを読み込み
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                
+                await MainActor.run {
+                    if let loadedImage = UIImage(data: data) {
+                        self.iconImage = loadedImage
+                        print("CharacterIconView: アイコン読み込み成功")
+                    } else {
+                        print("CharacterIconView: アイコンデータの変換に失敗")
+                        self.iconImage = nil
+                    }
+                    self.isLoading = false
+                }
+            } catch {
+                print("CharacterIconView: アイコン読み込みエラー - \(error.localizedDescription)")
+                await MainActor.run {
+                    self.iconImage = nil
+                    self.isLoading = false
+                }
+            }
+        }
     }
 }
 

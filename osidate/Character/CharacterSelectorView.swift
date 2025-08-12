@@ -100,9 +100,16 @@ struct CharacterSelectorView: View {
                         character: character,
                         isSelected: character.id == selectedCharacterId,
                         onSelect: {
+                            print("🔄 キャラクター選択: \(character.name) (ID: \(character.id))")
+                            
+                            // 🔧 修正：適切な順序で処理
                             selectedCharacterId = character.id
                             characterRegistry.setActiveCharacter(character.id)
-                            dismiss()
+                            
+                            // 少し遅延してからdismiss（状態更新を確実にするため）
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                dismiss()
+                            }
                         },
                         onDelete: {
                             characterToDelete = character
@@ -123,6 +130,7 @@ struct CharacterCardView: View {
     let onDelete: () -> Void
     
     @State private var isPressed = false
+    @State private var iconImage: UIImage? = nil
     
     var body: some View {
         Button(action: onSelect) {
@@ -133,14 +141,26 @@ struct CharacterCardView: View {
                         .fill(isSelected ? .blue.opacity(0.2) : .gray.opacity(0.1))
                         .frame(width: 80, height: 80)
                     
-                    if let iconURL = character.iconURL,
-                       let url = URL(string: iconURL) {
+                    // 🔧 修正：アイコン表示の改善
+                    if let iconImage = iconImage {
+                        Image(uiImage: iconImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 70, height: 70)
+                            .clipShape(Circle())
+                    } else if let iconURL = character.iconURL,
+                              !iconURL.isEmpty,
+                              let url = URL(string: iconURL) {
                         AsyncImage(url: url) { image in
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
                                 .frame(width: 70, height: 70)
                                 .clipShape(Circle())
+                                .onAppear {
+                                    // 読み込み成功時にローカル状態も更新
+                                    loadImageToState(from: url)
+                                }
                         } placeholder: {
                             Circle()
                                 .fill(.gray.opacity(0.3))
@@ -215,7 +235,6 @@ struct CharacterCardView: View {
         }
         .scaleEffect(isPressed ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.1), value: isPressed)
-        // 🔧 修正: onLongPressGesture の正しい構文
         .onTapGesture {
             // タップ時のフィードバック
             withAnimation(.easeInOut(duration: 0.1)) {
@@ -227,6 +246,29 @@ struct CharacterCardView: View {
                 }
             }
             onSelect()
+        }
+        .onAppear {
+            // アイコン画像をローカル状態に読み込み
+            if let iconURL = character.iconURL,
+               !iconURL.isEmpty,
+               let url = URL(string: iconURL) {
+                loadImageToState(from: url)
+            }
+        }
+        .id(character.id) // キャラクターIDでViewを一意化
+    }
+    
+    // 🔧 修正：画像をローカル状態に読み込む
+    private func loadImageToState(from url: URL) {
+        Task {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                await MainActor.run {
+                    self.iconImage = UIImage(data: data)
+                }
+            } catch {
+                print("CharacterCardView: アイコン読み込みエラー - \(error.localizedDescription)")
+            }
         }
     }
 }
@@ -329,7 +371,9 @@ struct AddCharacterView: View {
                 speakingStyle: speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines)
             )
             
+            // 🔧 修正：新しく作成したキャラクターを即座にアクティブに
             characterRegistry.setActiveCharacter(newCharacter.id)
+            
             isCreating = false
             dismiss()
         }
