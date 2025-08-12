@@ -851,7 +851,16 @@ struct CharacterCardView: View {
     }
 }
 
-// MARK: - Add Character View
+//
+//  Fixed AddCharacterView.swift
+//  osidate
+//
+//  アイコンアップロード機能付きの推し追加画面（weak selfエラー修正版）
+//
+
+import SwiftUI
+import SwiftyCrop
+
 struct AddCharacterView: View {
     @ObservedObject var characterRegistry: CharacterRegistry
     @Environment(\.dismiss) private var dismiss
@@ -866,13 +875,34 @@ struct AddCharacterView: View {
     @State private var animationOpacity: Double = 0
     @FocusState private var isInputFocused: Bool
     
-    private let steps = ["基本情報", "性格設定", "話し方設定"]
+    // 🌟 アイコン画像関連の状態
+    @StateObject private var imageManager = ImageStorageManager()
+    @State private var showingImagePicker = false
+    @State private var selectedImage: UIImage?
+    @State private var characterIcon: UIImage?
+    @State private var selectedImageForCropping: UIImage?
+    @State private var croppingItem: CroppingItem?
+    @State private var iconUploadURL: String?
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    
+    // アイコンアニメーション用の状態
+    @State private var iconScale: CGFloat = 1.0
+    @State private var deleteButtonScale: CGFloat = 1.0
+    
+    private struct CroppingItem: Identifiable {
+        let id = UUID()
+        let image: UIImage
+    }
+    
+    private let steps = ["基本情報", "アイコン設定", "性格設定", "話し方設定"]
     
     private var isCurrentStepValid: Bool {
         switch currentStep {
         case 0: return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case 1: return !personality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        case 2: return !speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case 1: return true // アイコンは任意なので常にOK
+        case 2: return !personality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case 3: return !speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         default: return false
         }
     }
@@ -894,6 +924,18 @@ struct AddCharacterView: View {
     
     private var backgroundColor: Color {
         colorScheme == .dark ? Color(.systemBackground) : Color(.systemGray6)
+    }
+    
+    // SwiftyCrop設定
+    private var cropConfig: SwiftyCropConfiguration {
+        var cfg = SwiftyCropConfiguration(
+            texts: .init(
+                cancelButton: "キャンセル",
+                interactionInstructions: "",
+                saveButton: "適用"
+            )
+        )
+        return cfg
     }
     
     var body: some View {
@@ -933,6 +975,41 @@ struct AddCharacterView: View {
             }
             .navigationTitle("")
             .navigationBarHidden(true)
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePickerView { pickedImage in
+                    self.selectedImageForCropping = pickedImage
+                }
+            }
+            .onChange(of: selectedImageForCropping) { img in
+                guard let img else { return }
+                guard croppingItem == nil else { return }
+                croppingItem = CroppingItem(image: img)
+            }
+            .fullScreenCover(item: $croppingItem) { item in
+                NavigationView {
+                    SwiftyCropView(
+                        imageToCrop: item.image,
+                        maskShape: .circle,
+                        configuration: cropConfig
+                    ) { cropped in
+                        if let cropped {
+                            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                                selectedImage = cropped
+                                characterIcon = cropped
+                            }
+                            uploadIconImage()
+                        }
+                        croppingItem = nil
+                    }
+                    .drawingGroup()
+                }
+                .navigationBarHidden(true)
+            }
+            .alert("通知", isPresented: $showingAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(alertMessage)
+            }
             .onAppear {
                 animateAppearance()
             }
@@ -1037,8 +1114,10 @@ struct AddCharacterView: View {
                 case 0:
                     nameStepView
                 case 1:
-                    personalityStepView
+                    iconStepView // 🌟 新しいアイコン設定ステップ
                 case 2:
+                    personalityStepView
+                case 3:
                     speakingStyleStepView
                 default:
                     EmptyView()
@@ -1119,8 +1198,8 @@ struct AddCharacterView: View {
         }
     }
     
-    // MARK: - ステップ2: 性格設定
-    private var personalityStepView: some View {
+    // MARK: - 🌟 ステップ2: アイコン設定
+    private var iconStepView: some View {
         VStack(spacing: 24) {
             // アイコン
             ZStack {
@@ -1128,9 +1207,236 @@ struct AddCharacterView: View {
                     .fill(accentColor.opacity(0.1))
                     .frame(width: 80, height: 80)
                 
-                Image(systemName: "heart.text.square.fill")
+                Image(systemName: "camera.fill")
                     .font(.system(size: 40))
                     .foregroundColor(accentColor)
+            }
+            
+            VStack(spacing: 16) {
+                Text("\(name.isEmpty ? "推し" : name)のアイコンを設定しましょう")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .multilineTextAlignment(.center)
+                
+                Text("お気に入りの写真を設定できます。\n後からでも変更可能です。")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+            
+            // メインアイコンセクション
+            VStack(spacing: 20) {
+                ZStack {
+                    // メインのアイコンボタン
+                    Button(action: {
+                        generateHapticFeedback()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                            iconScale = 0.95
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                iconScale = 1.0
+                            }
+                        }
+                        showingImagePicker = true
+                    }) {
+                        ZStack {
+                            if let icon = characterIcon {
+                                Image(uiImage: icon)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 180, height: 180)
+                                    .clipShape(Circle())
+                                    .overlay(
+                                        Circle()
+                                            .stroke(
+                                                LinearGradient(
+                                                    colors: [primaryColor, accentColor],
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                ),
+                                                lineWidth: 4
+                                            )
+                                    )
+                                    .shadow(color: primaryColor.opacity(0.3), radius: 15, x: 0, y: 8)
+                            } else {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color.gray.opacity(0.1), Color.gray.opacity(0.2)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 180, height: 180)
+                                    .overlay(
+                                        VStack(spacing: 12) {
+                                            Image(systemName: "camera.fill")
+                                                .font(.system(size: 50, weight: .light))
+                                                .foregroundColor(primaryColor.opacity(0.7))
+                                            
+                                            VStack(spacing: 4) {
+                                                Text("画像を選択")
+                                                    .font(.headline)
+                                                    .fontWeight(.medium)
+                                                Text("タップしてください")
+                                                    .font(.caption)
+                                            }
+                                            .foregroundColor(.secondary)
+                                        }
+                                    )
+                                    .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                            }
+                            
+                            // アップロード中のオーバーレイ
+                            if imageManager.isUploading {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 180, height: 180)
+                                    .overlay(
+                                        VStack(spacing: 15) {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: primaryColor))
+                                                .scaleEffect(1.5)
+                                            
+                                            VStack(spacing: 2) {
+                                                Text("アップロード中")
+                                                    .font(.headline)
+                                                    .fontWeight(.medium)
+                                                Text("\(Int(imageManager.uploadProgress * 100))%")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .foregroundColor(primaryColor)
+                                        }
+                                    )
+                            }
+                        }
+                    }
+                    .scaleEffect(iconScale)
+                    .disabled(imageManager.isUploading)
+                    
+                    // 削除ボタン（アイコンがある場合のみ表示）
+                    if characterIcon != nil && !imageManager.isUploading {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                Button(action: {
+                                    generateHapticFeedback()
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                        deleteButtonScale = 0.8
+                                    }
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                                            deleteButtonScale = 1.0
+                                        }
+                                    }
+                                    deleteCurrentIcon()
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(.ultraThinMaterial)
+                                            .frame(width: 36, height: 36)
+                                            .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
+                                        
+                                        Image(systemName: "xmark")
+                                            .font(.system(size: 16, weight: .bold))
+                                            .foregroundColor(.red)
+                                    }
+                                }
+                                .scaleEffect(deleteButtonScale)
+                                .offset(x: 15, y: -15)
+                            }
+                            Spacer()
+                        }
+                        .frame(width: 180, height: 180)
+                    }
+                }
+                
+                // 状態表示テキスト
+                Group {
+                    if imageManager.isUploading {
+                        HStack(spacing: 8) {
+                            Image(systemName: "icloud.and.arrow.up")
+                                .foregroundColor(primaryColor)
+                            Text("画像をアップロード中...")
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(primaryColor)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(primaryColor.opacity(0.1))
+                        .cornerRadius(20)
+                        
+                    } else if selectedImage != nil {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("画像が設定されました")
+                        }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.green)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(.green.opacity(0.1))
+                        .cornerRadius(20)
+                        
+                    } else if characterIcon != nil {
+                        Text("タップして画像を変更")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("画像を選択すると、より愛着が湧きますよ✨")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: imageManager.isUploading)
+                .animation(.easeInOut(duration: 0.3), value: selectedImage)
+            }
+            
+            // 使用方法カード
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Image(systemName: "info.circle.fill")
+                        .foregroundColor(accentColor)
+                    Text("使用方法")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    instructionRow(icon: "hand.tap.fill", text: "円形のアイコンエリアをタップして画像を選択")
+                    instructionRow(icon: "crop", text: "選択後、画像をクロップして調整できます")
+                    instructionRow(icon: "icloud.and.arrow.up.fill", text: "クロップ完了後、自動的にアップロードされます")
+                    instructionRow(icon: "xmark.circle.fill", text: "右上のバツマークでアイコンを削除できます")
+                    instructionRow(icon: "square.fill", text: "正方形の画像が推奨されます")
+                }
+            }
+            .padding(20)
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+        }
+    }
+    
+    // MARK: - ステップ3: 性格設定（元のステップ2）
+    private var personalityStepView: some View {
+        VStack(spacing: 24) {
+            // アイコン
+            ZStack {
+                Circle()
+                    .fill(Color.green.opacity(0.1))
+                    .frame(width: 80, height: 80)
+                
+                Image(systemName: "heart.text.square.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.green)
             }
             
             VStack(spacing: 16) {
@@ -1201,18 +1507,18 @@ struct AddCharacterView: View {
         }
     }
     
-    // MARK: - ステップ3: 話し方設定
+    // MARK: - ステップ4: 話し方設定（元のステップ3）
     private var speakingStyleStepView: some View {
         VStack(spacing: 24) {
             // アイコン
             ZStack {
                 Circle()
-                    .fill(Color.green.opacity(0.1))
+                    .fill(Color.orange.opacity(0.1))
                     .frame(width: 80, height: 80)
                 
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .font(.system(size: 40))
-                    .foregroundColor(.green)
+                    .foregroundColor(.orange)
             }
             
             VStack(spacing: 16) {
@@ -1314,6 +1620,22 @@ struct AddCharacterView: View {
         .cornerRadius(12)
     }
     
+    // MARK: - 説明行ヘルパー
+    @ViewBuilder
+    private func instructionRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(accentColor)
+                .frame(width: 20)
+            
+            Text(text)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.leading)
+        }
+    }
+    
     // MARK: - ナビゲーションボタン
     private var navigationButtonsView: some View {
         HStack(spacing: 16) {
@@ -1396,9 +1718,17 @@ struct AddCharacterView: View {
                     .scaleEffect(animationOpacity)
                     .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: animationOpacity)
                 
-                Image(systemName: "person.2.badge.plus")
-                    .font(.system(size: 48, weight: .light))
-                    .foregroundColor(primaryColor)
+                if let icon = characterIcon {
+                    Image(uiImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 80, height: 80)
+                        .clipShape(Circle())
+                } else {
+                    Image(systemName: "person.2.badge.plus")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundColor(primaryColor)
+                }
             }
             
             VStack(spacing: 16) {
@@ -1412,10 +1742,22 @@ struct AddCharacterView: View {
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                 
-                // プログレスバー
-                ProgressView()
-                    .scaleEffect(1.2)
-                    .tint(primaryColor)
+                if imageManager.isUploading {
+                    VStack(spacing: 8) {
+                        Text("アイコンをアップロード中...")
+                            .font(.caption)
+                            .foregroundColor(primaryColor)
+                        
+                        ProgressView(value: imageManager.uploadProgress)
+                            .progressViewStyle(LinearProgressViewStyle(tint: primaryColor))
+                            .frame(width: 200)
+                    }
+                } else {
+                    // プログレスバー
+                    ProgressView()
+                        .scaleEffect(1.2)
+                        .tint(primaryColor)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1441,12 +1783,43 @@ struct AddCharacterView: View {
         
         isCreating = true
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        // アイコンアップロードが完了していない場合は待機
+        if imageManager.isUploading {
+            // アップロード完了を待ってからキャラクター作成
+            waitForUploadCompletionAndCreateCharacter()
+        } else {
+            // 即座にキャラクター作成
+            performCharacterCreation()
+        }
+    }
+    
+    private func waitForUploadCompletionAndCreateCharacter() {
+        // アップロード状態を監視
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { timer in
+            if !imageManager.isUploading {
+                timer.invalidate()
+                performCharacterCreation()
+            }
+        }
+    }
+    
+    private func performCharacterCreation() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             let newCharacter = characterRegistry.createNewCharacter(
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                 personality: personality.trimmingCharacters(in: .whitespacesAndNewlines),
                 speakingStyle: speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines)
             )
+            
+            // アイコンURLが設定されている場合は適用
+            if let iconURL = iconUploadURL {
+                newCharacter.iconURL = iconURL
+                // 🔧 修正: CharacterRegistryにupdateCharacterメソッドが存在するかを確認
+                // 存在しない場合は別の方法で更新
+                if let index = characterRegistry.characters.firstIndex(where: { $0.id == newCharacter.id }) {
+                    characterRegistry.characters[index].iconURL = iconURL
+                }
+            }
             
             characterRegistry.setActiveCharacter(newCharacter.id)
             
@@ -1462,6 +1835,146 @@ struct AddCharacterView: View {
         withAnimation(.spring(response: 0.8, dampingFraction: 0.8)) {
             animationOffset = 0
             animationOpacity = 1
+        }
+    }
+    
+    // MARK: - 🌟 アイコンアップロード関連メソッド（修正版）
+    
+    private func uploadIconImage() {
+        guard let image = selectedImage else {
+            DispatchQueue.main.async {
+                alertMessage = "画像のアップロードに失敗しました"
+                showingAlert = true
+            }
+            return
+        }
+        
+        // 仮のユーザーIDを生成（実際のアプリではFirebase認証のUIDを使用）
+        let tempUserId = UUID().uuidString
+        let imagePath = "character_icons/\(tempUserId)_\(UUID().uuidString)_\(Date().timeIntervalSince1970).jpg"
+        
+        // 🔧 修正: weak selfを削除し、直接Binding経由で状態を更新
+        imageManager.uploadImage(image, path: imagePath) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let downloadURL):
+                    iconUploadURL = downloadURL
+                    characterIcon = image
+                    selectedImage = nil
+                    
+                    alertMessage = "アイコンが正常にアップロードされました"
+                    showingAlert = true
+                    
+                case .failure(let error):
+                    alertMessage = "アップロードエラー: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+    
+    private func deleteCurrentIcon() {
+        guard let iconURL = iconUploadURL,
+              !iconURL.isEmpty,
+              let imagePath = extractPathFromURL(iconURL) else {
+            
+            // ローカルアイコンのみを削除
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                characterIcon = nil
+                selectedImage = nil
+                iconUploadURL = nil
+            }
+            return
+        }
+        
+        // 🔧 修正: weak selfを削除し、直接Binding経由で状態を更新
+        imageManager.deleteImage(at: imagePath) { result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success:
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
+                        characterIcon = nil
+                        selectedImage = nil
+                        iconUploadURL = nil
+                    }
+                    
+                    alertMessage = "アイコンが削除されました"
+                    showingAlert = true
+                    
+                case .failure(let error):
+                    alertMessage = "削除エラー: \(error.localizedDescription)"
+                    showingAlert = true
+                }
+            }
+        }
+    }
+    
+    private func extractPathFromURL(_ url: String) -> String? {
+        guard let urlComponents = URLComponents(string: url),
+              let path = urlComponents.path.components(separatedBy: "/o/").last?.components(separatedBy: "?").first else {
+            return nil
+        }
+        return path.removingPercentEncoding
+    }
+    
+    private func generateHapticFeedback() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+        impactFeedback.impactOccurred()
+    }
+}
+
+// MARK: - ModernTextFieldStyle
+
+struct ModernTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(.systemGray4), lineWidth: 1)
+            )
+    }
+}
+
+// MARK: - ImagePickerView
+
+struct ImagePickerView: UIViewControllerRepresentable {
+    let onImageSelected: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = false
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImagePickerView
+        
+        init(_ parent: ImagePickerView) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImageSelected(image)
+            }
+            parent.dismiss()
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }

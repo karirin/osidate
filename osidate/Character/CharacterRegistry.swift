@@ -43,6 +43,24 @@ class CharacterRegistry: ObservableObject {
         return character
     }
     
+    func updateCharacter(_ character: Character) {
+        guard let userId = userId else { return }
+        
+        let characterData: [String: Any] = [
+            "id": character.id,
+            "name": character.name,
+            "personality": character.personality,
+            "speakingStyle": character.speakingStyle,
+            "iconName": character.iconName,
+            "iconURL": character.iconURL as Any,
+            "backgroundName": character.backgroundName,
+            "backgroundURL": character.backgroundURL as Any,
+            "updatedAt": Date().timeIntervalSince1970
+        ]
+        
+        database.child("characters").child(character.id).updateChildValues(characterData)
+    }
+    
     /// キャラクターを削除
     func deleteCharacter(_ character: Character) {
         guard let userId = userId else { return }

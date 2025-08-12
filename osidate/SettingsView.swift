@@ -843,21 +843,6 @@ struct ModernSettingRow<Content: View>: View {
     }
 }
 
-struct ModernTextFieldStyle: TextFieldStyle {
-    func _body(configuration: TextField<Self._Label>) -> some View {
-        configuration
-            .font(.body)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color(.systemGray4), lineWidth: 1)
-            )
-    }
-}
-
 struct ModernButtonStyle: ButtonStyle {
     let color: Color
     
