@@ -10,7 +10,6 @@ import Combine
 
 struct ContentView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
-    @ObservedObject var characterRegistry: CharacterRegistry
     @State private var showFloatingIcon = false
     @State private var pulseAnimation = false
     @State private var messageText = ""
@@ -19,10 +18,12 @@ struct ContentView: View {
     @State private var backgroundBlur: CGFloat = 0
     @State private var headerOpacity: Double = 1.0
     @State private var showingFullChatHistory = false
-    @State private var showingCharacterSelector = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
-    @State private var currentCharacterId = ""
+    
+    // 🌟 新機能：チャット表示モード
+    @State private var chatDisplayMode: ChatDisplayMode = .traditional
+    @State private var showingModeSelector = false
     
     // Design Constants
     private let cardCornerRadius: CGFloat = 20
@@ -46,18 +47,6 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: characterRegistry.activeCharacterId) { newCharacterId in
-             currentCharacterId = newCharacterId
-             if let activeCharacter = characterRegistry.getActiveCharacter() {
-                 viewModel.switchToCharacter(activeCharacter)
-             }
-         }
-         .onAppear {
-             currentCharacterId = characterRegistry.activeCharacterId
-             if let activeCharacter = characterRegistry.getActiveCharacter() {
-                 viewModel.switchToCharacter(activeCharacter)
-             }
-         }
         .simultaneousGesture(
             TapGesture().onEnded { _ in
                 if isInputFocused {
@@ -77,6 +66,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingFullChatHistory) {
             FullChatHistoryView(viewModel: viewModel)
         }
+        .sheet(isPresented: $showingModeSelector) {
+            ChatModeSelectionView(selectedMode: $chatDisplayMode)
+        }
         // 🌟 親密度レベルアップ通知
         .sheet(isPresented: $viewModel.showingIntimacyLevelUp) {
             IntimacyLevelUpView(
@@ -84,85 +76,10 @@ struct ContentView: View {
                 currentLevel: viewModel.character.intimacyLevel
             )
         }
-        .sheet(isPresented: $showingCharacterSelector) {
-            CharacterSelectorView(
-                characterRegistry: characterRegistry,
-                selectedCharacterId: $currentCharacterId
-            )
-        }
-        .overlay(
-            // Character switcher button
-            VStack {
-                HStack {
-                    Spacer()
-                    characterSwitcherButton
-                }
-                Spacer()
-            }
-            .padding(.top, 20)
-            .padding(.trailing, 20)
-        )
         .onReceive(Publishers.keyboardHeight) { height in
             withAnimation(.easeInOut(duration: 0.3)) {
                 keyboardHeight = height
             }
-        }
-    }
-
-    private var characterSwitcherButton: some View {
-        Button(action: {
-            showingCharacterSelector = true
-        }) {
-            HStack(spacing: 8) {
-                Text("推し変更")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.black).opacity(0.8)
-                Image(systemName: "chevron.down")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-//                if let activeCharacter = characterRegistry.getActiveCharacter() {
-//                    // アイコン表示
-//                    if let iconURL = activeCharacter.iconURL,
-//                       let url = URL(string: iconURL) {
-//                        AsyncImage(url: url) { image in
-//                            image
-//                                .resizable()
-//                                .aspectRatio(contentMode: .fill)
-//                                .frame(width: 28, height: 28)
-//                                .clipShape(Circle())
-//                        } placeholder: {
-//                            Circle()
-//                                .fill(.gray.opacity(0.3))
-//                                .frame(width: 28, height: 28)
-//                                .overlay(ProgressView().scaleEffect(0.6))
-//                        }
-//                    } else {
-//                        Circle()
-//                            .fill(.blue.opacity(0.2))
-//                            .frame(width: 28, height: 28)
-//                            .overlay(
-//                                Image(systemName: activeCharacter.iconName)
-//                                    .font(.system(size: 14))
-//                                    .foregroundColor(.blue)
-//                            )
-//                    }
-//                    
-//                    Text(activeCharacter.name)
-//                        .font(.caption)
-//                        .fontWeight(.medium)
-//                        .foregroundColor(.primary)
-//                        .lineLimit(1)
-//                }
-//                
-//                Image(systemName: "chevron.down")
-//                    .font(.caption2)
-//                    .foregroundColor(.secondary)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(.ultraThinMaterial)
-            .cornerRadius(16)
-            .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
     }
     
@@ -382,22 +299,24 @@ struct ContentView: View {
                 ZStack {
                     backgroundView(geometry: geometry)
                         .blur(radius: backgroundBlur)
-                    
+                        // 従来のLINE形式
                     VStack(spacing: 0) {
                         // Date status
                         if viewModel.currentDateSession != nil {
                             modernDateStatusView
                                 .padding(.top)
                         }
-                        
+                        speechBubbleArea
+                            .frame(height: geometry.size.height * 0.15)
                         // Floating character icon
                         modernFloatingIconView
-                        
+                            .frame(height: geometry.size.height * 0.25)
                         // Enhanced chat area
                         modernChatView
-                        
+                            .frame(height: geometry.size.height * 0.49)
                         // Modern input area
                         modernInputView
+                            .frame(height: geometry.size.height * 0.01)
                             .padding(.bottom, keyboardHeight > 0 ? 0 : 8)
                     }
                 }
@@ -407,91 +326,145 @@ struct ContentView: View {
         .navigationViewStyle(StackNavigationViewStyle())
     }
     
+    private var latestMessage: Message? {
+        return viewModel.messages.filter { !$0.isFromUser }.last
+    }
+    
+    @State private var showingMessage = false
+    @State private var isTyping = false
+    
+    private var speechBubbleArea: some View {
+        ZStack {
+            if showingMessage, let message = latestMessage {
+                SpeechBubbleView(
+                    message: message,
+                    isTyping: isTyping,
+                    primaryColor: primaryColor
+                )
+                .animation(.spring(response: 0.4, dampingFraction: 0.7), value: showingMessage)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            showLatestMessage()
+        }
+        .onChange(of: viewModel.messages.count) { _ in
+            showLatestMessage()
+        }
+    }
+    
+    private func showLatestMessage() {
+        guard latestMessage != nil else {
+            showingMessage = false
+            return
+        }
+        
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            showingMessage = true
+        }
+    }
+    
+    // MARK: - 🌟 チャットモードヘッダー
+    private var chatModeHeaderView: some View {
+        HStack {
+            // 親密度ステータス
+            modernIntimacyStatusView
+            
+            Spacer()
+            
+            // チャット表示モード切り替えボタン
+            HStack(spacing: 12) {
+                Button(action: {
+                    showingFullChatHistory = true
+                }) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.title3)
+                        .foregroundColor(primaryColor)
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .shadow(color: primaryColor.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+                
+                Button(action: {
+                    showingModeSelector = true
+                }) {
+                    VStack(spacing: 2) {
+                        Image(systemName: chatDisplayMode.icon)
+                            .font(.system(size: 16, weight: .medium))
+                        Text(chatDisplayMode.displayName)
+                            .font(.system(size: 8, weight: .medium))
+                    }
+                    .foregroundColor(primaryColor)
+                    .frame(width: 50, height: 40)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: primaryColor.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+                
+                Button(action: {
+                    viewModel.showingSettings = true
+                }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.title3)
+                        .foregroundColor(primaryColor)
+                        .frame(width: 40, height: 40)
+                        .background(.ultraThinMaterial, in: Circle())
+                        .shadow(color: primaryColor.opacity(0.2), radius: 4, x: 0, y: 2)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
     // MARK: - 🌟 拡張された親密度ステータス表示
     private var modernIntimacyStatusView: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             // 親密度レベルアイコン
             ZStack {
                 Circle()
                     .fill(viewModel.character.intimacyStage.color.opacity(0.2))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 36, height: 36)
                 
                 Image(systemName: viewModel.character.intimacyStage.icon)
-                    .font(.system(size: 18, weight: .medium))
+                    .font(.system(size: 16, weight: .medium))
                     .foregroundColor(viewModel.character.intimacyStage.color)
             }
             
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text("\(viewModel.character.intimacyLevel)")
-                        .font(.headline)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("Lv.\(viewModel.character.intimacyLevel)")
+                        .font(.caption)
                         .fontWeight(.bold)
                         .foregroundColor(viewModel.character.intimacyStage.color)
                     
                     Text(viewModel.character.intimacyTitle)
-                        .font(.subheadline)
+                        .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(.primary)
                 }
                 
-                // プログレスバー
-                HStack(spacing: 8) {
-                    ProgressView(value: viewModel.character.intimacyProgress)
-                        .progressViewStyle(LinearProgressViewStyle(tint: viewModel.character.intimacyStage.color))
-                        .frame(height: 4)
-                    
-                    if viewModel.character.intimacyToNextLevel > 0 {
+                // プログレスバー（コンパクト版）
+                if viewModel.character.intimacyToNextLevel > 0 {
+                    HStack(spacing: 4) {
+                        ProgressView(value: viewModel.character.intimacyProgress)
+                            .progressViewStyle(LinearProgressViewStyle(tint: viewModel.character.intimacyStage.color))
+                            .frame(width: 60, height: 2)
+                        
                         Text("+\(viewModel.character.intimacyToNextLevel)")
-                            .font(.caption2)
+                            .font(.system(size: 8))
                             .foregroundColor(.secondary)
-                    } else {
-                        Text("MAX")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundColor(viewModel.character.intimacyStage.color)
                     }
+                } else {
+                    Text("MAX")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundColor(viewModel.character.intimacyStage.color)
                 }
-            }
-            
-            Spacer()
-            
-            // 無限モードインジケーター
-            if viewModel.character.unlockedInfiniteMode {
-                ZStack {
-                    Circle()
-                        .fill(LinearGradient(
-                            colors: [Color.purple, Color.blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ))
-                        .frame(width: 32, height: 32)
-                    
-                    Image(systemName: "infinity")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                }
-                .scaleEffect(pulseAnimation ? 1.1 : 1.0)
-                .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: pulseAnimation)
-            }
-            
-            // デート回数
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(viewModel.character.totalDateCount)")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Text("回デート")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(.ultraThinMaterial)
-        .cornerRadius(16)
-        .padding(.horizontal, 16)
-        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .cornerRadius(12)
+        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
     
     // MARK: - Enhanced Background View
@@ -639,30 +612,31 @@ struct ContentView: View {
     
     private var modernFloatingIconView: some View {
         ZStack {
-            CharacterIconView(character: viewModel.character, size: 120)
-                .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
-                .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
-                .overlay(
-                    Group {
-                        if characterTalkingAnimation {
-                            ForEach(0..<3) { index in
-                                Circle()
-                                    .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
-                                    .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
-                                    .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
-                                    .opacity(characterTalkingAnimation ? 0 : 0.7)
-                                    .animation(
-                                        .easeOut(duration: 1.0)
+                //            CharacterIconView(character: viewModel.character, size: 120)
+            CharacterIconView(character: viewModel.character, size: isInputFocused ? 110 : 150)
+                    .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
+                    .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
+                    .overlay(
+                        Group {
+                            if characterTalkingAnimation {
+                                ForEach(0..<3) { index in
+                                    Circle()
+                                        .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
+                                        .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
+                                        .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
+                                        .opacity(characterTalkingAnimation ? 0 : 0.7)
+                                        .animation(
+                                            .easeOut(duration: 1.0)
                                             .delay(Double(index) * 0.2)
                                             .repeatForever(autoreverses: false),
-                                        value: characterTalkingAnimation
-                                    )
+                                            value: characterTalkingAnimation
+                                        )
+                                }
                             }
                         }
-                    }
-                )
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
-                .id(viewModel.character.iconURL ?? "default")
+                    )
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
+                    .id(viewModel.character.iconURL ?? "default")
         }
         .padding(.vertical, 20)
         .offset(y: iconOffset)
@@ -745,7 +719,7 @@ struct ContentView: View {
     // MARK: - Modern Input View
     private var modernInputView: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(spacing: 6) {
                 HStack(spacing: 12) {
                     TextField("", text: $messageText, prompt: Text("メッセージを入力...").foregroundColor(.gray.opacity(0.6)))
                         .textFieldStyle(PlainTextFieldStyle())
@@ -1129,6 +1103,21 @@ struct ModernMessageBubble: View {
                         .padding(.vertical, 4)
                         .background(.ultraThinMaterial, in: Capsule())
                 }
+                
+                // 🌟 親密度ボーナス表示
+                if message.intimacyGained > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 8))
+                        Text("+\(message.intimacyGained)")
+                            .font(.system(size: 8, weight: .bold))
+                    }
+                    .foregroundColor(.pink)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.pink.opacity(0.1))
+                    .clipShape(Capsule())
+                }
             }
         }
         .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .leading)
@@ -1165,5 +1154,5 @@ struct InfoRow: View {
 }
 
 #Preview {
-    ContentView(viewModel: RomanceAppViewModel(), characterRegistry: CharacterRegistry())
+    ContentView(viewModel: RomanceAppViewModel())
 }

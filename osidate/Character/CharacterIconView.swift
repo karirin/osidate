@@ -86,5 +86,5 @@ struct CharacterIconView: View {
 }
 
 #Preview {
-    ContentView(viewModel: RomanceAppViewModel(), characterRegistry: CharacterRegistry())
+    ContentView(viewModel: RomanceAppViewModel())
 }

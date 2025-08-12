@@ -810,5 +810,5 @@ private struct ProgressOverlay: View {
 // MARK: - Preview
 #Preview {
 //    BackgroundSelectorView(viewModel: RomanceAppViewModel())
-    ContentView(viewModel: RomanceAppViewModel(), characterRegistry: CharacterRegistry())
+    ContentView(viewModel: RomanceAppViewModel())
 }

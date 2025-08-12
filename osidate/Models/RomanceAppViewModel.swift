@@ -51,6 +51,26 @@ class RomanceAppViewModel: ObservableObject {
     var hasValidCharacter: Bool {
         return character.isValidCharacter
     }
+    
+    var chatDisplayMode: ChatDisplayMode {
+        get {
+            if let modeString = UserDefaults.standard.string(forKey: "chatDisplayMode"),
+               let mode = ChatDisplayMode(rawValue: modeString) {
+                return mode
+            }
+            return .traditional // デフォルトは従来形式
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: "chatDisplayMode")
+            UserDefaults.standard.synchronize()
+            
+            // 設定変更のシステムメッセージを送信
+            let message = getChatModeChangeMessage(newMode: newValue)
+            sendSystemMessage(message)
+            
+            print("🔄 チャット表示モードを変更: \(newValue.displayName)")
+        }
+    }
 
     // MARK: - Init / Deinit
     init() {
@@ -73,7 +93,31 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    // MARK: - ✅ キャラクター切り替えメソッド（複数推し対応）
+    /// チャット表示モード変更時のシステムメッセージを取得
+    private func getChatModeChangeMessage(newMode: ChatDisplayMode) -> String {
+        switch newMode {
+        case .traditional:
+            return "チャット表示をLINE形式に変更しました！横並びでメッセージが見やすくなりますね✨"
+        case .floating:
+            return "チャット表示を吹き出し形式に変更しました！私からの吹き出しでもっと親密に会話できますね💕"
+        }
+    }
+    
+    /// チャット表示モードを切り替え
+    func toggleChatDisplayMode() {
+        let newMode: ChatDisplayMode = chatDisplayMode == .traditional ? .floating : .traditional
+        chatDisplayMode = newMode
+    }
+    
+    /// チャット表示モードの設定をリセット
+    func resetChatDisplayMode() {
+        chatDisplayMode = .traditional
+    }
+    
+    /// デバッグ用：現在のチャット表示モードを出力
+    func debugChatDisplayMode() {
+        print("🎨 現在のチャット表示モード: \(chatDisplayMode.displayName) (\(chatDisplayMode.rawValue))")
+    }
     
     /// 推しを切り替える
     func switchToCharacter(_ newCharacter: Character) {

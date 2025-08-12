@@ -22,12 +22,16 @@ struct TopView: View {
             } else {
                 // Main app with tab navigation
                 TabView {
-                    ContentView(viewModel: romanceViewModel, characterRegistry: characterRegistry)
+                    ContentView(viewModel: romanceViewModel)
                         .tabItem {
                             Image(systemName: "bubble.left.and.bubble.right")
                             Text("チャット")
                         }
-                    
+                    CharacterSelectorView(characterRegistry: characterRegistry, selectedCharacterId: .constant(characterRegistry.activeCharacterId))
+                        .tabItem {
+                            Image(systemName: "bubble.left.and.bubble.right")
+                            Text("チャット")
+                        }
                     DateSelectorView(viewModel: romanceViewModel)
                         .tabItem {
                             Image(systemName: "heart.circle.fill")
@@ -71,7 +75,7 @@ struct TopView: View {
     
     private var mainAppView: some View {
         TabView {
-            ContentView(viewModel: romanceViewModel, characterRegistry: characterRegistry)
+            ContentView(viewModel: romanceViewModel)
                 .tabItem {
                     Image(systemName: "bubble.left.and.bubble.right")
                     Text("チャット")
