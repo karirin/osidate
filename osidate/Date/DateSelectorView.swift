@@ -1810,7 +1810,7 @@ struct UnlockMotivationView: View {
                             motivationRow(icon: "message.fill", title: "日常会話", points: "1-3", description: "毎日の何気ない会話で親密度アップ")
                             motivationRow(icon: "heart.fill", title: "デート", points: "5-20", description: "デートを完了すると大幅に親密度アップ")
                             motivationRow(icon: "text.bubble.fill", title: "長いメッセージ", points: "2-5", description: "感情を込めた長いメッセージで親密度ボーナス")
-                            motivationRow(icon: "calendar.fill", title: "継続利用", points: "1-2", description: "毎日アプリを使うことで親密度が自然に上昇")
+                            motivationRow(icon: "calendar.circle.fill", title: "継続利用", points: "1-2", description: "毎日アプリを使うことで親密度が自然に上昇")
                         }
                     }
                     .padding()

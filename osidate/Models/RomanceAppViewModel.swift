@@ -245,6 +245,12 @@ class RomanceAppViewModel: ObservableObject {
         print("📤 切り替え前: \(character.name) (ID: \(character.id))")
         print("📥 切り替え後: \(newCharacter.name) (ID: \(newCharacter.id))")
         
+        // 🔧 修正：キャラクター切り替え時に現在のデートセッションを終了
+        if let currentSession = currentDateSession {
+            print("🏁 キャラクター切り替えのため現在のデートセッションを終了: \(currentSession.location.name)")
+            endDate()
+        }
+        
         // 現在の状態を保存（有効なキャラクターの場合のみ）
         if character.isValidCharacter {
             saveCurrentCharacterState()
@@ -256,6 +262,9 @@ class RomanceAppViewModel: ObservableObject {
             
             // キャラクターを切り替え
             self.character = newCharacter
+            
+            // 🔧 修正：デートセッションをクリア（念のため）
+            self.currentDateSession = nil
             
             // 🔧 修正：明示的に更新通知を送信
             self.objectWillChange.send()
@@ -269,6 +278,7 @@ class RomanceAppViewModel: ObservableObject {
             print("   - ID: \(self.character.id)")
             print("   - アイコンURL: \(self.character.iconURL ?? "なし")")
             print("   - 親密度: \(self.character.intimacyLevel)")
+            print("   - デートセッション: \(self.currentDateSession?.location.name ?? "なし")")
             print("==================== キャラクター切り替え終了 ====================\n")
         }
     }

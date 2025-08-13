@@ -163,14 +163,6 @@ class LoginBonusManager: ObservableObject {
                 if let lastLoginTimestamp = data["lastLoginDate"] as? TimeInterval {
                     self.lastLoginDate = Date(timeIntervalSince1970: lastLoginTimestamp)
                 }
-                
-                print("📥 既存データ読み込み完了:")
-                print("  - 連続ログイン: \(self.currentStreak)日")
-                print("  - 累計ログイン: \(self.totalLoginDays)日")
-                print("  - 最終ログイン: \(self.lastLoginDate?.description ?? "なし")")
-                
-                // 履歴も読み込み
-                self.loadLoginHistory()
             }
             
             completion(dataExists)
@@ -400,9 +392,6 @@ class LoginBonusManager: ObservableObject {
          availableBonus = nil
          showingBonusView = false
          
-         // データ保存
-         saveLoginBonus(bonus)
-         
          print("✅ ログインボーナス受取完了: +\(bonus.intimacyBonus)")
      }
      
@@ -420,45 +409,6 @@ class LoginBonusManager: ObservableObject {
         
         database.child("loginBonus").child(userId).child("status").updateChildValues(data)
         print("💾 ログインデータ保存完了")
-    }
-    
-    private func saveLoginBonus(_ bonus: LoginBonus) {
-        guard let userId = userId else { return }
-        
-        let bonusData: [String: Any] = [
-            "id": bonus.id.uuidString,
-            "day": bonus.day,
-            "intimacyBonus": bonus.intimacyBonus,
-            "bonusType": bonus.bonusType.rawValue,
-            "receivedAt": bonus.receivedAt.timeIntervalSince1970,
-            "description": bonus.description
-        ]
-        
-        database.child("loginBonus").child(userId).child("history").child(bonus.id.uuidString).setValue(bonusData)
-    }
-    
-    private func loadLoginHistory() {
-        guard let userId = userId else { return }
-        
-        database.child("loginBonus").child(userId).child("history").observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            var history: [LoginBonus] = []
-            
-            if let historyData = snapshot.value as? [String: [String: Any]] {
-                for (_, bonusData) in historyData {
-                    if let bonus = self.loginBonusFromFirebaseData(bonusData) {
-                        history.append(bonus)
-                    }
-                }
-            }
-            
-            history.sort { $0.receivedAt > $1.receivedAt }
-            
-            DispatchQueue.main.async {
-                self.loginHistory = Array(history.prefix(100))
-            }
-        }
     }
     
     private func loginBonusFromFirebaseData(_ data: [String: Any]) -> LoginBonus? {
@@ -629,9 +579,6 @@ class LoginBonusManager: ObservableObject {
             
             print("📥 ログインデータ読み込み完了: 連続\(self.currentStreak)日, 累計\(self.totalLoginDays)日")
         }
-        
-        // ボーナス履歴を読み込み
-        loadLoginHistory()
     }
     
 
