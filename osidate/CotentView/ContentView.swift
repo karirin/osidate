@@ -1,5 +1,5 @@
 //
-//  ContentView.swift - 拡張親密度システム対応版
+//  ContentView.swift - アプリ起動時ログインボーナス自動表示対応版
 //  osidate
 //
 //  50箇所のデートスポットと無限モード対応
@@ -25,6 +25,10 @@ struct ContentView: View {
     @State private var chatDisplayMode: ChatDisplayMode = .traditional
     @State private var showingModeSelector = false
     
+    // 🌟 ログインボーナス自動表示制御
+    @State private var hasTriggeredAutoLoginBonus = false
+    @State private var isAppInitialized = false
+    
     // Design Constants
     private let cardCornerRadius: CGFloat = 20
     private let primaryColor = Color(.systemBlue)
@@ -33,6 +37,19 @@ struct ContentView: View {
     // MARK: - Recent Messages Computed Property
     private var recentMessages: [Message] {
         Array(viewModel.messages.suffix(5))
+    }
+    
+    private var readyToAutoClaim: AnyPublisher<Bool, Never> {
+        Publishers.CombineLatest4(
+            viewModel.$isAuthenticated,
+            viewModel.$hasValidCharacter,
+            viewModel.loginBonusManager.$userId.map { $0 != nil }.eraseToAnyPublisher(),
+            viewModel.loginBonusManager.$availableBonus.map { $0 != nil }.eraseToAnyPublisher()
+        )
+        .map { $0 && $1 && $2 && $3 }
+        .removeDuplicates()
+        .debounce(for: .milliseconds(300), scheduler: RunLoop.main) // フラつき防止
+        .eraseToAnyPublisher()
     }
     
     var body: some View {
@@ -54,6 +71,9 @@ struct ContentView: View {
                 }
             }
         )
+        .sheet(isPresented: $viewModel.showingLoginBonus) {
+            LoginBonusView(loginBonusManager: viewModel.loginBonusManager, viewModel: viewModel)
+        }
         .sheet(isPresented: $viewModel.showingBackgroundSelector) {
             BackgroundSelectorView(viewModel: viewModel)
         }
@@ -79,6 +99,102 @@ struct ContentView: View {
         .onReceive(Publishers.keyboardHeight) { height in
             withAnimation(.easeInOut(duration: 0.3)) {
                 keyboardHeight = height
+            }
+        }
+        .onReceive(readyToAutoClaim) { ready in
+            guard ready, !viewModel.didTriggerAutoLoginBonus else { return }
+            print("🎉 ContentView: 全ての条件を満たしました - 自動受け取りを実行")
+            viewModel.didTriggerAutoLoginBonus = true
+            viewModel.autoClaimLoginBonusIfAvailable()
+        }
+    }
+    
+    // MARK: - 🌟 ログインボーナス自動表示チェックのスケジュール
+    private func scheduleLoginBonusCheck() {
+        print("⏰ ContentView: ログインボーナスチェックをスケジュール")
+        
+        // 即座に1回チェック
+        checkAndTriggerLoginBonus()
+        
+        // 少し遅延してから定期的にチェック（最大15回、計7.5秒間）
+        for i in 1...15 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.5) {
+                if !self.hasTriggeredAutoLoginBonus {
+                    print("⏰ ContentView: 定期チェック \(i)回目")
+                    self.checkAndTriggerLoginBonus()
+                } else {
+                    print("✅ ContentView: 既に発火済みのため定期チェック終了")
+                }
+            }
+        }
+    }
+    
+    // MARK: - 🌟 ログインボーナス自動表示のトリガー
+    private func checkAndTriggerLoginBonus() {
+        // 既に発火済みの場合はスキップ
+        guard !hasTriggeredAutoLoginBonus else {
+            return
+        }
+        
+        print("🔍 ContentView: ログインボーナス自動受け取りチェック開始")
+        
+        // 必要条件をチェック
+        guard viewModel.isAuthenticated else {
+            print("❌ ContentView: 認証されていません")
+            return
+        }
+        
+        guard viewModel.hasValidCharacter else {
+            print("❌ ContentView: 有効なキャラクターが設定されていません")
+            return
+        }
+        
+        guard viewModel.loginBonusManager.userId != nil else {
+            print("❌ ContentView: LoginBonusManager未初期化")
+            return
+        }
+        
+        guard viewModel.loginBonusManager.availableBonus != nil else {
+            print("ℹ️ ContentView: 本日のログインボーナスは受取済みまたは条件未達成")
+            return
+        }
+        
+        // 全ての条件を満たした場合、ViewModelの自動受け取りメソッドを呼び出し
+        print("🎉 ContentView: 全ての条件を満たしました - ViewModel経由で自動受け取り")
+        hasTriggeredAutoLoginBonus = true
+        
+        // 🌟 ViewModelの自動受け取りメソッドを呼び出し
+        viewModel.autoClaimLoginBonusIfAvailable()
+    }
+    
+    // MARK: - 🌟 デバッグ用：自動表示フラグリセット
+    private func resetAutoLoginBonusFlag() {
+        hasTriggeredAutoLoginBonus = false
+        print("🔧 ContentView: ログインボーナス自動表示フラグをリセット")
+    }
+    
+    private var loginBonusButton: some View {
+        Button(action: {
+            viewModel.showLoginBonusManually()
+        }) {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 40, height: 40)
+                    .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
+                
+                VStack(spacing: 1) {
+                    Image(systemName: viewModel.loginBonusManager.availableBonus != nil ? "gift.fill" : "gift")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(viewModel.loginBonusManager.availableBonus != nil ? .orange : primaryColor)
+                    
+                    if viewModel.loginBonusManager.availableBonus != nil {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 6, height: 6)
+                            .offset(x: 8, y: -12)
+                    }
+                }
             }
         }
     }
@@ -331,6 +447,8 @@ struct ContentView: View {
         .navigationViewStyle(StackNavigationViewStyle())
     }
     
+    // MARK: - 以下は既存のコードをそのまま保持
+    
     private var latestMessage: Message? {
         return viewModel.messages.filter { !$0.isFromUser }.last
     }
@@ -499,8 +617,10 @@ struct ContentView: View {
             
             Spacer()
             
-            // チャット表示モード切り替えボタン
+            // ボタン群
             HStack(spacing: 12) {
+                
+                // 既存のボタン
                 Button(action: {
                     showingFullChatHistory = true
                 }) {
@@ -717,19 +837,6 @@ struct ContentView: View {
         }
     }
     
-//    private func timeElapsedString(from startTime: Date) -> String {
-//        let elapsed = Date().timeIntervalSince(startTime)
-//        let minutes = Int(elapsed / 60)
-//        let hours = minutes / 60
-//        let remainingMinutes = minutes % 60
-//        
-//        if hours > 0 {
-//            return "\(hours)時間\(remainingMinutes)分"
-//        } else {
-//            return "\(remainingMinutes)分"
-//        }
-//    }
-    
     // MARK: - Modern Floating Icon with Message Animation
     @State private var showMessageBubble = false
     @State private var messageBubbleText = ""
@@ -739,31 +846,30 @@ struct ContentView: View {
     
     private var modernFloatingIconView: some View {
         ZStack {
-                //            CharacterIconView(character: viewModel.character, size: 120)
             CharacterIconView(character: viewModel.character, size: isInputFocused ? 110 : 150)
-                    .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
-                    .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
-                    .overlay(
-                        Group {
-                            if characterTalkingAnimation {
-                                ForEach(0..<3) { index in
-                                    Circle()
-                                        .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
-                                        .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
-                                        .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
-                                        .opacity(characterTalkingAnimation ? 0 : 0.7)
-                                        .animation(
-                                            .easeOut(duration: 1.0)
-                                            .delay(Double(index) * 0.2)
-                                            .repeatForever(autoreverses: false),
-                                            value: characterTalkingAnimation
-                                        )
-                                }
+                .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
+                .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
+                .overlay(
+                    Group {
+                        if characterTalkingAnimation {
+                            ForEach(0..<3) { index in
+                                Circle()
+                                    .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
+                                    .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
+                                    .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
+                                    .opacity(characterTalkingAnimation ? 0 : 0.7)
+                                    .animation(
+                                        .easeOut(duration: 1.0)
+                                        .delay(Double(index) * 0.2)
+                                        .repeatForever(autoreverses: false),
+                                        value: characterTalkingAnimation
+                                    )
                             }
                         }
-                    )
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
-                    .id(viewModel.character.iconURL ?? "default")
+                    }
+                )
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
+                .id(viewModel.character.iconURL ?? "default")
         }
         .padding(.vertical, 20)
         .offset(y: iconOffset)

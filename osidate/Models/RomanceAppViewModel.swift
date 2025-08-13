@@ -13,7 +13,13 @@ import FirebaseAuth
 class RomanceAppViewModel: ObservableObject {
 
     // MARK: - Published State
-    @Published var character: Character
+    @Published var character: Character = Character() {
+        didSet {
+            hasValidCharacter = character.isValidCharacter
+            // ログで確認したい場合
+            print("hasValidCharacter -> \(hasValidCharacter) (id=\(character.id), name=\(character.name))")
+        }
+    }
     @Published var messages: [Message] = []
     @Published var currentDateLocation: DateLocation?
     @Published var availableLocations: [DateLocation] = []
@@ -30,6 +36,17 @@ class RomanceAppViewModel: ObservableObject {
     @Published var showingIntimacyLevelUp = false
     @Published var newIntimacyStage: IntimacyStage? = nil
     @Published var infiniteDateCount = 0
+    
+    let loginBonusManager = LoginBonusManager()
+    @Published var showingLoginBonus = false
+    
+    @Published var didTriggerAutoLoginBonus = false
+    
+    @Published private var hasAutoClaimedLoginBonus = false
+    
+    @Published private var isClaimingLoginBonus = false
+    
+    private var isLoadingCharacterData = false
 
     // MARK: - Private Properties
     private let database = Database.database().reference()
@@ -37,9 +54,7 @@ class RomanceAppViewModel: ObservableObject {
     private let characterId: String
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
-    var hasValidCharacter: Bool {
-        return character.isValidCharacter
-    }
+    @Published var hasValidCharacter = false
     
     var chatDisplayMode: ChatDisplayMode {
         get {
@@ -66,7 +81,6 @@ class RomanceAppViewModel: ObservableObject {
             characterId = UUID().uuidString
             UserDefaults.standard.set(characterId, forKey: "characterId")
         }
-        character = Character()
         setupAuthStateListener()
     }
 
@@ -74,6 +88,141 @@ class RomanceAppViewModel: ObservableObject {
         if let h = authStateListener {
             Auth.auth().removeStateDidChangeListener(h)
         }
+    }
+    
+    func autoClaimLoginBonusIfAvailable() {
+        // 既に自動受け取り済みの場合はスキップ
+        guard !hasAutoClaimedLoginBonus else {
+            print("ℹ️ ViewModel: 既にログインボーナス自動受け取り済み")
+            return
+        }
+        
+        print("🔍 ViewModel: ログインボーナス自動受け取りチェック開始")
+        print("   - 認証状態: \(isAuthenticated)")
+        print("   - キャラクター有効: \(hasValidCharacter)")
+        print("   - キャラクター名: \(character.name)")
+        print("   - LoginBonusManager初期化: \(loginBonusManager.userId != nil)")
+        print("   - ログインボーナス利用可能: \(loginBonusManager.availableBonus != nil)")
+        
+        if let bonus = loginBonusManager.availableBonus {
+            print("   - ボーナス詳細: 日数=\(bonus.day), 親密度=\(bonus.intimacyBonus), タイプ=\(bonus.bonusType.displayName)")
+        }
+        
+        // 必要条件をチェック
+        guard isAuthenticated else {
+            print("❌ ViewModel: 認証されていません")
+            return
+        }
+        
+        guard hasValidCharacter else {
+            print("❌ ViewModel: 有効なキャラクターが設定されていません")
+            return
+        }
+        
+        guard loginBonusManager.userId != nil else {
+            print("❌ ViewModel: LoginBonusManager未初期化")
+            return
+        }
+        
+        guard let bonus = loginBonusManager.availableBonus else {
+            print("ℹ️ ViewModel: 本日のログインボーナスは受取済みまたは条件未達成")
+            return
+        }
+        
+        // 全ての条件を満たした場合、自動受け取り処理
+        print("🎉 ViewModel: 全ての条件を満たしました - ログインボーナスを自動受け取り")
+        hasAutoClaimedLoginBonus = true
+        
+        // 自動受け取り処理を実行
+        executeAutoClaimLoginBonus(bonus: bonus)
+    }
+    
+    // MARK: - 🌟 削除：チャットメッセージ作成は不要
+    // createLoginBonusCompletionMessage メソッドは削除
+    
+    // MARK: - 🌟 saveMessageメソッド（public）
+    func saveMessage(_ message: Message) {
+        guard let userId = self.userId,
+              let conversationId = getConversationId(),
+              hasValidCharacter else {
+            print("❌ ViewModel: saveMessage条件不足")
+            return
+        }
+        
+        let messageData: [String: Any] = [
+            "id": message.id.uuidString,
+            "conversationId": conversationId,
+            "senderId": message.isFromUser ? userId : character.id,
+            "receiverId": message.isFromUser ? character.id : userId,
+            "text": message.text,
+            "isFromUser": message.isFromUser,
+            "timestamp": message.timestamp.timeIntervalSince1970,
+            "dateLocation": message.dateLocation as Any,
+            "intimacyGained": message.intimacyGained,
+            "messageType": "text"
+        ]
+        
+        database.child("messages").child(message.id.uuidString).setValue(messageData)
+    }
+    
+    // MARK: - 🌟 getConversationIdメソッド（public）
+    func getConversationId() -> String? {
+        guard let userId = self.userId, hasValidCharacter else { return nil }
+        return "\(userId)_\(character.id)"
+    }
+    
+    // MARK: - 🌟 デバッグ用：自動受け取りフラグリセット
+    #if DEBUG
+    func resetAutoClaimFlag() {
+        hasAutoClaimedLoginBonus = false
+        print("🔧 ViewModel: ログインボーナス自動受け取りフラグをリセット")
+    }
+    #endif
+    
+    private func handleAuthStateChange(user: User?) {
+        DispatchQueue.main.async {
+            if let u = user {
+                self.userId = u.uid
+                self.isAuthenticated = true
+                self.isLoading = false
+                
+                print("🔐 認証完了: \(u.uid)")
+                
+                // 🌟 修正: 自動受け取りフラグをリセット
+                self.hasAutoClaimedLoginBonus = false
+                
+                // 🌟 修正: 順序立てた初期化を実行
+                self.setupUserDataSequentially(userId: u.uid)
+                
+            } else {
+                self.userId = nil
+                self.isAuthenticated = false
+                self.isLoading = false
+                self.hasAutoClaimedLoginBonus = false
+                self.messages.removeAll()
+                self.currentDateSession = nil
+                self.character = Character()
+                self.updateAvailableLocations()
+                self.signInAnonymously()
+            }
+        }
+    }
+    
+    // MARK: - 🌟 順序立てた初期化メソッド
+    private func setupUserDataSequentially(userId: String) {
+        print("🚀 === ユーザーデータ順序初期化開始 ===")
+        
+        // 1. 基本ユーザーデータを初期化
+        setupInitialData()
+        
+        // 2. ログインボーナスシステムを初期化
+        loginBonusManager.initialize(userId: userId)
+        
+        // 3. その他の初期化
+        updateAvailableLocations()
+        scheduleTimeBasedEvents()
+        
+        print("✅ === ユーザーデータ順序初期化完了 ===")
     }
 
     private func getChatModeChangeMessage(newMode: ChatDisplayMode) -> String {
@@ -112,7 +261,7 @@ class RomanceAppViewModel: ObservableObject {
             self.objectWillChange.send()
             
             // 新しいキャラクターのデータを読み込み
-            self.loadCharacterSpecificData()
+            self.loadCharacterDataComplete()
             
             print("✅ キャラクター切り替え完了")
             print("🎭 新キャラクター情報:")
@@ -190,9 +339,6 @@ class RomanceAppViewModel: ObservableObject {
         if character.isValidCharacter {
             loadMessages()
             updateAvailableLocations()
-            
-            // キャラクターデータも再読み込み
-            loadCharacterData()
         }
     }
     
@@ -242,11 +388,16 @@ class RomanceAppViewModel: ObservableObject {
             "lastUpdated": Date().timeIntervalSince1970
         ]
         
+        print("💾 Firebase保存データ:")
+        print("   - intimacyLevel: \(characterData["intimacyLevel"] ?? "nil")")
+        print("   - id: \(characterData["id"] ?? "nil")")
+        
         database.child("characters").child(character.id).updateChildValues(characterData) { error, _ in
             if let error = error {
                 print("❌ キャラクターデータ保存失敗: \(error.localizedDescription)")
             } else {
                 print("✅ キャラクターデータ保存成功")
+                print("   - 保存された親密度: \(self.character.intimacyLevel)")
             }
         }
         
@@ -255,6 +406,12 @@ class RomanceAppViewModel: ObservableObject {
     
     /// 🔧 最適化：キャラクターの全データを読み込み（親密度含む）
     private func loadCharacterDataComplete() {
+        guard !isLoadingCharacterData else {
+            print("⏳ 既にキャラクターデータ読み込み中のためスキップ")
+            return
+        }
+        isLoadingCharacterData = true
+        
         guard character.isValidCharacter else {
             print("❌ 読み込み条件不足: キャラクター無効")
             return
@@ -262,17 +419,23 @@ class RomanceAppViewModel: ObservableObject {
         
         print("📥 === キャラクター完全データ読み込み開始 ===")
         print("🎭 対象キャラクター: \(character.name) (ID: \(character.id))")
+        print("📊 読み込み前の親密度: \(character.intimacyLevel)")
         
-        database.child("characters").child(character.id).observeSingleEvent(of: .value) { [weak self] snapshot in
+        database.child("characters").child(character.id).observeSingleEvent(of: .value, with: { [weak self] snapshot in
             guard let self = self,
                   let data = snapshot.value as? [String: Any] else {
                 print("❌ キャラクターデータが見つかりません")
                 return
             }
-            
+            defer { self.isLoadingCharacterData = false }
             print("📥 キャラクターデータ読み込み中...")
+            print("📊 Firebase内の親密度: \(data["intimacyLevel"] as? Int ?? 0)")
             
-            // 基本プロパティを更新
+            // 🌟 修正：現在の親密度を保持
+            let currentIntimacyLevel = self.character.intimacyLevel
+            print("📊 現在メモリ内の親密度: \(currentIntimacyLevel)")
+            
+            // 基本プロパティを更新（親密度以外）
             if let name = data["name"] as? String { self.character.name = name }
             if let personality = data["personality"] as? String { self.character.personality = personality }
             if let speakingStyle = data["speakingStyle"] as? String { self.character.speakingStyle = speakingStyle }
@@ -283,11 +446,27 @@ class RomanceAppViewModel: ObservableObject {
             if let userNickname = data["userNickname"] as? String { self.character.userNickname = userNickname }
             if let useNickname = data["useNickname"] as? Bool { self.character.useNickname = useNickname }
             
-            // 🔧 最適化：親密度データもcharactersテーブルから読み込み
-            if let intimacyLevel = data["intimacyLevel"] as? Int {
-                self.character.intimacyLevel = intimacyLevel
-                print("📊 親密度読み込み: \(intimacyLevel)")
+            // 🌟 修正：親密度は現在の値とFirebaseの値を比較して大きい方を採用
+            if let firebaseIntimacyLevel = data["intimacyLevel"] as? Int {
+                let finalIntimacyLevel = max(currentIntimacyLevel, firebaseIntimacyLevel)
+                self.character.intimacyLevel = finalIntimacyLevel
+                
+                print("📊 親密度決定ロジック:")
+                print("   - Firebase値: \(firebaseIntimacyLevel)")
+                print("   - メモリ値: \(currentIntimacyLevel)")
+                print("   - 採用値: \(finalIntimacyLevel)")
+                
+                // 値が変更された場合は保存
+                if finalIntimacyLevel != firebaseIntimacyLevel {
+                    print("💾 親密度が更新されたため保存実行")
+                    self.saveCharacterDataComplete()
+                }
+            } else {
+                // Firebaseに親密度データがない場合は現在の値を保持
+                print("📊 Firebase親密度データなし - 現在値を保持: \(currentIntimacyLevel)")
             }
+            
+            // その他のデータを読み込み
             if let totalDateCount = data["totalDateCount"] as? Int {
                 self.character.totalDateCount = totalDateCount
                 print("📅 デート回数読み込み: \(totalDateCount)")
@@ -311,31 +490,251 @@ class RomanceAppViewModel: ObservableObject {
             }
             
             print("📥 === キャラクター完全データ読み込み完了 ===")
+        })
+    }
+    
+    func getLoginBonusStatistics() -> (totalBonuses: Int, totalIntimacy: Int, currentStreak: Int, totalDays: Int) {
+        return (
+            totalBonuses: loginBonusManager.loginHistory.count,
+            totalIntimacy: loginBonusManager.getTotalIntimacyFromBonuses(),
+            currentStreak: loginBonusManager.currentStreak,
+            totalDays: loginBonusManager.totalLoginDays
+        )
+    }
+
+    /// 今日のログインステータスを取得
+    func getTodayLoginStatus() -> (hasLoggedIn: Bool, hasClaimed: Bool, availableBonus: LoginBonus?) {
+        let tz = TimeZone(identifier: "Asia/Tokyo")!
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = tz
+
+        let hasLoggedInToday = loginBonusManager.lastLoginDate.map {
+            cal.isDateInToday($0)
+        } ?? false
+
+        let hasClaimed = (loginBonusManager.availableBonus == nil) && hasLoggedInToday
+
+        return (hasLoggedIn: hasLoggedInToday,
+                hasClaimed: hasClaimed,
+                availableBonus: loginBonusManager.availableBonus)
+    }
+    
+    // MARK: - 🌟 自動発火付きログインボーナス初期化
+    private func initializeLoginBonusSystemWithAutoTrigger(userId: String) {
+        print("🎁 === ログインボーナス自動発火システム初期化 ===")
+        
+        // LoginBonusManagerを初期化
+        loginBonusManager.initialize(userId: userId)
+        
+        // 初期化完了を待って自動発火をチェック
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.checkAndAutoTriggerLoginBonus()
+        }
+    }
+    
+    // MARK: - 🌟 ログインボーナス自動発火チェック
+    private func checkAndAutoTriggerLoginBonus() {
+        print("🔍 ログインボーナス自動発火チェック開始")
+        
+        // 認証とキャラクターの有効性を再確認
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ 自動発火条件不足: 認証=\(isAuthenticated), キャラクター有効=\(hasValidCharacter)")
+            return
+        }
+        
+        // ログインボーナスマネージャーの初期化完了を確認
+        guard loginBonusManager.userId != nil else {
+            print("❌ LoginBonusManager未初期化のため自動発火をスキップ")
+            // リトライ
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.checkAndAutoTriggerLoginBonus()
+            }
+            return
+        }
+        
+        print("📊 現在の状況:")
+        print("  - 認証状態: \(isAuthenticated)")
+        print("  - キャラクター有効: \(hasValidCharacter)")
+        print("  - ログインボーナス利用可能: \(loginBonusManager.availableBonus != nil)")
+        print("  - 連続ログイン: \(loginBonusManager.currentStreak)日")
+        print("  - 最終ログイン: \(loginBonusManager.lastLoginDate?.description ?? "なし")")
+        
+        // 利用可能なボーナスがある場合は自動表示
+        if loginBonusManager.availableBonus != nil {
+            print("🎁 利用可能なログインボーナスを検出 -> 自動表示")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.showingLoginBonus = true
+            }
+        } else {
+            print("ℹ️ 本日のログインボーナスは受取済みまたは条件未達成")
+        }
+    }
+    
+    private func initializeLoginBonusSystem(userId: String) {
+        print("🎁 ログインボーナスシステム初期化開始")
+        
+        // LoginBonusManagerを初期化
+        loginBonusManager.initialize(userId: userId)
+        
+        print("✅ ログインボーナスシステム初期化完了")
+    }
+
+    // MARK: - setupInitialData の修正版
+
+    private func setupInitialData() {
+        guard let uid = userId else { return }
+        
+        // ユーザーデータの初期化をチェック
+        database.child("users").child(uid).observeSingleEvent(of: .value, with: { [weak self] snap in
+            if !(snap.exists()) {
+                print("👤 新規ユーザー検出: 初期データを作成")
+                self?.createInitialUserDataOnly()
+            } else {
+                print("👤 既存ユーザー検出: データ読み込み")
+            }
+        })
+    }
+
+    // MARK: - デバッグメソッド追加
+
+    #if DEBUG
+
+    /// デバッグ用：ログインボーナスシステムを強制再初期化
+    func forceReinitializeLoginBonus() {
+        guard let uid = userId else { return }
+        
+        print("🔧 デバッグ: ログインボーナスシステム強制再初期化")
+        
+        
+        // 再初期化
+        initializeLoginBonusSystem(userId: uid)
+    }
+
+    /// デバッグ用：初回ユーザーとして強制初期化
+    func simulateFirstTimeUserLoginBonus() {
+        loginBonusManager.forceInitializeFirstTimeUser()
+    }
+
+    /// デバッグ用：認証フローを再実行
+    func debugReinitializeAuth() {
+        if let currentUser = Auth.auth().currentUser {
+            handleAuthStateChange(user: currentUser)
         }
     }
 
-    // MARK: - Auth
-    private func handleAuthStateChange(user: User?) {
-        DispatchQueue.main.async {
-            if let u = user {
-                self.userId = u.uid
-                self.isAuthenticated = true
-                self.isLoading = false
-                self.setupInitialData()
-                if self.hasValidCharacter {
-                    self.loadCharacterDataComplete() // 🔧 最適化版メソッドを使用
-                }
-                self.updateAvailableLocations()
-                self.scheduleTimeBasedEvents()
-            } else {
-                self.userId = nil
-                self.isAuthenticated = false
-                self.isLoading = false
-                self.messages.removeAll()
-                self.currentDateSession = nil
-                self.character = Character()
-                self.updateAvailableLocations()
-                self.signInAnonymously()
+    #endif
+
+    // MARK: - ログイン処理の改善
+
+    /// ログインボーナス処理を実行（修正版）
+    private func processLoginBonus() {
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ ログインボーナス処理: 認証またはキャラクター無効")
+            return
+        }
+        
+        print("🎁 ログインボーナス処理チェック")
+        
+        // LoginBonusManagerが初期化済みかチェック
+        if loginBonusManager.userId != nil {
+            // 既に初期化済みの場合は通常のログイン処理
+            loginBonusManager.processLogin()
+        } else {
+            print("⚠️ LoginBonusManagerが初期化されていません")
+            if let uid = userId {
+                initializeLoginBonusSystem(userId: uid)
+            }
+        }
+    }
+
+    // MARK: - 手動ログインボーナス表示の修正
+
+    func showLoginBonusManually() {
+        print("👆 手動ログインボーナス表示要求")
+        
+        // 初期化チェック
+        if loginBonusManager.userId == nil {
+            if let uid = userId {
+                print("🔄 ログインボーナスマネージャーを初期化してから表示")
+                initializeLoginBonusSystemWithAutoTrigger(userId: uid)
+                return
+            }
+        }
+        
+        if loginBonusManager.availableBonus != nil {
+            print("🎁 手動表示: 利用可能なボーナスあり")
+            showingLoginBonus = true
+        } else {
+            print("ℹ️ 手動表示: 本日は受取済み")
+            let message = Message(
+                text: "今日のログインボーナスは既に受け取り済みです。明日もお忘れなく！💕",
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: nil,
+                intimacyGained: 0
+            )
+            
+            DispatchQueue.main.async {
+                self.messages.append(message)
+                self.saveMessage(message)
+            }
+        }
+    }
+    
+//    private func processLoginBonus() {
+//        guard isAuthenticated && hasValidCharacter else {
+//            print("❌ ログインボーナス処理: 認証またはキャラクター無効")
+//            return
+//        }
+//
+//        print("🎁 ログインボーナス処理を開始")
+//        loginBonusManager.processLogin()
+//
+//        // ボーナスが利用可能な場合は表示
+//        if loginBonusManager.availableBonus != nil {
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+//                self.showingLoginBonus = true
+//            }
+//        }
+//    }
+
+    /// ログインボーナス画面を手動で表示
+//    func showLoginBonusManually() {
+//        if loginBonusManager.availableBonus != nil {
+//            showingLoginBonus = true
+//        } else {
+//            // 今日既に受取済みの場合は履歴を表示するか、メッセージを表示
+//            let message = Message(
+//                text: "今日のログインボーナスは既に受け取り済みです。明日もお忘れなく！💕",
+//                isFromUser: false,
+//                timestamp: Date(),
+//                dateLocation: nil,
+//                intimacyGained: 0
+//            )
+//
+//            DispatchQueue.main.async {
+//                self.messages.append(message)
+//                self.saveMessage(message)
+//            }
+//        }
+//    }
+
+    /// デバッグ用：ログインボーナスリセット
+    func resetLoginBonusForDebug() {
+        loginBonusManager.resetLoginBonus()
+    }
+
+    private func checkForNewDayLoginBonus() {
+        guard isAuthenticated && hasValidCharacter else { return }
+        
+        let now = Date()
+        let calendar = Calendar.current
+        
+        // 最後のログインから日付が変わっているかチェック
+        if let lastLogin = loginBonusManager.lastLoginDate {
+            if !calendar.isDate(lastLogin, inSameDayAs: now) {
+                print("📅 新しい日を検出：ログインボーナスを再処理")
+                processLoginBonus()
             }
         }
     }
@@ -350,21 +749,52 @@ class RomanceAppViewModel: ObservableObject {
 
     /// 親密度を増加させる（レベルアップチェック付き）
     func increaseIntimacy(by amount: Int, reason: String = "") {
+        print("💕 === increaseIntimacy開始 ===")
+        print("   - 増加予定: +\(amount)")
+        print("   - 理由: \(reason)")
+        print("   - hasValidCharacter: \(hasValidCharacter)")
+        print("   - キャラクター名: \(character.name)")
+        print("   - 処理前の親密度: \(character.intimacyLevel)")
+        
         guard hasValidCharacter else {
             print("❌ 無効なキャラクターのため親密度を増加できません")
+            return
+        }
+        
+        guard amount > 0 else {
+            print("❌ 増加量が0以下のため処理をスキップ: \(amount)")
             return
         }
         
         let oldLevel = character.intimacyLevel
         let oldStage = character.intimacyStage
         
-        character.intimacyLevel += amount
+        print("   - 更新前レベル: \(oldLevel)")
+        print("   - 更新前ステージ: \(oldStage.displayName)")
         
-        print("🔥 親密度増加: +\(amount) -> \(character.intimacyLevel) (\(reason))")
+        // 🌟 確実な加算処理
+        let newLevel = oldLevel + amount
+        character.intimacyLevel = newLevel
+        
+        print("   - 加算計算: \(oldLevel) + \(amount) = \(newLevel)")
+        print("   - 実際の設定値: \(character.intimacyLevel)")
+        print("   - 検証: 正しく設定されている = \(character.intimacyLevel == newLevel)")
+        
+        // 🌟 加算が正しく行われたかダブルチェック
+        if character.intimacyLevel != newLevel {
+            print("⚠️ 親密度設定に問題発生！強制的に正しい値を設定")
+            character.intimacyLevel = newLevel
+        }
+        
+        let actualIncrease = character.intimacyLevel - oldLevel
+        print("🔥 親密度増加実行: +\(amount) -> \(character.intimacyLevel) (実際の増加: +\(actualIncrease)) (\(reason))")
         
         // レベルアップチェック
         let newStage = character.intimacyStage
+        print("   - 更新後ステージ: \(newStage.displayName)")
+        
         if newStage != oldStage {
+            print("🎉 レベルアップ発生! \(oldStage.displayName) -> \(newStage.displayName)")
             handleIntimacyLevelUp(from: oldStage, to: newStage, gainedIntimacy: amount)
         }
         
@@ -372,11 +802,29 @@ class RomanceAppViewModel: ObservableObject {
         if character.intimacyLevel >= 5000 && !character.unlockedInfiniteMode {
             character.unlockedInfiniteMode = true
             showInfiniteModeUnlockedMessage()
+            print("♾️ 無限モード解放!")
         }
         
-        // 🔧 最適化：親密度変更時に即座に保存
+        // 🌟 即座にデータ保存（上書きされる前に）
+        print("💾 親密度変更をFirebaseに即座に保存開始")
+        let saveBeforeLevel = character.intimacyLevel
         saveCharacterDataComplete()
+        print("💾 親密度変更をFirebase保存完了")
+        print("💾 保存時の親密度: \(saveBeforeLevel)")
+        print("💾 保存後の親密度: \(character.intimacyLevel)")
+        
         updateAvailableLocations()
+        
+        // 🌟 UI更新を確実にするため明示的に通知
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+            print("🔄 UI更新通知送信完了")
+            print("🔄 通知送信時の親密度: \(self.character.intimacyLevel)")
+        }
+        
+        print("💕 === increaseIntimacy完了 ===")
+        print("   - 最終的な親密度: \(character.intimacyLevel)")
+        print("   - 期待値との一致: \(character.intimacyLevel == newLevel)")
     }
 
     /// 親密度レベルアップ処理
@@ -488,7 +936,7 @@ class RomanceAppViewModel: ObservableObject {
     /// 🔧 最適化：ユーザーデータ読み込み（親密度は除外）
     private func loadUserData() {
         guard let uid = userId else { return }
-        database.child("users").child(uid).observe(.value) { [weak self] snap in
+        database.child("users").child(uid).observe(.value, with: { [weak self] snap in
             guard let self = self, let dict = snap.value as? [String:Any] else { return }
             
             // 共通のユーザーデータのみ管理（親密度はcharactersテーブルで管理）
@@ -498,7 +946,7 @@ class RomanceAppViewModel: ObservableObject {
             if let ann = dict["anniversaryDate"] as? TimeInterval {
                 self.character.anniversaryDate = Date(timeIntervalSince1970: ann)
             }
-        }
+        })
     }
 
     /// 🔧 最適化：ユーザーデータ保存（親密度は除外）
@@ -520,6 +968,54 @@ class RomanceAppViewModel: ObservableObject {
 
     private func saveCharacterData() {
         saveCharacterDataComplete()
+    }
+    
+    private func executeAutoClaimLoginBonus(bonus: LoginBonus) {
+        print("🎁 ViewModel: ログインボーナス自動受け取り実行開始")
+        print("   - ボーナス: \(bonus.day)日目 +\(bonus.intimacyBonus) (\(bonus.bonusType.displayName))")
+        print("   - 受け取り前の親密度: \(character.intimacyLevel)")
+        
+        // 🌟 受け取り中フラグを設定（データ読み込みによる上書きを防ぐ）
+        isClaimingLoginBonus = true
+        
+        // ボーナスを受け取り（LoginBonusManagerのclaimBonusメソッドを使用）
+        loginBonusManager.claimBonus { [weak self] intimacyBonus, reason in
+            guard let self = self else { return }
+            
+            print("✅ ViewModel: ログインボーナス受け取りコールバック開始")
+            print("   - 親密度増加予定: +\(intimacyBonus)")
+            print("   - 理由: \(reason)")
+            print("   - 現在の親密度: \(self.character.intimacyLevel)")
+            
+            // 🌟 明示的にメインスレッドで親密度増加を実行
+            DispatchQueue.main.async {
+                print("🔄 ViewModel: メインスレッドで親密度増加開始")
+                let oldIntimacy = self.character.intimacyLevel
+                
+                // 親密度増加
+                self.increaseIntimacy(by: intimacyBonus, reason: reason)
+                
+                print("📊 ViewModel: 親密度更新結果")
+                print("   - 更新前: \(oldIntimacy)")
+                print("   - 更新後: \(self.character.intimacyLevel)")
+                print("   - 差分: +\(self.character.intimacyLevel - oldIntimacy)")
+                
+                // 🌟 受け取り完了フラグを解除
+                self.isClaimingLoginBonus = false
+                
+                // 🌟 UI更新を確実にするため明示的に通知
+                self.objectWillChange.send()
+                
+                // 🌟 自動受け取り後にモーダル画面を表示
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    print("🎊 ViewModel: ログインボーナスモーダル画面を表示")
+                    print("   - 表示時の親密度: \(self.character.intimacyLevel)")
+                    self.showingLoginBonus = true
+                }
+            }
+            
+            print("🎊 ViewModel: ログインボーナス自動受け取り完了")
+        }
     }
 
     // MARK: - その他のメソッド
@@ -675,12 +1171,16 @@ class RomanceAppViewModel: ObservableObject {
         print("\n💬 ==================== メッセージ送信開始 ====================")
         print("📤 送信メッセージ: \(text)")
         print("📊 現在の親密度: \(character.intimacyLevel) (\(character.intimacyTitle))")
-        
+
         guard isAuthenticated && hasValidCharacter else {
             print("❌ 認証またはキャラクター無効")
             return
         }
+
+        // ★ これを呼ぶ
+        processSendMessage(text, with: currentDateSession)
     }
+
     
     private func processSendMessage(_ text: String, with dateSession: DateSession?) {
         let userMessage = Message(
@@ -790,15 +1290,17 @@ class RomanceAppViewModel: ObservableObject {
 
     // MARK: - Firebase関連メソッド
     
-    private func setupInitialData() {
-        guard let uid = userId else { return }
-        
-        database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
-            if !(snap.exists()) {
-                self?.createInitialUserDataOnly()
-            }
-        }
-    }
+//    private func setupInitialData() {
+//        guard let uid = userId else { return }
+//
+//        database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
+//            if !(snap.exists()) {
+//                self?.createInitialUserDataOnly()
+//            }
+//        }
+//
+//        loadActiveDateSession()
+//    }
 
     private func createInitialUserDataOnly() {
         guard let uid = userId else { return }
@@ -825,7 +1327,7 @@ class RomanceAppViewModel: ObservableObject {
         database.child("messages")
             .queryOrdered(byChild: "conversationId")
             .queryEqual(toValue: conversationId)
-            .observe(.value) { [weak self] snapshot in
+            .observe(.value, with: { [weak self] snapshot in
                 guard let self = self else { return }
                 
                 var loadedMessages: [Message] = []
@@ -843,28 +1345,7 @@ class RomanceAppViewModel: ObservableObject {
                         self.messages = loadedMessages
                     }
                 }
-            }
-    }
-    
-    private func saveMessage(_ message: Message) {
-        guard let userId = self.userId,
-              let conversationId = getConversationId(),
-              hasValidCharacter else { return }
-        
-        let messageData: [String: Any] = [
-            "id": message.id.uuidString,
-            "conversationId": conversationId,
-            "senderId": message.isFromUser ? userId : character.id,
-            "receiverId": message.isFromUser ? character.id : userId,
-            "text": message.text,
-            "isFromUser": message.isFromUser,
-            "timestamp": message.timestamp.timeIntervalSince1970,
-            "dateLocation": message.dateLocation as Any,
-            "intimacyGained": message.intimacyGained,
-            "messageType": "text"
-        ]
-        
-        database.child("messages").child(message.id.uuidString).setValue(messageData)
+            })
     }
     
     private func messageFromFirebaseData(_ data: [String: Any]) -> Message? {
@@ -890,10 +1371,10 @@ class RomanceAppViewModel: ObservableObject {
         )
     }
     
-    private func getConversationId() -> String? {
-        guard let userId = self.userId, hasValidCharacter else { return nil }
-        return "\(userId)_\(character.id)"
-    }
+//    private func getConversationId() -> String? {
+//        guard let userId = self.userId, hasValidCharacter else { return nil }
+//        return "\(userId)_\(character.id)"
+//    }
 
     private func checkDateCountMilestones() {
         let milestones = [5, 10, 25, 50, 100, 200, 500, 1000]
@@ -922,6 +1403,9 @@ class RomanceAppViewModel: ObservableObject {
     private func scheduleTimeBasedEvents() {
         Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
             self.checkForTimeBasedEvents()
+            
+            // 新しい日になったらログインボーナスをチェック
+            self.checkForNewDayLoginBonus()
         }
     }
     
@@ -1082,5 +1566,12 @@ class RomanceAppViewModel: ObservableObject {
     
     var isAnonymousUser: Bool {
         return Auth.auth().currentUser?.isAnonymous ?? false
+    }
+}
+
+
+extension Image {
+    static func safe(_ name: String, fallback: String = "bg_fallback") -> Image {
+        UIImage(named: name) != nil ? Image(name) : Image(fallback)
     }
 }
