@@ -319,11 +319,17 @@ struct TopView: View {
             
             romanceViewModel.switchToCharacter(activeCharacter)
             
+            // 🔧 修正: キャラクター変更通知を追加
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                romanceViewModel.notifyCharacterChanged()
+            }
+            
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 romanceViewModel.forceRefreshCharacterIcon()
                 romanceViewModel.forceUpdateCharacterProperties()
             }
             
+            // 🔧 修正: さらに遅延させてアニメーション確実化
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 romanceViewModel.forceRefreshCharacterIcon()
             }

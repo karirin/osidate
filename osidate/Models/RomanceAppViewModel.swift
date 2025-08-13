@@ -289,23 +289,17 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
-    /// キャラクターアイコンを強制リフレッシュ（修正版）
-    func forceRefreshCharacterIcon() {
-        print("🔄 キャラクターアイコンを強制リフレッシュ")
-        print("   - キャラクター名: \(character.name)")
-        print("   - アイコンURL: \(character.iconURL ?? "なし")")
-        
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            
-            // 明示的に更新を通知
+    func notifyCharacterChanged() {
+        // UI更新のために少し遅延させる
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             self.objectWillChange.send()
-            
-            // 少し遅延を入れてもう一度更新を通知（確実に反映させるため）
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self.objectWillChange.send()
-            }
         }
+    }
+    
+    // アイコンのリフレッシュを強制的に行う
+    func forceRefreshCharacterIcon() {
+        // キャラクターアイコンの強制更新
+        self.objectWillChange.send()
     }
     
     /// キャラクター設定更新時の処理（修正版）

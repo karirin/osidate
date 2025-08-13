@@ -460,35 +460,48 @@ struct ContentView: View {
         VStack(spacing: 16) {
             // キャラクターアイコン
             ZStack {
-                CharacterIconView(character: viewModel.character, size: isInputFocused ? 110 : 150)
-                    .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
-                    .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
-                    .overlay(
-                        Group {
-                            if characterTalkingAnimation {
-                                ForEach(0..<3) { index in
-                                    Circle()
-                                        .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
-                                        .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
-                                        .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
-                                        .opacity(characterTalkingAnimation ? 0 : 0.7)
-                                        .animation(
-                                            .easeOut(duration: 1.0)
-                                            .delay(Double(index) * 0.2)
-                                            .repeatForever(autoreverses: false),
-                                            value: characterTalkingAnimation
-                                        )
-                                }
+                CharacterIconView(
+                    character: viewModel.character,
+                    size: isInputFocused ? 110 : 150,
+                    enableFloating: !isInputFocused && !viewModel.isLoading // ローディング中はアニメーション無効
+                )
+                .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
+                .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
+                .overlay(
+                    Group {
+                        if characterTalkingAnimation {
+                            ForEach(0..<3) { index in
+                                Circle()
+                                    .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
+                                    .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
+                                    .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
+                                    .opacity(characterTalkingAnimation ? 0 : 0.7)
+                                    .animation(
+                                        .easeOut(duration: 1.0)
+                                        .delay(Double(index) * 0.2)
+                                        .repeatForever(autoreverses: false),
+                                        value: characterTalkingAnimation
+                                    )
                             }
                         }
-                    )
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
-                    .id(viewModel.character.iconURL ?? "default")
+                    }
+                )
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
+                // 🔧 修正: キャラクターID変更時にアニメーションをリスタートさせるためのID追加
+                .id("floating_icon_\(viewModel.character.id)_\(viewModel.character.iconURL ?? "default")")
             }
             .padding(.vertical, 20)
             .offset(y: iconOffset)
             .onAppear {
+                // 初回表示時のアニメーション
                 showFloatingIcon = true
+            }
+            .onChange(of: viewModel.character.id) { newCharacterId in
+                // キャラクターID変更時のアニメーション再起動
+                print("🔄 CharacterIconView: キャラクターID変更を検出 - \(newCharacterId)")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    showFloatingIcon = true
+                }
             }
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.8), value: viewModel.currentDateSession != nil)
@@ -846,35 +859,47 @@ struct ContentView: View {
     
     private var modernFloatingIconView: some View {
         ZStack {
-            CharacterIconView(character: viewModel.character, size: isInputFocused ? 110 : 150)
-                .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
-                .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
-                .overlay(
-                    Group {
-                        if characterTalkingAnimation {
-                            ForEach(0..<3) { index in
-                                Circle()
-                                    .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
-                                    .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
-                                    .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
-                                    .opacity(characterTalkingAnimation ? 0 : 0.7)
-                                    .animation(
-                                        .easeOut(duration: 1.0)
-                                        .delay(Double(index) * 0.2)
-                                        .repeatForever(autoreverses: false),
-                                        value: characterTalkingAnimation
-                                    )
-                            }
+            CharacterIconView(
+                character: viewModel.character,
+                size: isInputFocused ? 110 : 150,
+                enableFloating: !isInputFocused && !viewModel.isLoading // ローディング中はアニメーション無効
+            )
+            .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
+            .shadow(color: intimacyColor.opacity(showMessageBubble ? 0.6 : 0.4), radius: 20, x: 0, y: 10)
+            .overlay(
+                Group {
+                    if characterTalkingAnimation {
+                        ForEach(0..<3) { index in
+                            Circle()
+                                .stroke(intimacyColor.opacity(0.3), lineWidth: 2)
+                                .frame(width: 130 + CGFloat(index * 15), height: 130 + CGFloat(index * 15))
+                                .scaleEffect(characterTalkingAnimation ? 1.2 : 0.8)
+                                .opacity(characterTalkingAnimation ? 0 : 0.7)
+                                .animation(
+                                    .easeOut(duration: 1.0)
+                                    .delay(Double(index) * 0.2)
+                                    .repeatForever(autoreverses: false),
+                                    value: characterTalkingAnimation
+                                )
                         }
                     }
-                )
-                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
-                .id(viewModel.character.iconURL ?? "default")
+                }
+            )
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
+            // 🔧 修正: キャラクターID変更時にアニメーションをリスタートさせるためのID追加
+            .id("floating_icon_main_\(viewModel.character.id)_\(viewModel.character.iconURL ?? "default")")
         }
         .padding(.vertical, 20)
         .offset(y: iconOffset)
         .onAppear {
             showFloatingIcon = true
+        }
+        .onChange(of: viewModel.character.id) { newCharacterId in
+            // キャラクターID変更時のアニメーション再起動
+            print("🔄 CharacterIconView: キャラクターID変更を検出 - \(newCharacterId)")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                showFloatingIcon = true
+            }
         }
     }
     
