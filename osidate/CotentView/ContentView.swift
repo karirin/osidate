@@ -956,10 +956,13 @@ struct ContentView: View {
                 HStack(spacing: 12) {
                     TextField("", text: $messageText, prompt: Text("メッセージを入力...").foregroundColor(.gray.opacity(0.6)))
                         .textFieldStyle(PlainTextFieldStyle())
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
                         .disabled(!viewModel.isAuthenticated)
                         .focused($isInputFocused)
                         .font(.body)
                         .foregroundColor(.primary)
+                        .submitLabel(.send)
                         .onSubmit {
                             sendMessage()
                         }
@@ -1016,7 +1019,8 @@ struct ContentView: View {
                             .scaleEffect(pulseAnimation ? 1.1 : 1.0)
                     }
                 }
-                .disabled(messageText.isEmpty || !viewModel.isAuthenticated)
+                .disabled(messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !viewModel.isAuthenticated)
+
                 .scaleEffect(messageText.isEmpty ? 0.9 : 1.0)
                 .animation(.spring(response: 0.3, dampingFraction: 0.7), value: messageText.isEmpty)
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: pulseAnimation)
@@ -1028,17 +1032,20 @@ struct ContentView: View {
     
     // MARK: - Helper Functions
     private func sendMessage() {
-        guard !messageText.isEmpty else { return }
-        
+        let text = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        // 先にクリア＆必要ならフォーカスも外す
+        messageText = ""
+        // isInputFocused = false  // 残る場合は有効化
+
         showCharacterListening()
-        
+
         if let message = viewModel.messages.last, viewModel.currentDateSession != nil {
             viewModel.updateDateSessionOnMessage(message)
         }
-        
-        viewModel.sendMessage(messageText)
-        messageText = ""
-        
+
+        viewModel.sendMessage(text)
         triggerPulseAnimation()
     }
     

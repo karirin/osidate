@@ -362,7 +362,7 @@ struct CharacterSelectorView: View {
         ScrollView {
             LazyVGrid(
                 columns: Array(repeating: .init(.flexible(), spacing: 16), count: 3),
-                spacing: 20
+                spacing: 0
             ) {
                 ForEach(Array(filteredCharacters.enumerated()), id: \.element.id) { index, character in
                     ModernCharacterCard(
@@ -378,7 +378,7 @@ struct CharacterSelectorView: View {
                     )
                     .offset(y: animationOffset)
                     .opacity(animationOpacity)
-                    .padding(.top, 5)
+                    .padding(.top)
                     .animation(
                         .spring(response: 0.8, dampingFraction: 0.8)
                         .delay(0.4 + Double(index) * 0.1),
