@@ -30,6 +30,8 @@ struct SettingsView: View {
     @State private var alertMessage = ""
     @State private var iconScale: CGFloat = 1.0
     
+    @State private var showingLoginBonusHistory = false
+    
     private struct CroppingItem: Identifiable {
         let id = UUID()
         let image: UIImage
@@ -48,6 +50,7 @@ struct SettingsView: View {
                         appearanceSettingsSection
                         userNicknameSettingsSection  // 🌟 新規追加
                         anniversarySettingsSection
+                        loginBonusSection
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 32)
@@ -207,6 +210,195 @@ struct SettingsView: View {
     
     private var hasCustomBackground: Bool {
         return viewModel.character.backgroundURL != nil && !viewModel.character.backgroundURL!.isEmpty
+    }
+    
+    private var loginBonusSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("ログインボーナス")
+                .font(.headline)
+                .fontWeight(.bold)
+                .foregroundColor(.primary)
+            
+            VStack(spacing: 16) {
+                // 現在のログイン状況
+                loginStatusCard
+                
+                // ログインボーナス管理ボタン
+                loginBonusButtons
+            }
+        }
+        .padding()
+//        .background(cardColor)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+//        .offset(y: cardAppearOffset)
+//        .opacity(cardAppearOpacity)
+//        .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.6), value: cardAppearOffset)
+    }
+
+    private var loginStatusCard: some View {
+        VStack(spacing: 16) {
+            // ステータス表示
+            HStack(spacing: 20) {
+                StatusBadge(
+                    icon: "flame.fill",
+                    title: "連続ログイン",
+                    value: "\(viewModel.loginBonusManager.currentStreak)日",
+                    color: .orange
+                )
+                
+                StatusBadge(
+                    icon: "calendar.badge.plus",
+                    title: "累計ログイン",
+                    value: "\(viewModel.loginBonusManager.totalLoginDays)日",
+                    color: .green
+                )
+            }
+            
+            HStack(spacing: 20) {
+                StatusBadge(
+                    icon: "heart.circle.fill",
+                    title: "獲得親密度",
+                    value: "+\(viewModel.loginBonusManager.getTotalIntimacyFromBonuses())",
+                    color: .pink
+                )
+                
+                StatusBadge(
+                    icon: "gift.fill",
+                    title: "受取回数",
+                    value: "\(viewModel.loginBonusManager.loginHistory.count)回",
+                    color: .purple
+                )
+            }
+            
+            // 今日のステータス
+            let todayStatus = viewModel.getTodayLoginStatus()
+            HStack(spacing: 8) {
+                Image(systemName: todayStatus.hasClaimed ? "checkmark.circle.fill" : "clock.fill")
+                    .foregroundColor(todayStatus.hasClaimed ? .green : .orange)
+                
+                Text(todayStatus.hasClaimed ? "今日のボーナス受取済み" : "今日のボーナス受取可能")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(todayStatus.hasClaimed ? .green : .orange)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background((todayStatus.hasClaimed ? Color.green : Color.orange).opacity(0.1))
+            .cornerRadius(8)
+        }
+    }
+
+    private var loginBonusButtons: some View {
+        VStack(spacing: 12) {
+            // ボーナス受取ボタン
+            Button(action: {
+                viewModel.showLoginBonusManually()
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "gift.fill")
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Text("ログインボーナス")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    if viewModel.loginBonusManager.availableBonus != nil {
+                        Circle()
+                            .fill(.red)
+                            .frame(width: 8, height: 8)
+                    }
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .foregroundColor(.primary)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+            }
+            
+            // 履歴表示ボタン
+            Button(action: {
+                showingLoginBonusHistory = true
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Text("ログイン履歴")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .foregroundColor(.primary)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+            }
+            
+            // デバッグ用リセットボタン（開発時のみ表示）
+            #if DEBUG
+            Button(action: {
+                viewModel.resetLoginBonusForDebug()
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .medium))
+                    
+                    Text("ログインボーナスリセット (デバッグ)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                    
+                    Spacer()
+                }
+                .foregroundColor(.red)
+                .padding()
+                .background(Color.red.opacity(0.1))
+                .cornerRadius(12)
+            }
+            #endif
+        }
+    }
+
+    struct StatusBadge: View {
+        let icon: String
+        let title: String
+        let value: String
+        let color: Color
+        
+        var body: some View {
+            VStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.title3)
+                    .foregroundColor(color)
+                
+                Text(value)
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                
+                Text(title)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(color.opacity(0.1))
+            .cornerRadius(10)
+        }
     }
     
     private var appearanceSettingsSection: some View {

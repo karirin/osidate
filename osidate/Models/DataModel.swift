@@ -322,98 +322,6 @@ struct DateSession {
     }
 }
 
-// MARK: - Completed Date Model
-
-struct CompletedDate: Identifiable, Codable {
-    let id: UUID
-    let location: DateLocation
-    let startTime: Date
-    let endTime: Date
-    let duration: Int // 秒
-    let messagesExchanged: Int
-    let intimacyGained: Int
-    
-    init(location: DateLocation, startTime: Date, endTime: Date, duration: Int, messagesExchanged: Int, intimacyGained: Int) {
-        self.id = UUID()
-        self.location = location
-        self.startTime = startTime
-        self.endTime = endTime
-        self.duration = duration
-        self.messagesExchanged = messagesExchanged
-        self.intimacyGained = intimacyGained
-    }
-    
-    init(id: UUID, location: DateLocation, startTime: Date, endTime: Date, duration: Int, messagesExchanged: Int, intimacyGained: Int) {
-        self.id = id
-        self.location = location
-        self.startTime = startTime
-        self.endTime = endTime
-        self.duration = duration
-        self.messagesExchanged = messagesExchanged
-        self.intimacyGained = intimacyGained
-    }
-    
-    var durationFormatted: String {
-        let hours = duration / 3600
-        let minutes = (duration % 3600) / 60
-        
-        if hours > 0 {
-            return "\(hours)時間\(minutes)分"
-        } else {
-            return "\(minutes)分"
-        }
-    }
-}
-
-// MARK: - Date Statistics
-
-struct DateStatistics {
-    let totalDates: Int
-    let totalDuration: Int
-    let averageDuration: Int
-    let mostPopularType: DateType?
-    let dateTypeDistribution: [DateType: Int]
-    let longestDate: CompletedDate?
-    let recentDates: [CompletedDate]
-    
-    init(completedDates: [CompletedDate]) {
-        self.totalDates = completedDates.count
-        self.totalDuration = completedDates.reduce(0) { $0 + $1.duration }
-        self.averageDuration = totalDates > 0 ? totalDuration / totalDates : 0
-        
-        self.dateTypeDistribution = Dictionary(grouping: completedDates, by: { $0.location.type })
-            .mapValues { $0.count }
-        
-        self.mostPopularType = dateTypeDistribution.max(by: { $0.value < $1.value })?.key
-        
-        self.longestDate = completedDates.max(by: { $0.duration < $1.duration })
-        
-        self.recentDates = Array(completedDates.sorted(by: { $0.startTime > $1.startTime }).prefix(5))
-    }
-    
-    var totalDurationFormatted: String {
-        let hours = totalDuration / 3600
-        let minutes = (totalDuration % 3600) / 60
-        
-        if hours > 0 {
-            return "\(hours)時間\(minutes)分"
-        } else {
-            return "\(minutes)分"
-        }
-    }
-    
-    var averageDurationFormatted: String {
-        let hours = averageDuration / 3600
-        let minutes = (averageDuration % 3600) / 60
-        
-        if hours > 0 {
-            return "\(hours)時間\(minutes)分"
-        } else {
-            return "\(minutes)分"
-        }
-    }
-}
-
 // MARK: - DateLocation Extensions for Messages
 
 extension DateLocation {
@@ -569,22 +477,5 @@ extension DateLocation {
         }
         
         return messages.randomElement()
-    }
-}
-
-struct LocationUnlockStats {
-    let totalLocations: Int
-    let unlockedLocations: Int
-    let lockedLocations: Int
-    let unlockedByType: [DateType: Int]
-    let lockedByType: [DateType: Int]
-    let unlockProgress: Double // 0.0 - 1.0
-    
-    var unlockPercentage: Int {
-        return Int(unlockProgress * 100)
-    }
-    
-    var progressDescription: String {
-        return "\(unlockedLocations) / \(totalLocations) 解放済み (\(unlockPercentage)%)"
     }
 }
