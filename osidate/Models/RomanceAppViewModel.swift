@@ -27,8 +27,6 @@ class RomanceAppViewModel: ObservableObject {
 
     // MARK: - Date System Properties
     @Published var currentDateSession: DateSession? = nil
-    @Published var dateHistory: [CompletedDate] = []
-    @Published var intimacyMilestones: [IntimacyMilestone] = []
     @Published var showingIntimacyLevelUp = false
     @Published var newIntimacyStage: IntimacyStage? = nil
     @Published var infiniteDateCount = 0
@@ -191,9 +189,6 @@ class RomanceAppViewModel: ObservableObject {
     private func loadCharacterSpecificData() {
         if character.isValidCharacter {
             loadMessages()
-            loadDateHistory()
-            loadIntimacyMilestones()
-            loadActiveDateSession()
             updateAvailableLocations()
             
             // キャラクターデータも再読み込み
@@ -337,8 +332,6 @@ class RomanceAppViewModel: ObservableObject {
                 self.isAuthenticated = false
                 self.isLoading = false
                 self.messages.removeAll()
-                self.dateHistory.removeAll()
-                self.intimacyMilestones.removeAll()
                 self.currentDateSession = nil
                 self.character = Character()
                 self.updateAvailableLocations()
@@ -380,9 +373,6 @@ class RomanceAppViewModel: ObservableObject {
             character.unlockedInfiniteMode = true
             showInfiniteModeUnlockedMessage()
         }
-        
-        // マイルストーン記録
-        recordIntimacyMilestone(oldLevel: oldLevel, newLevel: character.intimacyLevel, reason: reason)
         
         // 🔧 最適化：親密度変更時に即座に保存
         saveCharacterDataComplete()
@@ -491,19 +481,6 @@ class RomanceAppViewModel: ObservableObject {
             self?.messages.append(infiniteMessage)
         }
         saveMessage(infiniteMessage)
-    }
-
-    /// 親密度マイルストーンを記録
-    private func recordIntimacyMilestone(oldLevel: Int, newLevel: Int, reason: String) {
-        let milestone = IntimacyMilestone(
-            achievedLevel: newLevel,
-            previousLevel: oldLevel,
-            achievedAt: Date(),
-            reason: reason
-        )
-        
-        intimacyMilestones.append(milestone)
-        saveIntimacyMilestone(milestone)
     }
 
     // MARK: - データ管理（最適化）
@@ -623,8 +600,6 @@ class RomanceAppViewModel: ObservableObject {
             infiniteDateCount += 1
         }
         
-        saveDateSession(session)
-        
         print("🏖️ デート開始: \(location.name)")
         print("==================== デート開始処理完了 ====================\n")
     }
@@ -648,17 +623,6 @@ class RomanceAppViewModel: ObservableObject {
         let endTime = Date()
         let duration = Int(endTime.timeIntervalSince(session.startTime))
         
-        let completedDate = CompletedDate(
-            location: session.location,
-            startTime: session.startTime,
-            endTime: endTime,
-            duration: duration,
-            messagesExchanged: session.messagesExchanged,
-            intimacyGained: session.intimacyGained + session.location.intimacyBonus
-        )
-        
-        dateHistory.append(completedDate)
-        
         let endMessage = Message(
             text: session.location.getEndMessage(
                 characterName: character.name,
@@ -680,9 +644,6 @@ class RomanceAppViewModel: ObservableObject {
         let totalBonus = timeBonus + session.location.intimacyBonus
         
         increaseIntimacy(by: totalBonus, reason: "デート完了: \(session.location.name) (時間:\(timeBonus) + スポット:\(session.location.intimacyBonus))")
-        
-        saveCompletedDate(completedDate)
-        checkDateCompletionEvents(completedDate)
         
         if let userId = currentUserID {
             database.child("dateSessions").child(userId).child("isActive").setValue(false)
@@ -719,10 +680,6 @@ class RomanceAppViewModel: ObservableObject {
             print("❌ 認証またはキャラクター無効")
             return
         }
-        
-        loadCurrentDateSessionForMessage { [weak self] dateSession in
-            self?.processSendMessage(text, with: dateSession)
-        }
     }
     
     private func processSendMessage(_ text: String, with dateSession: DateSession?) {
@@ -746,7 +703,6 @@ class RomanceAppViewModel: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 self?.currentDateSession = session
             }
-            saveDateSession(session)
         }
         
         // OpenAI Service を使用してAI応答を生成
@@ -782,7 +738,6 @@ class RomanceAppViewModel: ObservableObject {
             if var session = dateSession {
                 session.intimacyGained += responseBonus
                 currentDateSession = session
-                saveDateSession(session)
             }
             
             // AI応答による親密度増加
@@ -843,8 +798,6 @@ class RomanceAppViewModel: ObservableObject {
                 self?.createInitialUserDataOnly()
             }
         }
-        
-        loadActiveDateSession()
     }
 
     private func createInitialUserDataOnly() {
@@ -942,289 +895,6 @@ class RomanceAppViewModel: ObservableObject {
         return "\(userId)_\(character.id)"
     }
 
-    // MARK: - デートセッション管理
-    
-    private func saveDateSession(_ session: DateSession) {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        let sessionData: [String: Any] = [
-            "locationName": session.location.name,
-            "locationType": session.location.type.rawValue,
-            "startTime": session.startTime.timeIntervalSince1970,
-            "messagesExchanged": session.messagesExchanged,
-            "intimacyGained": session.intimacyGained,
-            "characterName": session.characterName,
-            "isActive": true
-        ]
-        
-        database.child("dateSessions").child(userId).setValue(sessionData)
-    }
-    
-    func loadActiveDateSession() {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        database.child("dateSessions").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
-            guard let self = self,
-                  let sessionData = snapshot.value as? [String: Any],
-                  let isActive = sessionData["isActive"] as? Bool,
-                  isActive else { return }
-            
-            if let locationName = sessionData["locationName"] as? String,
-               let locationTypeString = sessionData["locationType"] as? String,
-               let locationType = DateType(rawValue: locationTypeString),
-               let startTimeInterval = sessionData["startTime"] as? TimeInterval,
-               let messagesExchanged = sessionData["messagesExchanged"] as? Int,
-               let intimacyGained = sessionData["intimacyGained"] as? Int,
-               let characterName = sessionData["characterName"] as? String {
-                
-                if let location = DateLocation.availableDateLocations.first(where: {
-                    $0.name == locationName && $0.type == locationType
-                }) {
-                    
-                    var restoredSession = DateSession(
-                        location: location,
-                        startTime: Date(timeIntervalSince1970: startTimeInterval),
-                        characterName: characterName
-                    )
-                    restoredSession.messagesExchanged = messagesExchanged
-                    restoredSession.intimacyGained = intimacyGained
-                    
-                    DispatchQueue.main.async {
-                        self.currentDateSession = restoredSession
-                    }
-                }
-            }
-        }
-    }
-    
-    private func loadCurrentDateSessionForMessage(completion: @escaping (DateSession?) -> Void) {
-        guard let userId = currentUserID, hasValidCharacter else {
-            completion(nil)
-            return
-        }
-        
-        database.child("dateSessions").child(userId).observeSingleEvent(of: .value) { [weak self] snapshot in
-            guard let self = self else {
-                completion(nil)
-                return
-            }
-            
-            if let sessionData = snapshot.value as? [String: Any],
-               let isActive = sessionData["isActive"] as? Bool,
-               isActive {
-                
-                if let locationName = sessionData["locationName"] as? String,
-                   let locationTypeString = sessionData["locationType"] as? String,
-                   let locationType = DateType(rawValue: locationTypeString),
-                   let startTimeInterval = sessionData["startTime"] as? TimeInterval,
-                   let messagesExchanged = sessionData["messagesExchanged"] as? Int,
-                   let intimacyGained = sessionData["intimacyGained"] as? Int,
-                   let characterName = sessionData["characterName"] as? String {
-                    
-                    if let location = DateLocation.availableDateLocations.first(where: {
-                        $0.name == locationName && $0.type == locationType
-                    }) {
-                        
-                        var restoredSession = DateSession(
-                            location: location,
-                            startTime: Date(timeIntervalSince1970: startTimeInterval),
-                            characterName: characterName
-                        )
-                        restoredSession.messagesExchanged = messagesExchanged
-                        restoredSession.intimacyGained = intimacyGained
-                        
-                        DispatchQueue.main.async {
-                            self.currentDateSession = restoredSession
-                        }
-                        
-                        completion(restoredSession)
-                    } else {
-                        completion(nil)
-                    }
-                } else {
-                    completion(nil)
-                }
-            } else {
-                completion(nil)
-            }
-        }
-    }
-
-    // MARK: - デート履歴管理
-    
-    func loadDateHistory() {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        database.child("dateHistory").child(userId).observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            var loadedHistory: [CompletedDate] = []
-            
-            if let historyData = snapshot.value as? [String: [String: Any]] {
-                for (_, dateData) in historyData {
-                    if let completedDate = self.completedDateFromFirebaseData(dateData) {
-                        loadedHistory.append(completedDate)
-                    }
-                }
-                
-                loadedHistory.sort { $0.startTime > $1.startTime }
-                
-                DispatchQueue.main.async {
-                    self.dateHistory = loadedHistory
-                }
-            }
-        }
-    }
-    
-    private func saveCompletedDate(_ completedDate: CompletedDate) {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        let completedDateData: [String: Any] = [
-            "id": completedDate.id.uuidString,
-            "locationName": completedDate.location.name,
-            "locationType": completedDate.location.type.rawValue,
-            "startTime": completedDate.startTime.timeIntervalSince1970,
-            "endTime": completedDate.endTime.timeIntervalSince1970,
-            "duration": completedDate.duration,
-            "messagesExchanged": completedDate.messagesExchanged,
-            "intimacyGained": completedDate.intimacyGained
-        ]
-        
-        database.child("dateHistory").child(userId).child(completedDate.id.uuidString).setValue(completedDateData)
-    }
-    
-    private func completedDateFromFirebaseData(_ data: [String: Any]) -> CompletedDate? {
-        guard let idString = data["id"] as? String,
-              let id = UUID(uuidString: idString),
-              let locationName = data["locationName"] as? String,
-              let locationTypeString = data["locationType"] as? String,
-              let locationType = DateType(rawValue: locationTypeString),
-              let startTimeInterval = data["startTime"] as? TimeInterval,
-              let endTimeInterval = data["endTime"] as? TimeInterval,
-              let duration = data["duration"] as? Int,
-              let messagesExchanged = data["messagesExchanged"] as? Int,
-              let intimacyGained = data["intimacyGained"] as? Int else {
-            return nil
-        }
-        
-        let location = DateLocation.availableDateLocations.first {
-            $0.name == locationName && $0.type == locationType
-        } ?? DateLocation.availableDateLocations.first!
-        
-        return CompletedDate(
-            id: id,
-            location: location,
-            startTime: Date(timeIntervalSince1970: startTimeInterval),
-            endTime: Date(timeIntervalSince1970: endTimeInterval),
-            duration: duration,
-            messagesExchanged: messagesExchanged,
-            intimacyGained: intimacyGained
-        )
-    }
-
-    // MARK: - 親密度マイルストーン管理
-
-    private func loadIntimacyMilestones() {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        database.child("intimacyMilestones").child(userId).observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            var loadedMilestones: [IntimacyMilestone] = []
-            
-            if let milestonesData = snapshot.value as? [String: [String: Any]] {
-                for (_, milestoneData) in milestonesData {
-                    if let milestone = self.intimacyMilestoneFromFirebaseData(milestoneData) {
-                        loadedMilestones.append(milestone)
-                    }
-                }
-                
-                loadedMilestones.sort { $0.achievedAt > $1.achievedAt }
-                
-                DispatchQueue.main.async {
-                    self.intimacyMilestones = loadedMilestones
-                }
-            }
-        }
-    }
-
-    private func saveIntimacyMilestone(_ milestone: IntimacyMilestone) {
-        guard let userId = currentUserID, hasValidCharacter else { return }
-        
-        let milestoneData: [String: Any] = [
-            "id": milestone.id.uuidString,
-            "achievedLevel": milestone.achievedLevel,
-            "previousLevel": milestone.previousLevel,
-            "achievedAt": milestone.achievedAt.timeIntervalSince1970,
-            "reason": milestone.reason
-        ]
-        
-        database.child("intimacyMilestones").child(userId).child(milestone.id.uuidString).setValue(milestoneData)
-    }
-
-    private func intimacyMilestoneFromFirebaseData(_ data: [String: Any]) -> IntimacyMilestone? {
-        guard let idString = data["id"] as? String,
-              let id = UUID(uuidString: idString),
-              let achievedLevel = data["achievedLevel"] as? Int,
-              let previousLevel = data["previousLevel"] as? Int,
-              let achievedAtInterval = data["achievedAt"] as? TimeInterval,
-              let reason = data["reason"] as? String else {
-            return nil
-        }
-        
-        return IntimacyMilestone(
-            id: id,
-            achievedLevel: achievedLevel,
-            previousLevel: previousLevel,
-            achievedAt: Date(timeIntervalSince1970: achievedAtInterval),
-            reason: reason
-        )
-    }
-
-    // MARK: - イベント管理
-
-    func checkDateCompletionEvents(_ completedDate: CompletedDate) {
-        // 長時間デートの実績
-        if completedDate.duration > 3600 {
-            let achievementMessage = Message(
-                text: "1時間以上も一緒にいてくれて、本当に嬉しいです！💕 こんなに長い時間を共有できるなんて、私たちの関係が深まってきた証拠ですね✨",
-                isFromUser: false,
-                timestamp: Date(),
-                dateLocation: nil,
-                intimacyGained: 5
-            )
-            
-            DispatchQueue.main.async { [weak self] in
-                self?.messages.append(achievementMessage)
-                self?.saveMessage(achievementMessage)
-            }
-            
-            increaseIntimacy(by: 5, reason: "長時間デート実績")
-        }
-        
-        // 特定のデートタイプ初回完了
-        let sameTypeCompletedDates = dateHistory.filter { $0.location.type == completedDate.location.type }
-        if sameTypeCompletedDates.count == 1 {
-            let firstTimeMessage = Message(
-                text: "\(completedDate.location.type.displayName)のデート、初めてでしたね！🎉 新しい体験を一緒にできて素敵でした。今度は違う場所も試してみませんか？",
-                isFromUser: false,
-                timestamp: Date(),
-                dateLocation: nil,
-                intimacyGained: 3
-            )
-            
-            DispatchQueue.main.async { [weak self] in
-                self?.messages.append(firstTimeMessage)
-                self?.saveMessage(firstTimeMessage)
-            }
-            
-            increaseIntimacy(by: 3, reason: "新デートタイプ初回完了")
-        }
-        
-        // デート回数マイルストーン
-        checkDateCountMilestones()
-    }
-
     private func checkDateCountMilestones() {
         let milestones = [5, 10, 25, 50, 100, 200, 500, 1000]
         
@@ -1315,7 +985,6 @@ class RomanceAppViewModel: ObservableObject {
         }
         
         currentDateSession = session
-        saveDateSession(session)
     }
     
     /// データ削除（テスト用）
@@ -1354,8 +1023,6 @@ class RomanceAppViewModel: ObservableObject {
         
         DispatchQueue.main.async {
             self.messages.removeAll()
-            self.dateHistory.removeAll()
-            self.intimacyMilestones.removeAll()
             self.currentDateSession = nil
             self.character = Character()
             self.infiniteDateCount = 0
@@ -1415,31 +1082,5 @@ class RomanceAppViewModel: ObservableObject {
     
     var isAnonymousUser: Bool {
         return Auth.auth().currentUser?.isAnonymous ?? false
-    }
-}
-
-// MARK: - 親密度マイルストーン構造体
-
-struct IntimacyMilestone: Identifiable, Codable {
-    let id: UUID
-    let achievedLevel: Int
-    let previousLevel: Int
-    let achievedAt: Date
-    let reason: String
-    
-    init(achievedLevel: Int, previousLevel: Int, achievedAt: Date, reason: String) {
-        self.id = UUID()
-        self.achievedLevel = achievedLevel
-        self.previousLevel = previousLevel
-        self.achievedAt = achievedAt
-        self.reason = reason
-    }
-    
-    init(id: UUID, achievedLevel: Int, previousLevel: Int, achievedAt: Date, reason: String) {
-        self.id = id
-        self.achievedLevel = achievedLevel
-        self.previousLevel = previousLevel
-        self.achievedAt = achievedAt
-        self.reason = reason
     }
 }
