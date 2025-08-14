@@ -427,7 +427,7 @@ struct ContentView: View {
                                     removal: .move(edge: .top).combined(with: .opacity)
                                 ))
                                 .padding(.horizontal)
-                                .padding(.vertical)
+                                .padding(.top, 20)
                                 .opacity(isInputFocused ? 0 : 1)
                                 .frame(height: isInputFocused ? 0 : geometry.size.height * 0.1)
                         }
@@ -1058,11 +1058,11 @@ struct ContentView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
-                .background(
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 25))
+                .overlay(
                     RoundedRectangle(cornerRadius: 25)
-                        .fill(.ultraThinMaterial)
                         .stroke(
-                            isInputFocused ? primaryColor.opacity(0.5) : Color.clear,
+                            isInputFocused ? primaryColor.opacity(0.5) : .clear,
                             lineWidth: 2
                         )
                 )

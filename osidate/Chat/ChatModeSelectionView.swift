@@ -106,8 +106,11 @@ struct ChatModeCard: View {
             .padding(20)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isSelected ? .blue.opacity(0.05) : .clear)
-                    .stroke(isSelected ? .blue.opacity(0.3) : .gray.opacity(0.2), lineWidth: 2)
+                    .foregroundColor(isSelected ? Color.blue.opacity(0.05) : Color.clear)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isSelected ? Color.blue.opacity(0.3) : Color.gray.opacity(0.2), lineWidth: 2)
             )
         }
         .scaleEffect(isSelected ? 1.02 : 1.0)

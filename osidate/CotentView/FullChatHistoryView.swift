@@ -209,10 +209,23 @@ struct FullChatHistoryView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
             .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThickMaterial)
-                    .stroke( primaryGradient, lineWidth: 2)
-                    .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+                Group {
+                    if #available(iOS 17.0, *) {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(.ultraThickMaterial)
+                            .stroke(primaryGradient, lineWidth: 2)
+                    } else {
+                        // iOS16では material を fill/stroke に直接使えない
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.clear)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                            )
+                    }
+                }
+                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
             )
             .scaleEffect(isSearchFocused ? 1.02 : 1.0)
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isSearchFocused)

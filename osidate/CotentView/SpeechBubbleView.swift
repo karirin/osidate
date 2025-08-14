@@ -26,15 +26,9 @@ struct SpeechBubbleView: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
                         .background(
-                            Rectangle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [Color(.systemGray5), Color(.systemGray6)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .cornerRadius(20)
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(.ultraThinMaterial)
+                                .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
                         )
                         .shadow(
                             color: Color.black.opacity(0.1),
