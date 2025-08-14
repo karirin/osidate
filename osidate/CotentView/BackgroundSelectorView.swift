@@ -354,12 +354,6 @@ struct BackgroundSelectorView: View {
                 }
                 
                 Spacer()
-                
-                Image(systemName: "sparkles")
-                    .font(.title3)
-                    .foregroundColor(accentColor)
-                    .rotationEffect(.degrees(shimmerOffset / 10))
-                    .animation(.linear(duration: 2).repeatForever(autoreverses: false), value: shimmerOffset)
             }
             .padding(.horizontal, 20)
             
@@ -389,8 +383,8 @@ struct BackgroundSelectorView: View {
                 Image(preset.imageName)
                     .resizable()
                     .scaledToFill()
-                    .frame(height: 140)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .frame(width: 80,height: 140)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 
                 // オーバーレイ
                 RoundedRectangle(cornerRadius: 16)
@@ -567,9 +561,14 @@ struct BackgroundSelectorView: View {
 extension PresetBackground {
     var displayName: String {
         switch imageName {
-        case "背景画像1": return "ロマンチック"
-        case "背景画像2": return "ナチュラル"
-        case "背景画像3": return "エレガント"
+        case "背景画像1": return "海辺のリゾート"
+        case "背景画像2": return "星空観測"
+        case "背景画像3": return "温泉"
+        case "背景画像4": return "花火大会"
+        case "背景画像5": return "花園"
+        case "背景画像6": return "夕日の見える丘"
+        case "背景画像7": return "水族館"
+        case "背景画像8": return "レストラン"
         default: return "背景"
         }
     }
@@ -709,11 +708,11 @@ struct PresetBackground: Identifiable {
         .init(imageName: "背景画像1"),
         .init(imageName: "背景画像2"),
         .init(imageName: "背景画像3"),
-        .init(imageName: "背景画像1"),
-        .init(imageName: "背景画像2"),
-        .init(imageName: "背景画像3"),
-        .init(imageName: "背景画像2"),
-        .init(imageName: "背景画像3")
+        .init(imageName: "背景画像4"),
+        .init(imageName: "背景画像5"),
+        .init(imageName: "背景画像6"),
+        .init(imageName: "背景画像7"),
+        .init(imageName: "背景画像8")
     ]
 }
 
@@ -812,10 +811,4 @@ private struct ProgressOverlay: View {
                 }
             )
     }
-}
-
-// MARK: - Preview
-#Preview {
-//    BackgroundSelectorView(viewModel: RomanceAppViewModel())
-    ContentView(viewModel: RomanceAppViewModel())
 }

@@ -134,7 +134,7 @@ struct SplashScreenView: View {
                             .mask(Circle().frame(width: 100, height: 100))
                     }
                     .scaleEffect(logoScale)
-                    .rotationEffect(.degrees(rotationAngle * 0.1))
+//                    .rotationEffect(.degrees(rotationAngle * 0.1))
                     
                     // フローティングエモジ
                     ForEach(0..<4, id: \.self) { index in
@@ -362,5 +362,11 @@ struct BackgroundParticle: View {
             position.x += CGFloat.random(in: -50...50)
             position.y += CGFloat.random(in: -100...100)
         }
+    }
+}
+
+struct SplashScreenView_Previews: PreviewProvider {
+    static var previews: some View {
+        SplashScreenView{}
     }
 }
