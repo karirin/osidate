@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "hot_air_balloon.png",
+      "filename" : "onAppear { withAnimation { proxy.scrollTo(bottomMarker, anchor .bottom)  ← 初回も最下部へ } } .onChange(of recentMessages.count) { _ in withAnimation { proxy.scrollTo(bottomMarker, anchor .bottom)  ← 新規メ (2).png",
       "idiom" : "universal",
       "scale" : "1x"
     },

@@ -110,7 +110,7 @@ class OpenAIService: ObservableObject {
             "model": "gpt-4.1-nano-2025-04-14",
             "messages": messages,
             "temperature": 0.8,
-            "max_tokens": 150
+            "max_tokens": 400
         ]
         
         print("\n🌐 OpenAI APIリクエスト送信中...")
