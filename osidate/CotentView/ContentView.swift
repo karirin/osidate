@@ -80,7 +80,7 @@ struct ContentView: View {
             BackgroundSelectorView(viewModel: viewModel)
         }
         .sheet(isPresented: $viewModel.showingSettings) {
-            SettingsView(viewModel: viewModel)
+            CharacterEditView(viewModel: viewModel)
         }
         .sheet(isPresented: $viewModel.showingDateSelector) {
             DateSelectorView(viewModel: viewModel)

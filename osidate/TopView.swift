@@ -282,7 +282,7 @@ struct TopView: View {
                 }
                 .id("date_\(currentCharacterId)")
             
-            SettingsView(viewModel: romanceViewModel)
+            CharacterEditView(viewModel: romanceViewModel)
                 .tabItem {
                     Image(systemName: "person.text.rectangle")
                     Text("推しの編集")
@@ -296,6 +296,12 @@ struct TopView: View {
             .tabItem {
                 Image(systemName: "person.2")
                 Text("推しの変更")
+            }
+            
+            SettingsView()
+            .tabItem {
+                Image(systemName: "gear")
+                Text("設定")
             }
         }
         .id("main_tab_\(currentCharacterId)")

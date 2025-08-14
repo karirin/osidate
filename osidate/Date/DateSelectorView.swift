@@ -261,6 +261,7 @@ struct DateSelectorView: View {
                  isSheetReady = false
              }
          }
+        .navigationViewStyle(StackNavigationViewStyle())
      }
     
     private func handleDateStart(_ dateLocation: DateLocation) {

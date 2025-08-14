@@ -116,6 +116,7 @@ struct CharacterSelectorView: View {
                 animateAppearance()
             }
         }
+        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     // MARK: - ヘッダーセクション
