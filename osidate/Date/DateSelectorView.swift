@@ -30,6 +30,10 @@ struct DateSelectorView: View {
     @State private var showingIntimacyRangeFilter = false
     @State private var showingDateTypeFilter = false
     
+    // 🔧 修正: Sheet表示の問題を解決するための状態管理
+    @State private var isSheetReady = false
+    @State private var pendingLocation: DateLocation? = nil
+    
     // 🌟 親密度範囲フィルター
     enum IntimacyRange: String, CaseIterable {
         case all = "all"
@@ -170,7 +174,7 @@ struct DateSelectorView: View {
         if selectedDateType != nil { count += 1 }
         return count
     }
-    
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -220,20 +224,29 @@ struct DateSelectorView: View {
              }
              .navigationTitle("デートを選ぶ")
              .navigationBarTitleDisplayMode(.inline)
+             // 🔧 修正: Sheet表示の改善
              .sheet(isPresented: $showingDateDetail) {
                  if let location = selectedLocation {
-                     DateDetailView(
+                     DateDetailViewWrapper(
                          viewModel: viewModel,
                          location: location,
                          onStartDate: { dateLocation in
-                             // 🔧 修正：デートを開始した場合はdismissしない
-                             if dateLocation.requiredIntimacy <= viewModel.character.intimacyLevel {
-                                 viewModel.startDate(at: dateLocation)
-                                 // dismiss() を削除 - デート開始後はDetailViewを閉じるだけ
-                                 showingDateDetail = false
-                             }
+                             handleDateStart(dateLocation)
                          }
                      )
+                 } else {
+                     // フォールバック表示
+                     VStack {
+                         Text("読み込み中...")
+                         ProgressView()
+                     }
+                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                     .onAppear {
+                         // selectedLocationがnilの場合は自動的にシートを閉じる
+                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                             showingDateDetail = false
+                         }
+                     }
                  }
              }
              .sheet(isPresented: $showingIntimacyFilter) {
@@ -243,10 +256,63 @@ struct DateSelectorView: View {
                  )
              }
              .onAppear {
+                 print("🔧 DateSelectorView.onAppear - 初期化開始")
                  animateCardsAppearance()
+                 
+                 // シートの準備完了フラグを設定
+                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                     isSheetReady = true
+                     
+                     // 待機中のロケーションがある場合は表示
+                     if let pending = pendingLocation {
+                         selectedLocation = pending
+                         pendingLocation = nil
+                         showingDateDetail = true
+                     }
+                 }
+             }
+             .onDisappear {
+                 print("🔧 DateSelectorView.onDisappear")
+                 isSheetReady = false
              }
          }
      }
+    
+    private func handleDateStart(_ dateLocation: DateLocation) {
+        print("🔧 DateSelectorView: デート開始処理")
+        
+        if dateLocation.requiredIntimacy <= viewModel.character.intimacyLevel {
+            viewModel.startDate(at: dateLocation)
+            
+            // Sheet を閉じる
+            showingDateDetail = false
+            selectedLocation = nil
+            
+            // 少し遅延してからDateSelectorView自体も閉じる
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                dismiss()
+            }
+        } else {
+            // デートスポットがロックされている場合はシートのみ閉じる
+            showingDateDetail = false
+            selectedLocation = nil
+        }
+    }
+    
+    // 🔧 修正: デートロケーションカードのタップ処理を改善
+    private func handleLocationCardTap(_ location: DateLocation) {
+        print("🔧 DateSelectorView: ロケーションカードタップ - \(location.name)")
+        
+        if isSheetReady {
+            selectedLocation = location
+            showingDateDetail = true
+            print("🔧 Sheet即座表示")
+        } else {
+            // まだ準備ができていない場合は待機
+            pendingLocation = location
+            print("🔧 Sheet準備待ち - \(location.name)を待機リストに追加")
+        }
+    }
     
     private var intimacyStatusSection: some View {
         VStack(spacing: 16) {
@@ -341,6 +407,276 @@ struct DateSelectorView: View {
                     .font(.system(size: 30 * 0.4))
                     .foregroundColor(.white)
             )
+    }
+    
+    private func dateLocationCard(location: DateLocation) -> some View {
+        Button(action: {
+            handleLocationCardTap(location)
+        }) {
+            VStack(alignment: .leading, spacing: 12) {
+                // 背景画像セクション
+                ZStack {
+                    if UIImage(named: location.backgroundImage) != nil {
+                        Image(location.backgroundImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(height: 120)
+                            .clipped()
+                    } else {
+                        LinearGradient(
+                            colors: [
+                                location.type.color.opacity(0.6),
+                                location.type.color.opacity(0.3)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                        .frame(height: 120)
+                    }
+                    
+                    LinearGradient(
+                        colors: [
+                            Color.black.opacity(0.1),
+                            Color.black.opacity(0.4)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 120)
+                    
+                    VStack {
+                        HStack {
+                            // カテゴリアイコンと親密度要求レベル
+                            VStack(spacing: 4) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: location.type.icon)
+                                        .font(.caption2)
+                                    Text(location.type.displayName)
+                                        .font(.system(size: 9, weight: .medium))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(location.type.color.opacity(0.8))
+                                .cornerRadius(6)
+                                
+                                // 🌟 親密度表示（利用可能性に応じて色分け）
+                                HStack(spacing: 2) {
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 8))
+                                    Text("\(location.requiredIntimacy)")
+                                        .font(.system(size: 9, weight: .bold))
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(
+                                    location.requiredIntimacy <= viewModel.character.intimacyLevel
+                                    ? Color.green.opacity(0.8)
+                                    : Color.red.opacity(0.8)
+                                )
+                                .cornerRadius(4)
+                            }
+                            Spacer()
+                            
+                            // 🌟 親密度ボーナス表示
+                            if location.intimacyBonus > 0 {
+                                VStack(spacing: 2) {
+                                    Text("+\(location.intimacyBonus)")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.yellow)
+                                    
+                                    Image(systemName: "heart.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(.yellow)
+                                }
+                                .padding(4)
+                                .background(Color.black.opacity(0.6))
+                                .cornerRadius(6)
+                            }
+                        }
+                        Spacer()
+                        
+                        // デート名をオーバーレイ
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(location.name)
+                                    .font(adaptiveFontSizeForLocationName(location.name))
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .shadow(color: .black.opacity(0.7), radius: 2, x: 0, y: 1)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.6)
+                                
+                                // 🌟 ロック状態表示
+                                if location.requiredIntimacy > viewModel.character.intimacyLevel {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "lock.fill")
+                                            .font(.system(size: 8))
+                                        Text("ロック中")
+                                            .font(.system(size: 8, weight: .bold))
+                                    }
+                                    .foregroundColor(.red)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(4)
+                                } else if location.isSpecial {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "crown.fill")
+                                            .font(.system(size: 8))
+                                        Text("特別")
+                                            .font(.system(size: 8, weight: .bold))
+                                    }
+                                    .foregroundColor(.yellow)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(4)
+                                }
+                            }
+                            Spacer()
+                        }
+                    }
+                    .padding(12)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                
+                // 詳細情報セクション
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(location.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    
+                    HStack {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.caption2)
+                            Text("\(location.duration)分")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.secondary)
+                        
+                        Spacer()
+                        
+                        // 🌟 拡張された利用可能性表示
+                        Group {
+                            if location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption2)
+                                    Text("利用可能")
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.green)
+                            } else {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.caption2)
+                                    Text("要 \(location.requiredIntimacy)")
+                                        .font(.caption2)
+                                        .fontWeight(.medium)
+                                }
+                                .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+            .padding()
+            .background(cardColor)
+            .cornerRadius(16)
+            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+            
+            // 🌟 利用不可時のオーバーレイ（改善版）
+            .overlay(
+                Group {
+                    if location.requiredIntimacy > viewModel.character.intimacyLevel {
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.black.opacity(0.4))
+                            .overlay(
+                                VStack(spacing: 12) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.title)
+                                        .foregroundColor(.white)
+                                        .shadow(color: .black.opacity(0.5), radius: 2)
+                                    
+                                    VStack(spacing: 6) {
+                                        Text("親密度 \(location.requiredIntimacy) 必要")
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.white)
+                                            .multilineTextAlignment(.center)
+                                            .lineLimit(2)
+                                            .shadow(color: .black.opacity(0.7), radius: 1)
+                                        
+                                        Text("あと \(location.requiredIntimacy - viewModel.character.intimacyLevel)")
+                                            .font(.caption2)
+                                            .foregroundColor(.white.opacity(0.9))
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(Color.red.opacity(0.7))
+                                            .cornerRadius(8)
+                                    }
+                                    
+                                    // 🌟 解放のヒント
+                                    Text("💕 もっと会話して親密度を上げよう")
+                                        .font(.system(size: 9))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .multilineTextAlignment(.center)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(Color.blue.opacity(0.6))
+                                        .cornerRadius(6)
+                                }
+                            )
+                            .animation(.easeInOut(duration: 0.3), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
+                    }
+                }
+            )
+            
+            // 🌟 無限モードデートの特別表示
+            .overlay(
+                Group {
+                    if location.type == .infinite {
+                        VStack {
+                            HStack {
+                                Spacer()
+                                HStack(spacing: 4) {
+                                    Image(systemName: "infinity")
+                                        .font(.caption2)
+                                    Text("∞")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 3)
+                                .background(
+                                    LinearGradient(
+                                        colors: [.purple, .blue],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(8)
+                            }
+                            Spacer()
+                        }
+                        .padding(8)
+                    }
+                }
+            )
+        }
+        // 🌟 ロック状態に関係なくタップ可能（詳細は見れるが開始はできない）
+        .scaleEffect(location.requiredIntimacy > viewModel.character.intimacyLevel ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
     }
     
     // MARK: - 🌟 新しい検索・フィルターボタンセクション
@@ -762,278 +1098,6 @@ struct DateSelectorView: View {
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.8), value: cardAppearOffset)
     }
     
-    // 元のdateLocationCard関数はそのまま使用...
-    private func dateLocationCard(location: DateLocation) -> some View {
-        Button(action: {
-            selectedLocation = location
-            showingDateDetail = true
-        }) {
-            VStack(alignment: .leading, spacing: 12) {
-                // 背景画像セクション
-                ZStack {
-                    if UIImage(named: location.backgroundImage) != nil {
-                        Image(location.backgroundImage)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(height: 120)
-                            .clipped()
-                    } else {
-                        LinearGradient(
-                            colors: [
-                                location.type.color.opacity(0.6),
-                                location.type.color.opacity(0.3)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .frame(height: 120)
-                    }
-                    
-                    LinearGradient(
-                        colors: [
-                            Color.black.opacity(0.1),
-                            Color.black.opacity(0.4)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 120)
-                    
-                    VStack {
-                        HStack {
-                            // カテゴリアイコンと親密度要求レベル
-                            VStack(spacing: 4) {
-                                HStack(spacing: 4) {
-                                    Image(systemName: location.type.icon)
-                                        .font(.caption2)
-                                    Text(location.type.displayName)
-                                        .font(.system(size: 9, weight: .medium))
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.7)
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(location.type.color.opacity(0.8))
-                                .cornerRadius(6)
-                                
-                                // 🌟 親密度表示（利用可能性に応じて色分け）
-                                HStack(spacing: 2) {
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 8))
-                                    Text("\(location.requiredIntimacy)")
-                                        .font(.system(size: 9, weight: .bold))
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 2)
-                                .background(
-                                    location.requiredIntimacy <= viewModel.character.intimacyLevel
-                                    ? Color.green.opacity(0.8)
-                                    : Color.red.opacity(0.8)
-                                )
-                                .cornerRadius(4)
-                            }
-                            Spacer()
-                            
-                            // 🌟 親密度ボーナス表示
-                            if location.intimacyBonus > 0 {
-                                VStack(spacing: 2) {
-                                    Text("+\(location.intimacyBonus)")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.yellow)
-                                    
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundColor(.yellow)
-                                }
-                                .padding(4)
-                                .background(Color.black.opacity(0.6))
-                                .cornerRadius(6)
-                            }
-                        }
-                        Spacer()
-                        
-                        // デート名をオーバーレイ
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(location.name)
-                                    .font(adaptiveFontSizeForLocationName(location.name))
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                    .shadow(color: .black.opacity(0.7), radius: 2, x: 0, y: 1)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.6)
-                                
-                                // 🌟 ロック状態表示
-                                if location.requiredIntimacy > viewModel.character.intimacyLevel {
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "lock.fill")
-                                            .font(.system(size: 8))
-                                        Text("ロック中")
-                                            .font(.system(size: 8, weight: .bold))
-                                    }
-                                    .foregroundColor(.red)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(Color.black.opacity(0.6))
-                                    .cornerRadius(4)
-                                } else if location.isSpecial {
-                                    HStack(spacing: 2) {
-                                        Image(systemName: "crown.fill")
-                                            .font(.system(size: 8))
-                                        Text("特別")
-                                            .font(.system(size: 8, weight: .bold))
-                                    }
-                                    .foregroundColor(.yellow)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(Color.black.opacity(0.6))
-                                    .cornerRadius(4)
-                                }
-                            }
-                            Spacer()
-                        }
-                    }
-                    .padding(12)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                
-                // 詳細情報セクション
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(location.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    
-                    HStack {
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock")
-                                .font(.caption2)
-                            Text("\(location.duration)分")
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.secondary)
-                        
-                        Spacer()
-                        
-                        // 🌟 拡張された利用可能性表示
-                        Group {
-                            if location.requiredIntimacy <= viewModel.character.intimacyLevel {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.caption2)
-                                    Text("利用可能")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.green)
-                            } else {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "lock.fill")
-                                        .font(.caption2)
-                                    Text("要 \(location.requiredIntimacy)")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
-                                }
-                                .foregroundColor(.red)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 4)
-            }
-            .padding()
-            .background(cardColor)
-            .cornerRadius(16)
-            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
-            
-            // 🌟 利用不可時のオーバーレイ（改善版）
-            .overlay(
-                Group {
-                    if location.requiredIntimacy > viewModel.character.intimacyLevel {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.black.opacity(0.4))
-                            .overlay(
-                                VStack(spacing: 12) {
-                                    Image(systemName: "lock.fill")
-                                        .font(.title)
-                                        .foregroundColor(.white)
-                                        .shadow(color: .black.opacity(0.5), radius: 2)
-                                    
-                                    VStack(spacing: 6) {
-                                        Text("親密度 \(location.requiredIntimacy) 必要")
-                                            .font(.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.white)
-                                            .multilineTextAlignment(.center)
-                                            .lineLimit(2)
-                                            .shadow(color: .black.opacity(0.7), radius: 1)
-                                        
-                                        Text("あと \(location.requiredIntimacy - viewModel.character.intimacyLevel)")
-                                            .font(.caption2)
-                                            .foregroundColor(.white.opacity(0.9))
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(Color.red.opacity(0.7))
-                                            .cornerRadius(8)
-                                    }
-                                    
-                                    // 🌟 解放のヒント
-                                    Text("💕 もっと会話して親密度を上げよう")
-                                        .font(.system(size: 9))
-                                        .foregroundColor(.white.opacity(0.8))
-                                        .multilineTextAlignment(.center)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .background(Color.blue.opacity(0.6))
-                                        .cornerRadius(6)
-                                }
-                            )
-                            .animation(.easeInOut(duration: 0.3), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
-                    }
-                }
-            )
-            
-            // 🌟 無限モードデートの特別表示
-            .overlay(
-                Group {
-                    if location.type == .infinite {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                HStack(spacing: 4) {
-                                    Image(systemName: "infinity")
-                                        .font(.caption2)
-                                    Text("∞")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.purple, .blue],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(8)
-                            }
-                            Spacer()
-                        }
-                        .padding(8)
-                    }
-                }
-            )
-        }
-        // 🌟 ロック状態に関係なくタップ可能（詳細は見れるが開始はできない）
-        .scaleEffect(location.requiredIntimacy > viewModel.character.intimacyLevel ? 0.95 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
-    }
-    
     // MARK: - Helper Functions
     private func adaptiveFontSizeForLocationName(_ text: String) -> Font {
         let characterCount = text.count
@@ -1064,8 +1128,6 @@ struct DateSelectorView: View {
         }
     }
 }
-
-// MARK: - 🌟 新しいヘルパーコンポーネント
 
 // 統計バッジコンポーネント
 struct StatBadge: View {
@@ -1928,6 +1990,52 @@ struct StatCard: View {
         .padding(.vertical, 12)
         .background(color.opacity(0.1))
         .cornerRadius(12)
+    }
+}
+
+struct DateDetailViewWrapper: View {
+    @ObservedObject var viewModel: RomanceAppViewModel
+    let location: DateLocation
+    let onStartDate: (DateLocation) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var isViewReady = false
+    
+    var body: some View {
+        Group {
+            if isViewReady {
+                DateDetailView(
+                    viewModel: viewModel,
+                    location: location,
+                    onStartDate: onStartDate
+                )
+            } else {
+                // 読み込み中の表示
+                VStack(spacing: 20) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                    
+                    Text("準備中...")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemBackground))
+            }
+        }
+        .onAppear {
+            print("🔧 DateDetailViewWrapper.onAppear")
+            // 短い遅延の後にViewを表示
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isViewReady = true
+                }
+            }
+        }
+        .onDisappear {
+            print("🔧 DateDetailViewWrapper.onDisappear")
+            isViewReady = false
+        }
     }
 }
 

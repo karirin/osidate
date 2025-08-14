@@ -1145,10 +1145,6 @@ class RomanceAppViewModel: ObservableObject {
         
         increaseIntimacy(by: totalBonus, reason: "デート完了: \(session.location.name) (時間:\(timeBonus) + スポット:\(session.location.intimacyBonus))")
         
-        if let userId = currentUserID {
-            database.child("dateSessions").child(userId).child("isActive").setValue(false)
-        }
-        
         DispatchQueue.main.async { [weak self] in
             self?.currentDateSession = nil
         }
@@ -1499,11 +1495,6 @@ class RomanceAppViewModel: ObservableObject {
                     }
                 }
             }
-        
-        // デート履歴削除
-        database.child("dateHistory").child(userId).removeValue()
-        database.child("dateSessions").child(userId).removeValue()
-        database.child("intimacyMilestones").child(userId).removeValue()
         
         // UserDefaultsからキャラクターIDを削除
         UserDefaults.standard.removeObject(forKey: "characterId")

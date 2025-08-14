@@ -15,13 +15,23 @@ struct TopView: View {
     @State private var currentCharacterId = ""
     @State private var showingTutorial = false
     @State private var showingAddCharacter = false
+    @State private var showingSplash = true
     
     var body: some View {
         ZStack {
-            if characterRegistry.isLoading {
-                loadingView
+            if showingSplash {
+                SplashScreenView {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showingSplash = false
+                    }
+                }
+                .transition(.opacity)
             } else {
-                mainContentView
+                if characterRegistry.isLoading {
+                    loadingView
+                } else {
+                    mainContentView
+                }
             }
         }
         .onChange(of: characterRegistry.activeCharacterId) { newCharacterId in
@@ -32,6 +42,9 @@ struct TopView: View {
         }
         .onAppear {
             initializeApp()
+            if !showingSplash {
+                  initializeApp()
+              }
         }
         .sheet(isPresented: $showingTutorial) {
             TutorialView(characterRegistry: characterRegistry)
