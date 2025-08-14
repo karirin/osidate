@@ -239,6 +239,51 @@ class RomanceAppViewModel: ObservableObject {
         chatDisplayMode = newMode
     }
     
+    func updateUserCsFlag(userId: String, userCsFlag: Int, completion: @escaping (Bool) -> Void) {
+        let userRef = Database.database().reference().child("users").child(userId)
+        let updates = ["userCsFlag": userCsFlag]
+        print(updates)
+        userRef.updateChildValues(updates) { (error, _) in
+            if let error = error {
+                print("Error updating tutorialNum: \(error)")
+                completion(false)
+            } else {
+                completion(true)
+            }
+        }
+    }
+    
+    func updateContact(userId: String, newContact: String, completion: @escaping (Bool) -> Void) {
+        // contactテーブルの下の指定されたuserIdの参照を取得
+        let contactRef = Database.database().reference().child("contacts").child(userId)
+        // まず現在のcontactの値を読み取る
+        contactRef.observeSingleEvent(of: .value, with: { snapshot in
+            // 既存の問い合わせ内容を保持する変数を準備
+            var contacts: [String] = []
+            
+            // 現在の問い合わせ内容がある場合、それを読み込む
+            if let currentContacts = snapshot.value as? [String] {
+                contacts = currentContacts
+            }
+            
+            // 新しい問い合わせ内容をリストに追加
+            contacts.append(newContact)
+            
+            // データベースを更新する
+            contactRef.setValue(contacts, withCompletionBlock: { error, _ in
+                if let error = error {
+                    print("Error updating contact: \(error)")
+                    completion(false)
+                } else {
+                    completion(true)
+                }
+            })
+        }) { error in
+            print(error.localizedDescription)
+            completion(false)
+        }
+    }
+    
     /// 🔧 最適化：推しを切り替える（charactersテーブル直接管理）
     func switchToCharacter(_ newCharacter: Character) {
         print("\n🔄 ==================== キャラクター切り替え開始 ====================")
@@ -581,6 +626,44 @@ class RomanceAppViewModel: ObservableObject {
         loginBonusManager.initialize(userId: userId)
         
         print("✅ ログインボーナスシステム初期化完了")
+    }
+    
+    func fetchUserFlag(completion: @escaping (Int?, Error?) -> Void) {
+        guard let userId = userId else { return }
+
+        let userRef = Database.database().reference().child("users").child(userId)
+        // "userFlag"の値を取得する
+        userRef.child("userFlag").observeSingleEvent(of: .value) { snapshot in
+            if let userFlag = snapshot.value as? Int {
+                // userFlagが存在し、Int型として取得できた場合
+                DispatchQueue.main.async {
+                    completion(userFlag, nil)
+                }
+            } else {
+                // userFlagが存在しない場合は0を返す
+                DispatchQueue.main.async {
+                    completion(0, nil)
+                }
+            }
+        } withCancel: { error in
+            // データベースの読み取りに失敗した場合
+            DispatchQueue.main.async {
+                completion(nil, error)
+            }
+        }
+    }
+    
+    func updateUserFlag(userId: String, userFlag: Int, completion: @escaping (Bool) -> Void) {
+        let userRef = Database.database().reference().child("users").child(userId)
+        let updates = ["userFlag": userFlag]
+        userRef.updateChildValues(updates) { (error, _) in
+            if let error = error {
+                print("Error updating tutorialNum: \(error)")
+                completion(false)
+            } else {
+                completion(true)
+            }
+        }
     }
 
     // MARK: - setupInitialData の修正版

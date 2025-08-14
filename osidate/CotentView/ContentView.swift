@@ -20,6 +20,8 @@ struct ContentView: View {
     @State private var showingFullChatHistory = false
     @FocusState private var isInputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @State private var customerFlag: Bool = false
+    @State private var helpFlag: Bool = false
     
     // 🌟 新機能：チャット表示モード
     @State private var chatDisplayMode: ChatDisplayMode = .traditional
@@ -440,11 +442,59 @@ struct ContentView: View {
                         modernInputView
                             .frame(height: geometry.size.height * 0.1)
                     }
+                    
+                    if helpFlag {
+                        HelpModalView(isPresented: $helpFlag)
+                    }
+                    
+                    if customerFlag {
+                        ReviewView(isPresented: $customerFlag, helpFlag: $helpFlag)
+                    }
+                }
+                
+                .onAppear {
+                    viewModel.fetchUserFlag { userFlag, error in
+                        if let error = error {
+                            print(error.localizedDescription)
+                        } else if let userFlag = userFlag {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                                if userFlag == 0 {
+                                    executeProcessEveryfifTimes()
+                                    executeProcessEveryThreeTimes()
+                                }
+                            }
+                        }
+                    }
                 }
             }
             .clipped()
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+    
+    func executeProcessEveryThreeTimes() {
+        // UserDefaultsからカウンターを取得
+        let count = UserDefaults.standard.integer(forKey: "launchCount") + 1
+        
+        // カウンターを更新
+        UserDefaults.standard.set(count, forKey: "launchCount")
+        
+        // 3回に1回の割合で処理を実行
+        
+        if count % 10 == 0 {
+            customerFlag = true
+        }
+    }
+    
+    func executeProcessEveryfifTimes() {
+        // UserDefaultsからカウンターを取得
+        let count = UserDefaults.standard.integer(forKey: "launchHelpCount") + 1
+        
+        // カウンターを更新
+        UserDefaults.standard.set(count, forKey: "launchHelpCount")
+        if count % 15 == 0 {
+            helpFlag = true
+        }
     }
     
     // MARK: - 以下は既存のコードをそのまま保持
