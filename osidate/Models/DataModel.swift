@@ -70,7 +70,7 @@ class Character: ObservableObject, Codable, Identifiable {
                !speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
-    // 残りのプロパティとメソッドは既存のまま...
+    // 🔧 修正：無限の愛レベルを削除し、究極の愛を最高レベルに
     var intimacyTitle: String {
         guard isValidCharacter else { return "未設定" }
         switch intimacyLevel {
@@ -88,8 +88,7 @@ class Character: ObservableObject, Codable, Identifiable {
         case 3001...3500: return "一心同体"
         case 3501...4000: return "奇跡の絆"
         case 4001...4500: return "神聖な愛"
-        case 4501...5000: return "究極の愛"
-        default: return "無限の愛"
+        default: return "究極の愛" // 4501以上は全て「究極の愛」
         }
     }
     
@@ -101,7 +100,7 @@ class Character: ObservableObject, Codable, Identifiable {
         return "あなた"
     }
     
-    // 親密度レベルの段階を取得
+    // 🔧 修正：無限の愛ステージを削除
     var intimacyStage: IntimacyStage {
         switch intimacyLevel {
         case 0...100: return .bestFriend
@@ -118,12 +117,11 @@ class Character: ObservableObject, Codable, Identifiable {
         case 3001...3500: return .oneHeart
         case 3501...4000: return .miracleBond
         case 4001...4500: return .sacredLove
-        case 4501...5000: return .ultimateLove
-        default: return .infiniteLove
+        default: return .ultimateLove // 4501以上は全て「究極の愛」
         }
     }
     
-    // レベルアップまでに必要な親密度を計算
+    // 🔧 修正：レベルアップ閾値から5000を削除
     var intimacyToNextLevel: Int {
         let thresholds = [100, 200, 300, 500, 700, 1000, 1300, 1600, 2000, 2500, 3000, 3500, 4000, 4500, 5000]
         for threshold in thresholds {
@@ -131,10 +129,10 @@ class Character: ObservableObject, Codable, Identifiable {
                 return threshold - intimacyLevel
             }
         }
-        return 0 // 最高レベル達成
+        return 0 // 5000以上は最高レベル達成
     }
     
-    // レベルアップ進捗（0.0-1.0）
+    // 🔧 修正：進捗計算も更新
     var intimacyProgress: Double {
         let thresholds = [0, 100, 200, 300, 500, 700, 1000, 1300, 1600, 2000, 2500, 3000, 3500, 4000, 4500, 5000]
         
@@ -145,7 +143,7 @@ class Character: ObservableObject, Codable, Identifiable {
                 return Double(current) / Double(total)
             }
         }
-        return 1.0 // 最高レベル
+        return 1.0 // 5000以上は最高レベル
     }
     
     // MARK: - Codable 実装
@@ -196,7 +194,7 @@ class Character: ObservableObject, Codable, Identifiable {
     }
 }
 
-// 🌟 親密度段階の列挙型
+// 🔧 修正：無限の愛段階を削除
 enum IntimacyStage: String, CaseIterable {
     case bestFriend = "bestFriend"
     case specialFriend = "specialFriend"
@@ -213,7 +211,7 @@ enum IntimacyStage: String, CaseIterable {
     case miracleBond = "miracleBond"
     case sacredLove = "sacredLove"
     case ultimateLove = "ultimateLove"
-    case infiniteLove = "infiniteLove"
+    // .infiniteLove を削除
     
     var displayName: String {
         switch self {
@@ -232,7 +230,6 @@ enum IntimacyStage: String, CaseIterable {
         case .miracleBond: return "奇跡の絆"
         case .sacredLove: return "神聖な愛"
         case .ultimateLove: return "究極の愛"
-        case .infiniteLove: return "無限の愛"
         }
     }
     
@@ -253,7 +250,6 @@ enum IntimacyStage: String, CaseIterable {
         case .miracleBond: return Color(.systemPink)
         case .sacredLove: return Color(.systemOrange)
         case .ultimateLove: return Color(.systemRed)
-        case .infiniteLove: return Color.primary
         }
     }
     
@@ -274,7 +270,6 @@ enum IntimacyStage: String, CaseIterable {
         case .miracleBond: return "sparkles"
         case .sacredLove: return "crown.fill"
         case .ultimateLove: return "flame.fill"
-        case .infiniteLove: return "infinity.circle.fill"
         }
     }
 }
@@ -360,7 +355,7 @@ extension DateLocation {
         case .romantic:
             return "\(baseMessage) \(description) 💕 ロマンチックな時間をお楽しみください✨"
         case .infinite:
-            return "\(baseMessage) 🌌 無限の愛が生み出した奇跡のデートスポットです！想像を超えた体験をしましょう♾️✨"
+            return "\(baseMessage) 🌌 想像を超えた特別なデートスポットです！素敵な体験をしましょう♾️✨"
         }
     }
     
@@ -409,7 +404,7 @@ extension DateLocation {
         case .romantic:
             return "\(name)での\(baseMessage)過ごせてロマンチックでした 💕 愛が深まりました✨"
         case .infinite:
-            return "\(name)での\(baseMessage)過ごせて無限に幸せでした 🌌 私たちの愛は本当に無限大ですね♾️✨"
+            return "\(name)での\(baseMessage)過ごせて特別でした 🌌 素敵な体験をありがとう♾️✨"
         }
     }
     
@@ -468,8 +463,8 @@ extension DateLocation {
             ]
         case .infinite:
             messages = [
-                "無限の可能性を感じます... 🌌",
-                "私たちの愛は本当に無限大ですね ♾️",
+                "この特別な場所... あなたと一緒だからこそ ✨",
+                "素敵な体験を共有できて嬉しいです 🌌",
                 "想像を超えた美しさ... あなたと一緒だからこそ ✨"
             ]
         default:

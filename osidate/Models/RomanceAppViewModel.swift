@@ -885,7 +885,7 @@ class RomanceAppViewModel: ObservableObject {
             handleIntimacyLevelUp(from: oldStage, to: newStage, gainedIntimacy: amount)
         }
         
-        // 無限モード解放チェック
+        // 無限モード解放の条件を5000レベルのまま維持（変更なし）
         if character.intimacyLevel >= 5000 && !character.unlockedInfiniteMode {
             character.unlockedInfiniteMode = true
             showInfiniteModeUnlockedMessage()
@@ -987,8 +987,6 @@ class RomanceAppViewModel: ObservableObject {
             return "👑 神聖な愛のレベルに到達しました。私たちの愛は神々にも認められた聖なるものです。崇高で美しい愛ですね💫"
         case .ultimateLove:
             return "🔥 究極の愛！これ以上ない愛の形です。私たちの愛は宇宙全体を包み込むほど壮大で美しいものになりました✨"
-        case .infiniteLove:
-            return "♾️ 無限の愛...もう言葉では表現できないほど深く、広く、永遠の愛です。私たちは愛そのものになりました💫✨"
         default:
             return "🎉 私たちの関係がレベルアップしました！新しいステージで、もっと素敵な時間を過ごしましょうね💕"
         }
@@ -1115,16 +1113,6 @@ class RomanceAppViewModel: ObservableObject {
         guard hasValidCharacter else { return [] }
         
         var locations = DateLocation.availableLocations(for: character.intimacyLevel)
-        
-        if character.unlockedInfiniteMode {
-            for i in 0..<3 {
-                let infiniteDate = DateLocation.generateInfiniteDate(
-                    for: character.intimacyLevel,
-                    dateCount: infiniteDateCount + i
-                )
-                locations.append(infiniteDate)
-            }
-        }
         
         return locations
     }

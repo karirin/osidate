@@ -87,16 +87,6 @@ struct DateSelectorView: View {
     private var allDateLocations: [DateLocation] {
         var locations = DateLocation.availableDateLocations
         
-        if viewModel.character.unlockedInfiniteMode {
-            for i in 0..<3 {
-                let infiniteDate = DateLocation.generateInfiniteDate(
-                    for: viewModel.character.intimacyLevel,
-                    dateCount: viewModel.infiniteDateCount + i
-                )
-                locations.append(infiniteDate)
-            }
-        }
-        
         return locations
     }
     
@@ -206,11 +196,6 @@ struct DateSelectorView: View {
                         // 🌟 フィルターセクション（条件付き表示）
                         if showingFilters {
                             filterSectionsContainer
-                        }
-                        
-                        // 🌟 無限モードセクション
-                        if viewModel.character.unlockedInfiniteMode {
-                            infiniteModeSection
                         }
                         
                         // デートロケーション一覧

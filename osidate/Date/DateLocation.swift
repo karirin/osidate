@@ -965,32 +965,4 @@ extension DateLocation {
     static func specialLocations() -> [DateLocation] {
         return availableDateLocations.filter { $0.isSpecial }
     }
-    
-    // 🌌 無限モード用の動的デート生成
-    static func generateInfiniteDate(for intimacyLevel: Int, dateCount: Int) -> DateLocation {
-        let infiniteNames = [
-            "夢の中のデート", "時空を超えた愛", "宇宙の果てのデート", "異次元の愛",
-            "神話の世界デート", "魔法の国での愛", "天使の楽園", "妖精の森",
-            "クリスタルの洞窟", "雲の上の宮殿", "星座のデート", "虹の橋",
-            "時の神殿", "愛の宇宙船", "ドラゴンと愛", "不思議の国"
-        ]
-        
-        let index = dateCount % infiniteNames.count
-        let name = infiniteNames[index]
-        
-        return DateLocation(
-            name: "\(name) #\(dateCount + 1)",
-            type: .infinite,
-            backgroundImage: "infinite_date_\(index % 8 + 1)",
-            requiredIntimacy: 5000,
-            description: "無限の愛が生み出した奇跡のデートスポット",
-            prompt: "無限の愛と想像を超えた体験について話し、現実を超越した愛の世界を表現してください。",
-            duration: 180,
-            specialEffects: ["infinite_magic", "transcendent_love", "limitless_imagination"],
-            availableSeasons: [.all],
-            timeOfDay: .anytime,
-            intimacyBonus: min(50 + (dateCount / 10), 200), // 最大200まで増加
-            isSpecial: true
-        )
-    }
 }
