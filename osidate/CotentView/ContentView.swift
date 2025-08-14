@@ -38,7 +38,7 @@ struct ContentView: View {
     
     // MARK: - Recent Messages Computed Property
     private var recentMessages: [Message] {
-        Array(viewModel.messages.suffix(5))
+        Array(viewModel.messages.suffix(4))
     }
     
     private var readyToAutoClaim: AnyPublisher<Bool, Never> {
@@ -963,9 +963,9 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    if viewModel.messages.count > 5 {
+                    if viewModel.messages.count > 4 { // 5 -> 4 に変更
                         VStack(spacing: 12) {
-                            Text("\(viewModel.messages.count - 5)件の過去のメッセージがあります")
+                            Text("\(viewModel.messages.count - 4)件の過去のメッセージがあります") // 5 -> 4 に変更
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
@@ -1001,24 +1001,35 @@ struct ContentView: View {
                         .id("bottomMarker")
                 }
                 .padding(.vertical, 16)
+                .padding(.bottom, keyboardHeight)
             }
             .background(.clear)
-            .onChange(of: keyboardHeight) { _ in
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo("bottomMarker", anchor: .bottom)
-                    }
+            .onAppear {
+                withAnimation {
+                    proxy.scrollTo("bottomMarker", anchor: .bottom) // ← 初回も最下部へ
                 }
             }
             .onChange(of: recentMessages.count) { _ in
-                if !recentMessages.isEmpty {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        proxy.scrollTo("bottomMarker", anchor: .bottom)
-                    }
+                withAnimation {
+                    proxy.scrollTo("bottomMarker", anchor: .bottom) // ← 新規メッセージで最下部へ
                 }
-                
                 if let lastMessage = recentMessages.last, !lastMessage.isFromUser {
                     triggerFloatingIcon()
+                }
+            }
+            .onChange(of: isInputFocused) { focused in
+                guard focused else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation {
+                        proxy.scrollTo("bottomMarker", anchor: .bottom) // ← フォーカス時に最下部へ
+                    }
+                }
+            }
+            .onChange(of: keyboardHeight) { _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    withAnimation {
+                        proxy.scrollTo("bottomMarker", anchor: .bottom) // ← キーボード高さ変化でも追従
+                    }
                 }
             }
         }
