@@ -9,6 +9,7 @@ import SwiftUI
 
 struct TutorialView: View {
     @ObservedObject var characterRegistry: CharacterRegistry
+    @ObservedObject var tutorialManager: TutorialManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     
@@ -114,8 +115,8 @@ struct TutorialView: View {
                 Spacer()
                 
                 Button("スキップ") {
-                    tutorialCompleted = true
-                    markTutorialAsCompleted()
+                    tutorialManager.completeTutorial()
+                    dismiss()
                 }
                 .font(.subheadline)
                 .foregroundColor(primaryColor)
@@ -378,7 +379,7 @@ struct TutorialView: View {
             }
             
             Button("はじめる") {
-                markTutorialAsCompleted()
+                tutorialManager.completeTutorial()
                 dismiss()
             }
             .font(.headline)
@@ -716,5 +717,5 @@ class TutorialManager: ObservableObject {
 }
 
 #Preview {
-    TutorialView(characterRegistry: CharacterRegistry())
+    TutorialView(characterRegistry: CharacterRegistry(), tutorialManager: TutorialManager())
 }

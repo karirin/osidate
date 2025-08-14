@@ -47,7 +47,7 @@ struct TopView: View {
               }
         }
         .sheet(isPresented: $showingTutorial) {
-            TutorialView(characterRegistry: characterRegistry)
+            TutorialView(characterRegistry: characterRegistry, tutorialManager: tutorialManager)
         }
         .sheet(isPresented: $showingAddCharacter) {
             AddCharacterView(characterRegistry: characterRegistry)
