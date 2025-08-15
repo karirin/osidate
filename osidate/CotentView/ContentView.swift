@@ -1003,7 +1003,7 @@ struct ContentView: View {
                         .id("bottomMarker")
                 }
                 .padding(.vertical, 16)
-                .padding(.bottom, keyboardHeight)
+                
             }
             .background(.clear)
             .onAppear {
