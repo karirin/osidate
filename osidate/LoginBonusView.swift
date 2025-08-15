@@ -18,6 +18,8 @@ struct LoginBonusView: View {
     @State private var celebrationAnimation = false
     @State private var showingConfetti = false
     
+    private var isSmallScreen: Bool { UIScreen.main.bounds.height <= 667 }
+    
     private var backgroundColor: Color {
         colorScheme == .dark ? Color(.systemBackground) : Color(.systemGray6)
     }
@@ -140,7 +142,7 @@ struct LoginBonusView: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 120, height: 120)
+                        .frame(width: isSmallScreen ? 60 : 120, height: isSmallScreen ? 60 : 120)
                         .scaleEffect(celebrationAnimation ? 1.1 : 1.0)
                         .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: celebrationAnimation)
                     
@@ -220,7 +222,7 @@ struct LoginBonusView: View {
             // 連続ログイン情報
             loginStreakInfo
         }
-        .padding(32)
+        .padding(isSmallScreen ? 10 : 32)
         .background(
             RoundedRectangle(cornerRadius: 24)
                 .fill(.ultraThinMaterial)
@@ -306,7 +308,7 @@ struct LoginBonusView: View {
                     }
                     .foregroundColor(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
+                    .padding(.vertical,isSmallScreen ? 12 : 18)
                     .background(
                         LinearGradient(
                             colors: [bonus.bonusType.color, bonus.bonusType.color.opacity(0.8)],
@@ -486,5 +488,29 @@ struct ConfettiPiece: View {
                     rotation = 360
                 }
             }
+    }
+}
+
+struct LoginBonusView_Previews: PreviewProvider {
+    static var previews: some View {
+        let mockBonus = LoginBonus(
+            day: 3,
+            intimacyBonus: 150,
+            bonusType: .special, // ← enumに合わせて適宜変更
+            description: "特別なログインボーナス！"
+        )
+        
+        let mockManager = LoginBonusManager()
+        mockManager.availableBonus = mockBonus
+        mockManager.currentStreak = 5
+        mockManager.totalLoginDays = 12
+        mockManager.loginHistory = [mockBonus]
+        
+        let mockViewModel = RomanceAppViewModel()
+        
+        return LoginBonusView(
+            loginBonusManager: mockManager,
+            viewModel: mockViewModel
+        )
     }
 }

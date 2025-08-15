@@ -506,13 +506,15 @@ struct ContentView: View {
     @State private var showingMessage = false
     @State private var isTyping = false
     
+    private var isSmallScreen: Bool { UIScreen.main.bounds.height <= 667 }
+
     private var modernFloatingIconWithDateStatus: some View {
         VStack(spacing: 16) {
             // キャラクターアイコン
             ZStack {
                 CharacterIconView(
                     character: viewModel.character,
-                    size: isInputFocused ? 110 : 150,
+                    size: isInputFocused ? isSmallScreen ? 90 : 110 : 150,
                     enableFloating: !isInputFocused && !viewModel.isLoading // ローディング中はアニメーション無効
                 )
                 .scaleEffect(characterTalkingAnimation ? 1.05 : 1.0)
