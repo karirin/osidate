@@ -209,31 +209,15 @@ struct DateSelectorView: View {
              }
              .navigationTitle("デートを選ぶ")
              .navigationBarTitleDisplayMode(.inline)
-             // 🔧 修正: Sheet表示の改善
-             .sheet(isPresented: $showingDateDetail) {
-                 if let location = selectedLocation {
-                     DateDetailViewWrapper(
-                         viewModel: viewModel,
-                         location: location,
-                         onStartDate: { dateLocation in
-                             handleDateStart(dateLocation)
-                         }
-                     )
-                 } else {
-                     // フォールバック表示
-                     VStack {
-                         Text("読み込み中...")
-                         ProgressView()
-                     }
-                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                     .onAppear {
-                         // selectedLocationがnilの場合は自動的にシートを閉じる
-                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                             showingDateDetail = false
-                         }
-                     }
-                 }
-             }
+            .sheet(item: $selectedLocation) { location in
+                DateDetailViewWrapper(
+                    viewModel: viewModel,
+                    location: location,
+                    onStartDate: { dateLocation in
+                        handleDateStart(dateLocation)
+                    }
+                )
+            }
              .sheet(isPresented: $showingIntimacyFilter) {
                  IntimacyFilterView(
                      selectedRange: $selectedIntimacyRange,
@@ -271,7 +255,6 @@ struct DateSelectorView: View {
             viewModel.startDate(at: dateLocation)
             
             // Sheet を閉じる
-            showingDateDetail = false
             selectedLocation = nil
             
             // 少し遅延してからDateSelectorView自体も閉じる
@@ -280,7 +263,6 @@ struct DateSelectorView: View {
             }
         } else {
             // デートスポットがロックされている場合はシートのみ閉じる
-            showingDateDetail = false
             selectedLocation = nil
         }
     }
@@ -291,7 +273,6 @@ struct DateSelectorView: View {
         
         if isSheetReady {
             selectedLocation = location
-            showingDateDetail = true
             print("🔧 Sheet即座表示")
         } else {
             // まだ準備ができていない場合は待機
@@ -1417,24 +1398,6 @@ struct DateDetailView: View {
                 .frame(height: 200)
             }
             
-            // 🌟 ロック状態の場合はオーバーレイを追加
-            if !isUnlocked {
-                Rectangle()
-                    .fill(.black.opacity(0.4))
-                    .frame(height: 200)
-                
-                VStack(spacing: 12) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 40, weight: .light))
-                        .foregroundColor(.white)
-                    
-                    Text("ロック中")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                }
-            }
-            
             VStack(spacing: 16) {
                 Image(systemName: location.type.icon)
                     .font(.system(size: 48, weight: .light))
@@ -1478,6 +1441,24 @@ struct DateDetailView: View {
                     }
                     .foregroundColor(.yellow)
                     .shadow(color: .black.opacity(0.7), radius: 1, x: 0, y: 1)
+                }
+            }.opacity(isUnlocked ? 1 : 0.8)
+            
+            // 🌟 ロック状態の場合はオーバーレイを追加
+            if !isUnlocked {
+                Rectangle()
+                    .fill(.black.opacity(0.4))
+                    .frame(height: 200)
+                
+                VStack(spacing: 12) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 40, weight: .light))
+                        .foregroundColor(.white)
+                    
+                    Text("ロック中")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
                 }
             }
         }
