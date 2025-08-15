@@ -437,20 +437,13 @@ struct CharacterEditView: View {
                             // 呼び名が入力された場合は自動的にuseNicknameをtrueに設定
                             if !newValue.isEmpty && !viewModel.character.useNickname {
                                 viewModel.character.useNickname = true
-                                sendNicknameChangeMessage(enabled: true)
                             }
                             // 呼び名が空になった場合は自動的にuseNicknameをfalseに設定
                             else if newValue.isEmpty && viewModel.character.useNickname {
                                 viewModel.character.useNickname = false
-                                sendNicknameChangeMessage(enabled: false)
                             }
                             
                             viewModel.updateCharacterSettings()
-                        }
-                        .onSubmit {
-                            if !viewModel.character.userNickname.isEmpty {
-                                sendNicknameSetMessage()
-                            }
                         }
                 }
             }
@@ -626,33 +619,6 @@ struct CharacterEditView: View {
         let suggestions = getNicknameSuggestions()
         if let defaultSuggestion = suggestions.first {
             viewModel.character.userNickname = defaultSuggestion
-        }
-    }
-
-    private func sendNicknameChangeMessage(enabled: Bool) {
-        let message: String
-        
-        if enabled {
-            let nickname = viewModel.character.userNickname.isEmpty ? "特別な呼び名" : viewModel.character.userNickname
-            message = "これからは\(nickname)って呼ばせてもらいますね💕 特別な呼び名で呼べるなんて、なんだか嬉しいです✨"
-        } else {
-            message = "分かりました。これからは普通に「あなた」って呼びますね。でも、心の中ではいつでも特別な存在ですよ💕"
-        }
-        
-        // ViewModelにメッセージ送信を依頼
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            viewModel.sendSystemMessage(message)
-        }
-    }
-
-    private func sendNicknameSetMessage() {
-        let nickname = viewModel.character.userNickname
-        guard !nickname.isEmpty else { return }
-        
-        let message = "\(nickname)...素敵な響きですね💕 これから\(nickname)って呼ばせていただきます。特別な呼び名をつけてもらえて、とても嬉しいです✨"
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            viewModel.sendSystemMessage(message)
         }
     }
     
