@@ -19,6 +19,11 @@ struct CharacterEditView: View {
     @State private var isDataSyncing = false
     @FocusState private var isInputFocused: Bool
     
+    // 🌟 バリデーション用のアラート状態
+    @State private var showingNameValidationAlert = false
+    @State private var showingPersonalityValidationAlert = false
+    @State private var showingSpeakingStyleValidationAlert = false
+    
     // Image picker and cropping states
     @StateObject private var imageManager = ImageStorageManager()
     @State private var showingImagePicker = false
@@ -46,7 +51,7 @@ struct CharacterEditView: View {
                     VStack(spacing: 16) {
                         characterSettingsSection
                         appearanceSettingsSection
-                        userNicknameSettingsSection  // 🌟 新規追加
+                        userNicknameSettingsSection
                         anniversarySettingsSection
                     }
                     .padding(.horizontal, 20)
@@ -92,6 +97,22 @@ struct CharacterEditView: View {
                     .drawingGroup()
                 }
                 .navigationBarHidden(true)
+            }
+            // 🌟 バリデーションアラートを追加
+            .alert("名前は必須です", isPresented: $showingNameValidationAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("推しの名前は1文字以上入力してください。")
+            }
+            .alert("性格設定は必須です", isPresented: $showingPersonalityValidationAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("推しの性格は1文字以上入力してください。")
+            }
+            .alert("話し方設定は必須です", isPresented: $showingSpeakingStyleValidationAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("推しの話し方は1文字以上入力してください。")
             }
             .alert("通知", isPresented: $showingAlert) {
                 Button("OK", role: .cancel) { }
@@ -141,7 +162,6 @@ struct CharacterEditView: View {
                                 .shadow(color: intimacyColor.opacity(0.3), radius: 8, x: 0, y: 4)
                         } else {
                             ZStack {
-                                // 🌟 アニメーションを無効にしてCharacterIconViewを使用
                                 CharacterIconView(character: viewModel.character, size: 100, enableFloating: false)
                                     .clipShape(Circle())
                                     .overlay(
@@ -331,25 +351,37 @@ struct CharacterEditView: View {
     
     // MARK: - Character Settings
     private var characterSettingsSection: some View {
-        ModernSectionView(title: "キャラクター設定", icon: "person.circle") {
+        ModernSectionView(title: "推し設定", icon: "person.circle") {
             VStack(spacing: 16) {
-                // Name field
+                // Name field - 🌟 バリデーション付き
                 ModernSettingRow(
                     icon: "textformat",
                     title: "名前",
-                    subtitle: "キャラクターの呼び名"
+                    subtitle: "推しの呼び名"
                 ) {
                     TextField("名前を入力", text: $viewModel.character.name)
                         .textFieldStyle(ModernTextFieldStyle())
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.name) { _ in
-                            viewModel.updateCharacterSettings()
+                        .onChange(of: viewModel.character.name) { newValue in
+                            // 🌟 バリデーション: 空文字の場合は元の値に戻してアラート表示
+                            if newValue.isEmpty {
+                                // 元の値が1文字だった場合のみアラートを表示
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    if viewModel.character.name.isEmpty {
+                                        viewModel.character.name = "推し" // デフォルト値に戻す
+                                        showingNameValidationAlert = true
+                                        generateHapticFeedback()
+                                    }
+                                }
+                            } else {
+                                viewModel.updateCharacterSettings()
+                            }
                         }
                 }
                 
                 Divider()
                 
-                // Personality editor
+                // Personality editor - 🌟 バリデーション付き
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "heart.text.square")
@@ -359,7 +391,7 @@ struct CharacterEditView: View {
                             Text("性格")
                                 .font(.headline)
                                 .foregroundColor(.primary)
-                            Text("キャラクターの個性を設定")
+                            Text("推しの個性を設定")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
@@ -375,14 +407,25 @@ struct CharacterEditView: View {
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.personality) { _ in
-                            viewModel.updateCharacterSettings()
+                        .onChange(of: viewModel.character.personality) { newValue in
+                            // 🌟 バリデーション: 空文字の場合は元の値に戻してアラート表示
+                            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    if viewModel.character.personality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        viewModel.character.personality = "優しく親しみやすい性格"
+                                        showingPersonalityValidationAlert = true
+                                        generateHapticFeedback()
+                                    }
+                                }
+                            } else {
+                                viewModel.updateCharacterSettings()
+                            }
                         }
                 }
                 
                 Divider()
                 
-                // Speaking style editor
+                // Speaking style editor - 🌟 バリデーション付き
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -408,15 +451,26 @@ struct CharacterEditView: View {
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.speakingStyle) { _ in
-                            viewModel.updateCharacterSettings()
+                        .onChange(of: viewModel.character.speakingStyle) { newValue in
+                            // 🌟 バリデーション: 空文字の場合は元の値に戻してアラート表示
+                            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                    if viewModel.character.speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        viewModel.character.speakingStyle = "丁寧で温かみのある話し方"
+                                        showingSpeakingStyleValidationAlert = true
+                                        generateHapticFeedback()
+                                    }
+                                }
+                            } else {
+                                viewModel.updateCharacterSettings()
+                            }
                         }
                 }
             }
         }
     }
 
-    // MARK: - 🌟 User Nickname Settings Section
+    // MARK: - User Nickname Settings Section
     private var userNicknameSettingsSection: some View {
         ModernSectionView(title: "あなたの呼び名設定", icon: "person.badge.plus") {
             VStack(spacing: 16) {
