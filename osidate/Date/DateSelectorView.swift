@@ -284,36 +284,37 @@ struct DateSelectorView: View {
     private var intimacyStatusSection: some View {
         VStack(spacing: 16) {
             HStack {
-                if let urlString = viewModel.character.iconURL,
-                   let url = URL(string: urlString),
-                   !urlString.isEmpty {
-                    
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 30, height: 30)
-                                .clipShape(Circle())
-                        case .failure(_):
-                            defaultIcon   // 読み込み失敗時
-                            
-                        case .empty:
-                            Circle()      // 読み込み中
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(width: 30, height: 30)
-                                .overlay(ProgressView().scaleEffect(0.8))
-                            
-                        @unknown default:
-                            defaultIcon
-                        }
-                    }
-                    .id(urlString)
-                    
-                } else {
-                    defaultIcon           // iconURL が無いとき
-                }
+//                if let urlString = viewModel.character.iconURL,
+//                   let url = URL(string: urlString),
+//                   !urlString.isEmpty {
+//
+//                    AsyncImage(url: url) { phase in
+//                        switch phase {
+//                        case .success(let image):
+//                            image
+//                                .resizable()
+//                                .aspectRatio(contentMode: .fill)
+//                                .frame(width: 30, height: 30)
+//                                .clipShape(Circle())
+//                        case .failure(_):
+//                            defaultIcon   // 読み込み失敗時
+//
+//                        case .empty:
+//                            Circle()      // 読み込み中
+//                                .fill(Color.gray.opacity(0.3))
+//                                .frame(width: 30, height: 30)
+//                                .overlay(ProgressView().scaleEffect(0.8))
+//
+//                        @unknown default:
+//                            defaultIcon
+//                        }
+//                    }
+//                    .id(urlString)
+//
+//                } else {
+//                    defaultIcon           // iconURL が無いとき
+//                }
+                CharacterIconView(character: viewModel.character, size: 30, enableFloating: false)
                 Text("関係性: \(viewModel.character.intimacyTitle)")
                     .font(.headline)
                     .fontWeight(.bold)
