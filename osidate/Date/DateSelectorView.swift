@@ -164,7 +164,7 @@ struct DateSelectorView: View {
         if selectedDateType != nil { count += 1 }
         return count
     }
-
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -202,13 +202,13 @@ struct DateSelectorView: View {
                         dateLocationsSection
                         
                         Spacer(minLength: 20)
-                     }
-                     .padding(.horizontal, 20)
-                     .padding(.top, 10)
-                 }
-             }
-             .navigationTitle("デートを選ぶ")
-             .navigationBarTitleDisplayMode(.inline)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 10)
+                }
+            }
+            .navigationTitle("デートを選ぶ")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(item: $selectedLocation) { location in
                 DateDetailViewWrapper(
                     viewModel: viewModel,
@@ -218,35 +218,35 @@ struct DateSelectorView: View {
                     }
                 )
             }
-             .sheet(isPresented: $showingIntimacyFilter) {
-                 IntimacyFilterView(
-                     selectedRange: $selectedIntimacyRange,
-                     locationCounts: locationCounts
-                 )
-             }
-             .onAppear {
-                 print("🔧 DateSelectorView.onAppear - 初期化開始")
-                 animateCardsAppearance()
-                 
-                 // シートの準備完了フラグを設定
-                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                     isSheetReady = true
-                     
-                     // 待機中のロケーションがある場合は表示
-                     if let pending = pendingLocation {
-                         selectedLocation = pending
-                         pendingLocation = nil
-                         showingDateDetail = true
-                     }
-                 }
-             }
-             .onDisappear {
-                 print("🔧 DateSelectorView.onDisappear")
-                 isSheetReady = false
-             }
-         }
+            .sheet(isPresented: $showingIntimacyFilter) {
+                IntimacyFilterView(
+                    selectedRange: $selectedIntimacyRange,
+                    locationCounts: locationCounts
+                )
+            }
+            .onAppear {
+                print("🔧 DateSelectorView.onAppear - 初期化開始")
+                animateCardsAppearance()
+                
+                // シートの準備完了フラグを設定
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    isSheetReady = true
+                    
+                    // 待機中のロケーションがある場合は表示
+                    if let pending = pendingLocation {
+                        selectedLocation = pending
+                        pendingLocation = nil
+                        showingDateDetail = true
+                    }
+                }
+            }
+            .onDisappear {
+                print("🔧 DateSelectorView.onDisappear")
+                isSheetReady = false
+            }
+        }
         .navigationViewStyle(StackNavigationViewStyle())
-     }
+    }
     
     private func dateLocationCardWithAdInfo(location: DateLocation) -> some View {
         Button(action: {
@@ -324,7 +324,7 @@ struct DateSelectorView: View {
                             VStack(spacing: 4) {
                                 // 広告必須マーク
                                 if viewModel.isAdRequiredForDate(at: location) &&
-                                   location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                    location.requiredIntimacy <= viewModel.character.intimacyLevel {
                                     HStack(spacing: 2) {
                                         Image(systemName: "tv.fill")
                                             .font(.system(size: 8))
@@ -338,12 +338,10 @@ struct DateSelectorView: View {
                                     .cornerRadius(4)
                                 }
                                 
-                                // 親密度ボーナス表示（広告ボーナス込み）
+                                // 🔧 修正：親密度ボーナス表示（広告ボーナス除外）
                                 if location.intimacyBonus > 0 {
                                     VStack(spacing: 2) {
-                                        // 🌟 広告ボーナス込みで表示
-                                        let totalBonus = location.intimacyBonus + (viewModel.isAdRequiredForDate(at: location) ? 1 : 0)
-                                        Text("+\(totalBonus)")
+                                        Text("+\(location.intimacyBonus)")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundColor(.yellow)
                                         
@@ -423,11 +421,9 @@ struct DateSelectorView: View {
                         
                         // 🌟 広告必須表示
                         if viewModel.isAdRequiredForDate(at: location) &&
-                           location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                            location.requiredIntimacy <= viewModel.character.intimacyLevel {
                             HStack(spacing: 4) {
                                 Image(systemName: "tv")
-                                    .font(.caption2)
-                                Text("広告視聴")
                                     .font(.caption2)
                                     .fontWeight(.medium)
                             }
@@ -516,6 +512,7 @@ struct DateSelectorView: View {
         .scaleEffect(location.requiredIntimacy > viewModel.character.intimacyLevel ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
     }
+
     
     private func handleDateStart(_ dateLocation: DateLocation) {
         print("🔧 DateSelectorView: 広告必須デート開始処理")
@@ -1536,10 +1533,10 @@ struct DateDetailView: View {
                     detailInfoSection
                     specialEffectsSection
                     
-                    // 🌟 広告必須の説明セクション（解放済みの場合のみ表示）
-                    if isUnlocked {
-                        adRequirementSection
-                    }
+                    // 🔧 削除：広告必須の説明セクションを削除
+                    // if isUnlocked {
+                    //     adRequirementSection
+                    // }
                     
                     // ボタンセクション
                     if isUnlocked {
@@ -1597,56 +1594,7 @@ struct DateDetailView: View {
         }
     }
     
-    // MARK: - 🌟 広告必須説明セクション
-    private var adRequirementSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "tv.fill")
-                    .font(.title2)
-                    .foregroundColor(.blue)
-                
-                Text("デート開始について")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                
-                Spacer()
-            }
-            
-            VStack(alignment: .leading, spacing: 12) {
-                InfoRowView(
-                    icon: "play.circle.fill",
-                    title: "広告視聴でデート開始",
-                    description: "短い広告をご視聴いただくことで、素敵なデートを楽しめます",
-                    color: .blue
-                )
-                
-                InfoRowView(
-                    icon: "heart.fill",
-                    title: "特別な親密度ボーナス",
-                    description: "広告視聴への感謝として、追加で+1の親密度ボーナスをプレゼント",
-                    color: .pink
-                )
-                
-                InfoRowView(
-                    icon: "sparkles",
-                    title: "アプリの継続運営",
-                    description: "広告収益により、アプリの品質向上と新機能開発を行っています",
-                    color: .purple
-                )
-            }
-        }
-        .padding(20)
-        .background(cardColor)
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.blue.opacity(0.2), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
-    }
-    
-    // MARK: - 🌟 修正されたスタートボタンセクション
+    // MARK: - 🔧 修正されたスタートボタンセクション（親密度ボーナス表示を削除）
     private var startButtonSection: some View {
         VStack(spacing: 16) {
             // 🌟 メインのデート開始ボタン（広告視聴必須）
@@ -1662,7 +1610,8 @@ struct DateDetailView: View {
                             .font(.headline)
                             .fontWeight(.bold)
                         
-                        Text("親密度 +\(location.intimacyBonus + 1) 獲得")
+                        // 🔧 削除：広告視聴による親密度ボーナス表示を削除
+                        Text("親密度 +\(location.intimacyBonus) 獲得")
                             .font(.subheadline)
                             .fontWeight(.medium)
                     }
@@ -1703,7 +1652,7 @@ struct DateDetailView: View {
                 .padding(.vertical, 8)
             }
             
-            // 🌟 補足説明
+            // 🔧 修正：補足説明から親密度ボーナスの言及を削除
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle.fill")
@@ -1716,11 +1665,11 @@ struct DateDetailView: View {
                 }
                 
                 HStack(spacing: 8) {
-                    Image(systemName: "gift.fill")
+                    Image(systemName: "heart.fill")
                         .font(.caption)
                         .foregroundColor(.orange)
                     
-                    Text("視聴完了で追加の親密度ボーナス！")
+                    Text("デート完了で親密度ボーナス獲得！")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -1837,7 +1786,8 @@ struct DateDetailView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "heart.fill")
                             .font(.caption)
-                        Text("+\(location.intimacyBonus + 1)") // 🌟 広告ボーナス込みで表示
+                        // 🔧 削除：広告ボーナス込みの表示を元の表示に戻す
+                        Text("+\(location.intimacyBonus)")
                             .font(.caption)
                             .fontWeight(.bold)
                     }
@@ -2014,6 +1964,7 @@ struct DateDetailView: View {
         .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
     }
     
+    // 🔧 修正：親密度ボーナスセクション（広告ボーナスの説明を削除）
     private var intimacyBonusSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
@@ -2028,8 +1979,8 @@ struct DateDetailView: View {
                 
                 Spacer()
                 
-                // 🌟 広告ボーナス込みで表示
-                Text("+\(location.intimacyBonus + 1)")
+                // 🔧 削除：広告ボーナス込みの表示を元に戻す
+                Text("+\(location.intimacyBonus)")
                     .font(.title)
                     .fontWeight(.bold)
                     .foregroundColor(.pink)
@@ -2062,34 +2013,34 @@ struct DateDetailView: View {
                     }
                 }
                 
-                // 🌟 広告ボーナスの説明を追加
-                if isUnlocked {
-                    HStack(spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("広告視聴ボーナス")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.primary)
-                            
-                            Text("広告視聴への感謝として +1 の追加ボーナス")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        Spacer()
-                        
-                        ZStack {
-                            Circle()
-                                .fill(.blue.opacity(0.2))
-                                .frame(width: 40, height: 40)
-                            
-                            Text("+1")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.blue)
-                        }
-                    }
-                }
+                // 🔧 削除：広告ボーナスの説明セクションを削除
+                // if isUnlocked {
+                //     HStack(spacing: 12) {
+                //         VStack(alignment: .leading, spacing: 4) {
+                //             Text("広告視聴ボーナス")
+                //                 .font(.subheadline)
+                //                 .fontWeight(.semibold)
+                //                 .foregroundColor(.primary)
+                //
+                //             Text("広告視聴への感謝として +1 の追加ボーナス")
+                //                 .font(.caption)
+                //                 .foregroundColor(.secondary)
+                //         }
+                //
+                //         Spacer()
+                //
+                //         ZStack {
+                //             Circle()
+                //                 .fill(.blue.opacity(0.2))
+                //                 .frame(width: 40, height: 40)
+                //
+                //             Text("+1")
+                //                 .font(.caption)
+                //                 .fontWeight(.bold)
+                //                 .foregroundColor(.blue)
+                //         }
+                //     }
+                // }
                 
                 if location.isSpecial {
                     HStack(spacing: 8) {

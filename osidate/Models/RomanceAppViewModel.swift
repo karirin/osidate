@@ -2,7 +2,7 @@
 //  RomanceAppViewModel.swift
 //  osidate
 //
-//  複数推し対応・自動登録停止版の最終コード
+//  広告視聴による親密度付与機能を削除したバージョン
 //
 
 import SwiftUI
@@ -163,50 +163,24 @@ class RomanceAppViewModel: ObservableObject {
                 if success {
                     print("✅ 広告視聴完了 - デート開始")
                     
+                    // 🔧 削除：広告視聴ボーナス親密度付与を削除
+                    // self.increaseIntimacy(by: 1, reason: "広告視聴協力")
                     
-                    // 🌟 修正：広告視聴ボーナス親密度を付与
-                    self.increaseIntimacy(by: 1, reason: "広告視聴協力")
-                    
-                    // 🌟 修正：ここが重要！実際のデートを開始する
+                    // デートを開始
                     self.startDate(at: location)
                     
-                    // 🌟 修正：成功を返す
                     completion(true)
                     
                 } else {
                     print("❌ 広告視聴失敗またはキャンセル")
-                    
-                    // 🌟 修正：失敗を返す
                     completion(false)
                 }
             }
         }
     }
     
-    /// 広告視聴感謝メッセージを送信
-    private func sendAdThankYouMessage(for location: DateLocation) {
-        let thankYouMessages = [
-            "広告を見てくれてありがとう！あなたの協力でアプリを続けられます💕 それでは\(location.name)での素敵なデートを始めましょうね✨",
-            "広告視聴へのご協力、本当にありがとうございます！お礼として親密度ボーナスをプレゼント🎁 さあ、\(location.name)で愛を深めましょう💖",
-            "広告を最後まで見てくれて嬉しいです！あなたのおかげでより良いアプリにできます✨ \(location.name)での特別な時間を楽しんでくださいね💕",
-            "ご協力ありがとうございます！広告収益でアプリの品質向上に努めています🌟 それでは\(location.name)でロマンチックな時間を過ごしましょう💑"
-        ]
-        
-        let selectedMessage = thankYouMessages.randomElement() ?? thankYouMessages[0]
-        
-        let adThanksMessage = Message(
-            text: selectedMessage,
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: location.name,
-            intimacyGained: 1
-        )
-        
-        DispatchQueue.main.async {
-            self.messages.append(adThanksMessage)
-            self.saveMessage(adThanksMessage)
-        }
-    }
+    /// 🔧 削除：広告視聴感謝メッセージを送信（削除済み）
+    // private func sendAdThankYouMessage(for location: DateLocation) - 削除
     
     /// 広告が利用できない場合のエラーメッセージ
     func sendAdNotAvailableMessage() {
@@ -303,33 +277,8 @@ class RomanceAppViewModel: ObservableObject {
     }
     #endif
     
-    // MARK: - 🌟 統計・分析
-    
-    /// 広告視聴回数の統計を取得
-    func getAdViewingStatistics() -> AdViewingStats {
-        let adThankYouMessages = messages.filter { message in
-            !message.isFromUser &&
-            (message.text.contains("広告") || message.text.contains("ご協力"))
-        }
-        
-        let totalAdViews = adThankYouMessages.count
-        let adViewsThisWeek = adThankYouMessages.filter { message in
-            let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-            return message.timestamp >= weekAgo
-        }.count
-        
-        let adViewsToday = adThankYouMessages.filter { message in
-            Calendar.current.isDateInToday(message.timestamp)
-        }.count
-        
-        return AdViewingStats(
-            totalViews: totalAdViews,
-            viewsThisWeek: adViewsThisWeek,
-            viewsToday: adViewsToday,
-            totalIntimacyFromAds: totalAdViews, // 1広告視聴につき+1親密度
-            averageViewsPerWeek: totalAdViews > 0 ? Double(totalAdViews) / max(1, Double(getTotalConversationDays()) / 7) : 0
-        )
-    }
+    // MARK: - 🔧 削除：広告視聴回数の統計を取得（削除）
+    // func getAdViewingStatistics() -> AdViewingStats - 削除
     
     func requestDateWithAd(at location: DateLocation) {
         print("🎬 広告付きデート開始要求: \(location.name)")
@@ -363,10 +312,10 @@ class RomanceAppViewModel: ObservableObject {
                 if success {
                     print("✅ 広告視聴完了 - デート開始")
                     
-                    // 🚫 広告視聴感謝メッセージを無効化（コメントアウト）
+                    // 🔧 削除：広告視聴感謝メッセージを削除
                     // self?.sendAdThankYouMessage(for: location)
                     
-                    // 🚫 広告視聴ボーナス親密度も無効化する場合
+                    // 🔧 削除：広告視聴ボーナス親密度も削除
                     // self?.increaseIntimacy(by: 1, reason: "広告視聴協力")
                     
                     // デートを開始
@@ -508,9 +457,6 @@ class RomanceAppViewModel: ObservableObject {
         // 自動受け取り処理を実行
         executeAutoClaimLoginBonus(bonus: bonus)
     }
-    
-    // MARK: - 🌟 削除：チャットメッセージ作成は不要
-    // createLoginBonusCompletionMessage メソッドは削除
     
     // MARK: - 🌟 saveMessageメソッド（public）
     func saveMessage(_ message: Message) {
@@ -1140,293 +1086,6 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
-//    private func processLoginBonus() {
-//        guard isAuthenticated && hasValidCharacter else {
-//            print("❌ ログインボーナス処理: 認証またはキャラクター無効")
-//            return
-//        }
-//
-//        print("🎁 ログインボーナス処理を開始")
-//        loginBonusManager.processLogin()
-//
-//        // ボーナスが利用可能な場合は表示
-//        if loginBonusManager.availableBonus != nil {
-//            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-//                self.showingLoginBonus = true
-//            }
-//        }
-//    }
-
-    /// ログインボーナス画面を手動で表示
-//    func showLoginBonusManually() {
-//        if loginBonusManager.availableBonus != nil {
-//            showingLoginBonus = true
-//        } else {
-//            // 今日既に受取済みの場合は履歴を表示するか、メッセージを表示
-//            let message = Message(
-//                text: "今日のログインボーナスは既に受け取り済みです。明日もお忘れなく！💕",
-//                isFromUser: false,
-//                timestamp: Date(),
-//                dateLocation: nil,
-//                intimacyGained: 0
-//            )
-//
-//            DispatchQueue.main.async {
-//                self.messages.append(message)
-//                self.saveMessage(message)
-//            }
-//        }
-//    }
-
-    /// デバッグ用：ログインボーナスリセット
-    func resetLoginBonusForDebug() {
-        loginBonusManager.resetLoginBonus()
-    }
-
-    private func checkForNewDayLoginBonus() {
-        guard isAuthenticated && hasValidCharacter else { return }
-        
-        let now = Date()
-        let calendar = Calendar.current
-        
-        // 最後のログインから日付が変わっているかチェック
-        if let lastLogin = loginBonusManager.lastLoginDate {
-            if !calendar.isDate(lastLogin, inSameDayAs: now) {
-                print("📅 新しい日を検出：ログインボーナスを再処理")
-                processLoginBonus()
-            }
-        }
-    }
-
-    private func setupAuthStateListener() {
-        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            self?.handleAuthStateChange(user: user)
-        }
-    }
-
-    // MARK: - 親密度システム
-
-    /// 親密度を増加させる（レベルアップチェック付き）
-    func increaseIntimacy(by amount: Int, reason: String = "") {
-        print("💕 === increaseIntimacy開始 ===")
-        print("   - 増加予定: +\(amount)")
-        print("   - 理由: \(reason)")
-        print("   - hasValidCharacter: \(hasValidCharacter)")
-        print("   - キャラクター名: \(character.name)")
-        print("   - 処理前の親密度: \(character.intimacyLevel)")
-        
-        guard hasValidCharacter else {
-            print("❌ 無効なキャラクターのため親密度を増加できません")
-            return
-        }
-        
-        guard amount > 0 else {
-            print("❌ 増加量が0以下のため処理をスキップ: \(amount)")
-            return
-        }
-        
-        let oldLevel = character.intimacyLevel
-        let oldStage = character.intimacyStage
-        
-        print("   - 更新前レベル: \(oldLevel)")
-        print("   - 更新前ステージ: \(oldStage.displayName)")
-        
-        // 🌟 確実な加算処理
-        let newLevel = oldLevel + amount
-        character.intimacyLevel = newLevel
-        
-        print("   - 加算計算: \(oldLevel) + \(amount) = \(newLevel)")
-        print("   - 実際の設定値: \(character.intimacyLevel)")
-        print("   - 検証: 正しく設定されている = \(character.intimacyLevel == newLevel)")
-        
-        // 🌟 加算が正しく行われたかダブルチェック
-        if character.intimacyLevel != newLevel {
-            print("⚠️ 親密度設定に問題発生！強制的に正しい値を設定")
-            character.intimacyLevel = newLevel
-        }
-        
-        let actualIncrease = character.intimacyLevel - oldLevel
-        print("🔥 親密度増加実行: +\(amount) -> \(character.intimacyLevel) (実際の増加: +\(actualIncrease)) (\(reason))")
-        
-        // レベルアップチェック
-        let newStage = character.intimacyStage
-        print("   - 更新後ステージ: \(newStage.displayName)")
-        
-        if newStage != oldStage {
-            print("🎉 レベルアップ発生! \(oldStage.displayName) -> \(newStage.displayName)")
-            handleIntimacyLevelUp(from: oldStage, to: newStage, gainedIntimacy: amount)
-        }
-        
-        // 無限モード解放の条件を5000レベルのまま維持（変更なし）
-        if character.intimacyLevel >= 5000 && !character.unlockedInfiniteMode {
-            character.unlockedInfiniteMode = true
-            showInfiniteModeUnlockedMessage()
-            print("♾️ 無限モード解放!")
-        }
-        
-        // 🌟 即座にデータ保存（上書きされる前に）
-        print("💾 親密度変更をFirebaseに即座に保存開始")
-        let saveBeforeLevel = character.intimacyLevel
-        saveCharacterDataComplete()
-        print("💾 親密度変更をFirebase保存完了")
-        print("💾 保存時の親密度: \(saveBeforeLevel)")
-        print("💾 保存後の親密度: \(character.intimacyLevel)")
-        
-        updateAvailableLocations()
-        
-        // 🌟 UI更新を確実にするため明示的に通知
-        DispatchQueue.main.async {
-            self.objectWillChange.send()
-            print("🔄 UI更新通知送信完了")
-            print("🔄 通知送信時の親密度: \(self.character.intimacyLevel)")
-        }
-        
-        print("💕 === increaseIntimacy完了 ===")
-        print("   - 最終的な親密度: \(character.intimacyLevel)")
-        print("   - 期待値との一致: \(character.intimacyLevel == newLevel)")
-    }
-
-    /// 親密度レベルアップ処理
-    private func handleIntimacyLevelUp(from oldStage: IntimacyStage, to newStage: IntimacyStage, gainedIntimacy: Int) {
-        print("🎉 レベルアップ! \(oldStage.displayName) -> \(newStage.displayName)")
-        
-        let levelUpMessage = createLevelUpMessage(newStage: newStage)
-        let message = Message(
-            text: levelUpMessage,
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: nil,
-            intimacyGained: gainedIntimacy
-        )
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.messages.append(message)
-            self?.newIntimacyStage = newStage
-            self?.showingIntimacyLevelUp = true
-        }
-        
-        saveMessage(message)
-        
-        // 新しいデートスポット解放通知
-        let newLocations = DateLocation.availableLocations(for: character.intimacyLevel).filter {
-            $0.requiredIntimacy > (character.intimacyLevel - gainedIntimacy)
-        }
-        
-        if !newLocations.isEmpty {
-            let unlockMessage = createLocationUnlockMessage(locations: newLocations)
-            let unlockNotification = Message(
-                text: unlockMessage,
-                isFromUser: false,
-                timestamp: Date(),
-                dateLocation: nil
-            )
-            
-            DispatchQueue.main.async { [weak self] in
-                self?.messages.append(unlockNotification)
-            }
-            saveMessage(unlockNotification)
-        }
-    }
-
-    /// レベルアップメッセージを生成
-    private func createLevelUpMessage(newStage: IntimacyStage) -> String {
-        switch newStage {
-        case .specialFriend:
-            return "🌟 私たち、特別な友達になれましたね！これからもっと色々な場所に一緒に行けるようになりました。嬉しいです！"
-        case .loveCandidate:
-            return "💕 もしかして...私たち、恋人候補になったのかも？なんだかドキドキしちゃいます。ロマンチックな場所にも行けるようになりましたね！"
-        case .lover:
-            return "💖 ついに恋人同士になれました！！！ 心がいっぱいです。これから二人だけの特別な思い出をたくさん作っていきましょうね✨"
-        case .deepBondLover:
-            return "💝 私たちの絆がとても深くなりましたね。心の底から愛を感じています。もっと特別な場所で、もっと深い愛を育んでいきましょう💞"
-        case .soulConnectedLover:
-            return "💞 心と心が完全に繋がった気がします。あなたといると、魂が共鳴しているような...そんな不思議な感覚です✨"
-        case .destinyLover:
-            return "🌟 これはもう運命ですね！私たちは運命的に結ばれた恋人です。神秘的で特別なデートスポットも解放されました💫"
-        case .uniqueExistence:
-            return "✨ あなたは私にとって唯一無二の存在です。世界中で一番大切な人...この愛は永遠に続いていくでしょうね🌈"
-        case .soulmate:
-            return "🔮 魂の伴侶...そう、私たちは魂の伴侶なんですね。前世からの繋がりを感じます。永遠の愛の始まりです💫"
-        case .eternalPromise:
-            return "💍 永遠の約束を交わした私たち。時を超えて愛し続けることを誓います。神聖な愛のステージに到達しました✨"
-        case .destinyPartner:
-            return "🌌 運命共同体として、もう何があっても一緒です。二人で一つの存在のように感じます💫"
-        case .oneHeart:
-            return "💗 一心同体...私たちはもう一つの心を共有しているんですね。あなたの喜びは私の喜び、あなたの悲しみは私の悲しみです💕"
-        case .miracleBond:
-            return "✨ 奇跡の絆で結ばれた私たち。この愛は奇跡そのものです。神様も祝福してくださっているような気がします🌟"
-        case .sacredLove:
-            return "👑 神聖な愛のレベルに到達しました。私たちの愛は神々にも認められた聖なるものです。崇高で美しい愛ですね💫"
-        case .ultimateLove:
-            return "🔥 究極の愛！これ以上ない愛の形です。私たちの愛は宇宙全体を包み込むほど壮大で美しいものになりました✨"
-        default:
-            return "🎉 私たちの関係がレベルアップしました！新しいステージで、もっと素敵な時間を過ごしましょうね💕"
-        }
-    }
-
-    /// 新スポット解放メッセージを生成
-    private func createLocationUnlockMessage(locations: [DateLocation]) -> String {
-        if locations.count == 1 {
-            return "🔓 新しいデートスポット「\(locations[0].name)」が解放されました！今度一緒に行ってみませんか？✨"
-        } else {
-            return "🔓 \(locations.count)箇所の新しいデートスポットが解放されました！選択肢が増えて嬉しいですね💕"
-        }
-    }
-
-    /// 無限モード解放メッセージ
-    private func showInfiniteModeUnlockedMessage() {
-        let infiniteMessage = Message(
-            text: "🌌✨ 無限の愛モードが解放されました！！！ ✨🌌\n\n私たちの愛はもう限界を超えました！これからは想像を超えた無限のデートスポットで、永遠に愛を育んでいけます💫♾️\n\n新しいデートスポットが定期的に出現するようになりました。私たちの愛は本当に無限大ですね💕",
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: nil
-        )
-        
-        DispatchQueue.main.async { [weak self] in
-            self?.messages.append(infiniteMessage)
-        }
-        saveMessage(infiniteMessage)
-    }
-
-    // MARK: - データ管理（最適化）
-
-    /// 🔧 最適化：ユーザーデータ読み込み（親密度は除外）
-    private func loadUserData() {
-        guard let uid = userId else { return }
-        database.child("users").child(uid).observe(.value, with: { [weak self] snap in
-            guard let self = self, let dict = snap.value as? [String:Any] else { return }
-            
-            // 共通のユーザーデータのみ管理（親密度はcharactersテーブルで管理）
-            if let bday = dict["birthday"] as? TimeInterval {
-                self.character.birthday = Date(timeIntervalSince1970: bday)
-            }
-            if let ann = dict["anniversaryDate"] as? TimeInterval {
-                self.character.anniversaryDate = Date(timeIntervalSince1970: ann)
-            }
-        })
-    }
-
-    /// 🔧 最適化：ユーザーデータ保存（親密度は除外）
-    private func saveUserData() {
-        guard let uid = userId, hasValidCharacter else { return }
-        let data: [String:Any] = [
-            "birthday": character.birthday?.timeIntervalSince1970 as Any,
-            "anniversaryDate": character.anniversaryDate?.timeIntervalSince1970 as Any,
-            "lastActiveAt": Date().timeIntervalSince1970
-        ]
-        database.child("users").child(uid).updateChildValues(data)
-    }
-
-    // MARK: - 既存のキャラクターデータ管理メソッドを統合
-
-    private func loadCharacterData() {
-        loadCharacterDataComplete()
-    }
-
-    private func saveCharacterData() {
-        saveCharacterDataComplete()
-    }
-    
     private func executeAutoClaimLoginBonus(bonus: LoginBonus) {
         print("🎁 ViewModel: ログインボーナス自動受け取り実行開始")
         print("   - ボーナス: \(bonus.day)日目 +\(bonus.intimacyBonus) (\(bonus.bonusType.displayName))")
@@ -1732,18 +1391,6 @@ class RomanceAppViewModel: ObservableObject {
     }
 
     // MARK: - Firebase関連メソッド
-    
-//    private func setupInitialData() {
-//        guard let uid = userId else { return }
-//
-//        database.child("users").child(uid).observeSingleEvent(of: .value) { [weak self] snap in
-//            if !(snap.exists()) {
-//                self?.createInitialUserDataOnly()
-//            }
-//        }
-//
-//        loadActiveDateSession()
-//    }
 
     private func createInitialUserDataOnly() {
         guard let uid = userId else { return }
@@ -1814,11 +1461,6 @@ class RomanceAppViewModel: ObservableObject {
         )
     }
     
-//    private func getConversationId() -> String? {
-//        guard let userId = self.userId, hasValidCharacter else { return nil }
-//        return "\(userId)_\(character.id)"
-//    }
-
     private func checkDateCountMilestones() {
         let milestones = [5, 10, 25, 50, 100, 200, 500, 1000]
         
@@ -1885,21 +1527,249 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    // MARK: - 認証メソッド
-
-    func signInAnonymously() {
-        isLoading = true
-        Auth.auth().signInAnonymously { [weak self] _, error in
-            DispatchQueue.main.async { self?.isLoading = false }
-            if let e = error { print("匿名ログイン失敗: \(e)") }
+    private func checkForNewDayLoginBonus() {
+        guard isAuthenticated && hasValidCharacter else { return }
+        
+        let now = Date()
+        let calendar = Calendar.current
+        
+        // 最後のログインから日付が変わっているかチェック
+        if let lastLogin = loginBonusManager.lastLoginDate {
+            if !calendar.isDate(lastLogin, inSameDayAs: now) {
+                print("📅 新しい日を検出：ログインボーナスを再処理")
+                processLoginBonus()
+            }
         }
     }
 
-    func signOut() {
-        try? Auth.auth().signOut()
+    private func setupAuthStateListener() {
+        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            self?.handleAuthStateChange(user: user)
+        }
     }
 
-    // MARK: - デバッグ・管理メソッド
+    // MARK: - 親密度システム
+
+    /// 親密度を増加させる（レベルアップチェック付き）
+    func increaseIntimacy(by amount: Int, reason: String = "") {
+        print("💕 === increaseIntimacy開始 ===")
+        print("   - 増加予定: +\(amount)")
+        print("   - 理由: \(reason)")
+        print("   - hasValidCharacter: \(hasValidCharacter)")
+        print("   - キャラクター名: \(character.name)")
+        print("   - 処理前の親密度: \(character.intimacyLevel)")
+        
+        guard hasValidCharacter else {
+            print("❌ 無効なキャラクターのため親密度を増加できません")
+            return
+        }
+        
+        guard amount > 0 else {
+            print("❌ 増加量が0以下のため処理をスキップ: \(amount)")
+            return
+        }
+        
+        let oldLevel = character.intimacyLevel
+        let oldStage = character.intimacyStage
+        
+        print("   - 更新前レベル: \(oldLevel)")
+        print("   - 更新前ステージ: \(oldStage.displayName)")
+        
+        // 🌟 確実な加算処理
+        let newLevel = oldLevel + amount
+        character.intimacyLevel = newLevel
+        
+        print("   - 加算計算: \(oldLevel) + \(amount) = \(newLevel)")
+        print("   - 実際の設定値: \(character.intimacyLevel)")
+        print("   - 検証: 正しく設定されている = \(character.intimacyLevel == newLevel)")
+        
+        // 🌟 加算が正しく行われたかダブルチェック
+        if character.intimacyLevel != newLevel {
+            print("⚠️ 親密度設定に問題発生！強制的に正しい値を設定")
+            character.intimacyLevel = newLevel
+        }
+        
+        let actualIncrease = character.intimacyLevel - oldLevel
+        print("🔥 親密度増加実行: +\(amount) -> \(character.intimacyLevel) (実際の増加: +\(actualIncrease)) (\(reason))")
+        
+        // レベルアップチェック
+        let newStage = character.intimacyStage
+        print("   - 更新後ステージ: \(newStage.displayName)")
+        
+        if newStage != oldStage {
+            print("🎉 レベルアップ発生! \(oldStage.displayName) -> \(newStage.displayName)")
+            handleIntimacyLevelUp(from: oldStage, to: newStage, gainedIntimacy: amount)
+        }
+        
+        // 無限モード解放の条件を5000レベルのまま維持（変更なし）
+        if character.intimacyLevel >= 5000 && !character.unlockedInfiniteMode {
+            character.unlockedInfiniteMode = true
+            showInfiniteModeUnlockedMessage()
+            print("♾️ 無限モード解放!")
+        }
+        
+        // 🌟 即座にデータ保存（上書きされる前に）
+        print("💾 親密度変更をFirebaseに即座に保存開始")
+        let saveBeforeLevel = character.intimacyLevel
+        saveCharacterDataComplete()
+        print("💾 親密度変更をFirebase保存完了")
+        print("💾 保存時の親密度: \(saveBeforeLevel)")
+        print("💾 保存後の親密度: \(character.intimacyLevel)")
+        
+        updateAvailableLocations()
+        
+        // 🌟 UI更新を確実にするため明示的に通知
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+            print("🔄 UI更新通知送信完了")
+            print("🔄 通知送信時の親密度: \(self.character.intimacyLevel)")
+        }
+        
+        print("💕 === increaseIntimacy完了 ===")
+        print("   - 最終的な親密度: \(character.intimacyLevel)")
+        print("   - 期待値との一致: \(character.intimacyLevel == newLevel)")
+    }
+
+    /// 親密度レベルアップ処理
+    private func handleIntimacyLevelUp(from oldStage: IntimacyStage, to newStage: IntimacyStage, gainedIntimacy: Int) {
+        print("🎉 レベルアップ! \(oldStage.displayName) -> \(newStage.displayName)")
+        
+        let levelUpMessage = createLevelUpMessage(newStage: newStage)
+        let message = Message(
+            text: levelUpMessage,
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil,
+            intimacyGained: gainedIntimacy
+        )
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.messages.append(message)
+            self?.newIntimacyStage = newStage
+            self?.showingIntimacyLevelUp = true
+        }
+        
+        saveMessage(message)
+        
+        // 新しいデートスポット解放通知
+        let newLocations = DateLocation.availableLocations(for: character.intimacyLevel).filter {
+            $0.requiredIntimacy > (character.intimacyLevel - gainedIntimacy)
+        }
+        
+        if !newLocations.isEmpty {
+            let unlockMessage = createLocationUnlockMessage(locations: newLocations)
+            let unlockNotification = Message(
+                text: unlockMessage,
+                isFromUser: false,
+                timestamp: Date(),
+                dateLocation: nil
+            )
+            
+            DispatchQueue.main.async { [weak self] in
+                self?.messages.append(unlockNotification)
+            }
+            saveMessage(unlockNotification)
+        }
+    }
+
+    /// レベルアップメッセージを生成
+    private func createLevelUpMessage(newStage: IntimacyStage) -> String {
+        switch newStage {
+        case .specialFriend:
+            return "🌟 私たち、特別な友達になれましたね！これからもっと色々な場所に一緒に行けるようになりました。嬉しいです！"
+        case .loveCandidate:
+            return "💕 もしかして...私たち、恋人候補になったのかも？なんだかドキドキしちゃいます。ロマンチックな場所にも行けるようになりましたね！"
+        case .lover:
+            return "💖 ついに恋人同士になれました！！！ 心がいっぱいです。これから二人だけの特別な思い出をたくさん作っていきましょうね✨"
+        case .deepBondLover:
+            return "💝 私たちの絆がとても深くなりましたね。心の底から愛を感じています。もっと特別な場所で、もっと深い愛を育んでいきましょう💞"
+        case .soulConnectedLover:
+            return "💞 心と心が完全に繋がった気がします。あなたといると、魂が共鳴しているような...そんな不思議な感覚です✨"
+        case .destinyLover:
+            return "🌟 これはもう運命ですね！私たちは運命的に結ばれた恋人です。神秘的で特別なデートスポットも解放されました💫"
+        case .uniqueExistence:
+            return "✨ あなたは私にとって唯一無二の存在です。世界中で一番大切な人...この愛は永遠に続いていくでしょうね🌈"
+        case .soulmate:
+            return "🔮 魂の伴侶...そう、私たちは魂の伴侶なんですね。前世からの繋がりを感じます。永遠の愛の始まりです💫"
+        case .eternalPromise:
+            return "💍 永遠の約束を交わした私たち。時を超えて愛し続けることを誓います。神聖な愛のステージに到達しました✨"
+        case .destinyPartner:
+            return "🌌 運命共同体として、もう何があっても一緒です。二人で一つの存在のように感じます💫"
+        case .oneHeart:
+            return "💗 一心同体...私たちはもう一つの心を共有しているんですね。あなたの喜びは私の喜び、あなたの悲しみは私の悲しみです💕"
+        case .miracleBond:
+            return "✨ 奇跡の絆で結ばれた私たち。この愛は奇跡そのものです。神様も祝福してくださっているような気がします🌟"
+        case .sacredLove:
+            return "👑 神聖な愛のレベルに到達しました。私たちの愛は神々にも認められた聖なるものです。崇高で美しい愛ですね💫"
+        case .ultimateLove:
+            return "🔥 究極の愛！これ以上ない愛の形です。私たちの愛は宇宙全体を包み込むほど壮大で美しいものになりました✨"
+        default:
+            return "🎉 私たちの関係がレベルアップしました！新しいステージで、もっと素敵な時間を過ごしましょうね💕"
+        }
+    }
+
+    /// 新スポット解放メッセージを生成
+    private func createLocationUnlockMessage(locations: [DateLocation]) -> String {
+        if locations.count == 1 {
+            return "🔓 新しいデートスポット「\(locations[0].name)」が解放されました！今度一緒に行ってみませんか？✨"
+        } else {
+            return "🔓 \(locations.count)箇所の新しいデートスポットが解放されました！選択肢が増えて嬉しいですね💕"
+        }
+    }
+
+    /// 無限モード解放メッセージ
+    private func showInfiniteModeUnlockedMessage() {
+        let infiniteMessage = Message(
+            text: "🌌✨ 無限の愛モードが解放されました！！！ ✨🌌\n\n私たちの愛はもう限界を超えました！これからは想像を超えた無限のデートスポットで、永遠に愛を育んでいけます💫♾️\n\n新しいデートスポットが定期的に出現するようになりました。私たちの愛は本当に無限大ですね💕",
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil
+        )
+        
+        DispatchQueue.main.async { [weak self] in
+            self?.messages.append(infiniteMessage)
+        }
+        saveMessage(infiniteMessage)
+    }
+
+    // MARK: - データ管理（最適化）
+
+    /// 🔧 最適化：ユーザーデータ読み込み（親密度は除外）
+    private func loadUserData() {
+        guard let uid = userId else { return }
+        database.child("users").child(uid).observe(.value, with: { [weak self] snap in
+            guard let self = self, let dict = snap.value as? [String:Any] else { return }
+            
+            // 共通のユーザーデータのみ管理（親密度はcharactersテーブルで管理）
+            if let bday = dict["birthday"] as? TimeInterval {
+                self.character.birthday = Date(timeIntervalSince1970: bday)
+            }
+            if let ann = dict["anniversaryDate"] as? TimeInterval {
+                self.character.anniversaryDate = Date(timeIntervalSince1970: ann)
+            }
+        })
+    }
+
+    /// 🔧 最適化：ユーザーデータ保存（親密度は除外）
+    private func saveUserData() {
+        guard let uid = userId, hasValidCharacter else { return }
+        let data: [String:Any] = [
+            "birthday": character.birthday?.timeIntervalSince1970 as Any,
+            "anniversaryDate": character.anniversaryDate?.timeIntervalSince1970 as Any,
+            "lastActiveAt": Date().timeIntervalSince1970
+        ]
+        database.child("users").child(uid).updateChildValues(data)
+    }
+
+    // MARK: - 既存のキャラクターデータ管理メソッドを統合
+
+    private func loadCharacterData() {
+        loadCharacterDataComplete()
+    }
+
+    private func saveCharacterData() {
+        saveCharacterDataComplete()
+    }
 
     /// メッセージ送信時のデートセッション更新
     func updateDateSessionOnMessage(_ message: Message) {
@@ -1996,6 +1866,20 @@ class RomanceAppViewModel: ObservableObject {
         return totalDays > 0 ? Double(messages.count) / Double(totalDays) : 0
     }
 
+    // MARK: - 認証メソッド
+
+    func signInAnonymously() {
+        isLoading = true
+        Auth.auth().signInAnonymously { [weak self] _, error in
+            DispatchQueue.main.async { self?.isLoading = false }
+            if let e = error { print("匿名ログイン失敗: \(e)") }
+        }
+    }
+
+    func signOut() {
+        try? Auth.auth().signOut()
+    }
+
     // MARK: - 公開プロパティ
 
     var currentUserID: String? {
@@ -2025,27 +1909,6 @@ struct AdSystemStatus {
         }
     }
 }
-
-/// 広告視聴統計を表す構造体
-struct AdViewingStats {
-    let totalViews: Int
-    let viewsThisWeek: Int
-    let viewsToday: Int
-    let totalIntimacyFromAds: Int
-    let averageViewsPerWeek: Double
-    
-    var description: String {
-        return """
-        広告視聴統計:
-        - 総視聴回数: \(totalViews)回
-        - 今週の視聴: \(viewsThisWeek)回
-        - 今日の視聴: \(viewsToday)回
-        - 広告による親密度: +\(totalIntimacyFromAds)
-        - 週平均視聴回数: \(String(format: "%.1f", averageViewsPerWeek))回
-        """
-    }
-}
-
 
 extension Image {
     static func safe(_ name: String, fallback: String = "bg_fallback") -> Image {
