@@ -25,6 +25,28 @@ class AdMobManager: NSObject, ObservableObject {
         loadRewardedAd()
     }
     
+    // 追加（AdMobManager 内）
+    private func topViewController(base: UIViewController? = UIApplication.shared
+        .connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .first(where: { $0.activationState == .foregroundActive })?
+        .windows.first(where: { $0.isKeyWindow })?
+        .rootViewController) -> UIViewController? {
+        if let nav = base as? UINavigationController { return topViewController(base: nav.visibleViewController) }
+        if let tab = base as? UITabBarController, let selected = tab.selectedViewController { return topViewController(base: selected) }
+        if let presented = base?.presentedViewController { return topViewController(base: presented) }
+        return base
+    }
+    
+    private func topPresentableViewController() -> UIViewController? {
+        guard let top = topViewController() else { return nil }
+        // アラートが最前面なら、その presenting 側から出す
+        if let alert = top as? UIAlertController {
+            return alert.presentingViewController ?? top
+        }
+        return top
+    }
+
     // MARK: - 広告読み込み
     func loadRewardedAd() {
         print("🎬 リワード広告読み込み開始")
@@ -56,24 +78,32 @@ class AdMobManager: NSObject, ObservableObject {
             completion(false)
             return
         }
-        
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootViewController = windowScene.windows.first?.rootViewController else {
-            print("❌ ルートビューコントローラーが見つかりません")
+        guard !isShowingAd else {
+            print("⚠️ すでに広告表示処理中")
             completion(false)
             return
         }
-        
+
         adCompletionHandler = completion
         isShowingAd = true
-        
-        print("🎬 リワード広告表示開始")
-        rewardedAd.present(from: rootViewController) { [weak self] in
-            // リワード獲得時の処理
-            print("🎁 リワード獲得!")
-            DispatchQueue.main.async {
-                self?.adCompletionHandler?(true)
-                self?.adCompletionHandler = nil
+
+        // ここ重要：必ずメインスレッド＋最前面の “出せる” VC を使う
+        DispatchQueue.main.async {
+            guard let presentVC = self.topPresentableViewController() else {
+                print("❌ 表示用のViewControllerが取得できません")
+                self.isShowingAd = false
+                self.adCompletionHandler?(false)
+                self.adCompletionHandler = nil
+                return
+            }
+
+            print("🎬 リワード広告表示開始")
+            rewardedAd.present(from: presentVC) { [weak self] in
+                print("🎁 リワード獲得!")
+                DispatchQueue.main.async {
+                    self?.adCompletionHandler?(true)
+                    self?.adCompletionHandler = nil
+                }
             }
         }
     }
@@ -86,31 +116,32 @@ class AdMobManager: NSObject, ObservableObject {
 
 // MARK: - GADFullScreenContentDelegate
 extension AdMobManager: FullScreenContentDelegate {
-    func ad( ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
+    func ad(_ ad: FullScreenPresentingAd,
+            didFailToPresentFullScreenContentWithError error: Error) {
         print("❌ 広告表示失敗: \(error.localizedDescription)")
         DispatchQueue.main.async {
             self.isShowingAd = false
             self.adCompletionHandler?(false)
             self.adCompletionHandler = nil
-            // 次の広告を読み込み
+            self.rewardedAd = nil
             self.loadRewardedAd()
         }
     }
-    
-    func adWillPresentFullScreenContent( ad: FullScreenPresentingAd) {
-        print("🎬 広告表示開始")
+
+    func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {
+        print("🎬 広告表示開始(Delegate)")
     }
-    
+
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         print("🎬 広告表示終了")
         DispatchQueue.main.async {
             self.isShowingAd = false
-            // リワードを受け取らずに閉じた場合
+            // リワード未獲得で閉じた場合のフォールバック
             if self.adCompletionHandler != nil {
                 self.adCompletionHandler?(false)
                 self.adCompletionHandler = nil
             }
-            // 次の広告を読み込み
+            self.rewardedAd = nil
             self.loadRewardedAd()
         }
     }

@@ -1566,7 +1566,11 @@ struct DateDetailView: View {
             .alert("デート開始には広告の視聴が必要です", isPresented: $showAdRequiredConfirmation) {
                 Button("キャンセル", role: .cancel) { }
                 Button("広告を見る") {
-                    watchAdAndStartDate()
+                    // アラートを閉じ切るまで少し待ってから表示
+                    showAdRequiredConfirmation = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        watchAdAndStartDate()
+                    }
                 }
             } message: {
                 Text("\(location.name)でのデートを開始するには、短い広告をご視聴ください。\n\n広告視聴後、素敵なデートが始まります！✨")
@@ -2228,6 +2232,28 @@ struct DateDetailView: View {
         case "romantic_atmosphere": return "💕 ロマンチック"
         case "sunset_glow": return "🌅 夕焼け"
         case "wave_sounds": return "🌊 波の音"
+        case "falling_leaves": return "🍂 落ち葉"
+        case "crisp_air": return "🍃 爽やかな風"
+        case "snow_falling": return "❄️ 雪景色"
+        case "warm_atmosphere": return "♨️ 温かい雰囲気"
+        case "carnival_lights": return "🎡 カーニバル"
+        case "excitement": return "🎉 興奮"
+        case "blue_lighting": return "💙 幻想的な光"
+        case "peaceful_atmosphere": return "😌 穏やかな雰囲気"
+        case "coffee_aroma": return "☕️ コーヒーの香り"
+        case "cozy_atmosphere": return "🏠 居心地の良さ"
+        case "elegant_atmosphere": return "✨ 上品な雰囲気"
+        case "romantic_lighting": return "🕯️ ロマンチックな照明"
+        case "dim_lighting": return "💡 落ち着いた照明"
+        case "intimate_atmosphere": return "💑 親密な雰囲気"
+        case "cooking_sounds": return "🍳 料理音"
+        case "delicious_aromas": return "🍽️ 美味しい香り"
+        case "city_lights": return "🌃 夜景"
+        case "shopping_excitement": return "🛍️ お買い物"
+        case "discovery": return "🔍 新発見"
+        case "infinite_magic": return "♾️ 無限の魔法"
+        case "transcendent_love": return "✨ 超越的な愛"
+        case "limitless_imagination": return "🌌 無限の想像力"
         // 他のエフェクトも同様に追加
         default: return effect
         }
