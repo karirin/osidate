@@ -46,6 +46,12 @@ class RomanceAppViewModel: ObservableObject {
     
     @Published private var isClaimingLoginBonus = false
     
+    @Published var adMobManager = AdMobManager()
+    @Published var showingAdRequiredAlert = false
+    @Published var pendingDateLocation: DateLocation? = nil
+    
+    @Published var interstitialAdManager = InterstitialAdManager()
+    
     private var isLoadingCharacterData = false
 
     // MARK: - Private Properties
@@ -90,6 +96,142 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
+    func requestDateWithAd(at location: DateLocation) {
+        print("🎬 広告付きデート開始要求: \(location.name)")
+        
+        // 広告が利用可能かチェック
+        guard adMobManager.canShowAd else {
+            print("❌ 広告が利用できません")
+            // 広告読み込み中の場合は再読み込みを試行
+            adMobManager.loadRewardedAd()
+            showAdNotAvailableAlert()
+            return
+        }
+        
+        // デート場所を保存
+        pendingDateLocation = location
+        
+        // 広告表示確認ダイアログを表示
+        showingAdRequiredAlert = true
+    }
+
+    func startDateAfterAd() {
+        guard let location = pendingDateLocation else {
+            print("❌ 保留中のデート場所がありません")
+            return
+        }
+        
+        print("🎬 広告視聴開始...")
+        
+        adMobManager.showRewardedAd { [weak self] success in
+            DispatchQueue.main.async {
+                if success {
+                    print("✅ 広告視聴完了 - デート開始")
+                    self?.startDate(at: location)
+                    
+                    // デート開始メッセージ
+                    let adRewardMessage = Message(
+                        text: "広告を見てくれてありがとう！それでは素敵なデートを楽しみましょうね💕",
+                        isFromUser: false,
+                        timestamp: Date(),
+                        dateLocation: location.name,
+                        intimacyGained: 1
+                    )
+                    
+                    self?.messages.append(adRewardMessage)
+                    self?.saveMessage(adRewardMessage)
+                    self?.increaseIntimacy(by: 1, reason: "広告視聴協力")
+                    
+                } else {
+                    print("❌ 広告視聴失敗 - デート開始できません")
+                    self?.showAdFailedAlert()
+                }
+                
+                // 保留中の場所をクリア
+                self?.pendingDateLocation = nil
+            }
+        }
+    }
+    
+    // 広告が利用できない場合のアラート
+    private func showAdNotAvailableAlert() {
+        DispatchQueue.main.async {
+            // アラート表示のためのフラグを追加
+            // 実装は後述のDateDetailViewで処理
+        }
+    }
+    
+    // 広告視聴失敗時のアラート
+    private func showAdFailedAlert() {
+        let failMessage = Message(
+            text: "申し訳ございません。広告の読み込みに問題が発生しました。しばらく時間をおいてから再度お試しください。",
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil,
+            intimacyGained: 0
+        )
+        
+        DispatchQueue.main.async {
+            self.messages.append(failMessage)
+            self.saveMessage(failMessage)
+        }
+    }
+    
+    private var chatCountKey: String {
+        return "chatCount_\(character.id)"
+    }
+    
+    // 現在のチャット回数を取得
+    func getCurrentChatCount() -> Int {
+        return UserDefaults.standard.integer(forKey: chatCountKey)
+    }
+    
+    // チャット回数をリセット
+    func resetChatCount() {
+        UserDefaults.standard.set(0, forKey: chatCountKey)
+        UserDefaults.standard.synchronize()
+        print("🔄 チャット回数をリセット: \(character.name)")
+    }
+    
+    // チャット回数を増加させてインタースティシャル表示をチェック
+    private func incrementChatCountAndCheckAd() {
+        let currentCount = getCurrentChatCount()
+        let newCount = currentCount + 1
+        
+        UserDefaults.standard.set(newCount, forKey: chatCountKey)
+        UserDefaults.standard.synchronize()
+        
+        print("💬 チャット回数更新: \(newCount) (キャラクター: \(character.name))")
+        
+        // 5回ごとにインタースティシャル広告を表示
+        if newCount % 5 == 0 {
+            print("🎬 チャット\(newCount)回に到達 - インタースティシャル広告を表示")
+            
+            // 少し遅延させて自然なタイミングで表示
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.interstitialAdManager.showInterstitialAd()
+            }
+        }
+    }
+    
+    func sendMessageWithAdCheck(_ text: String) {
+        print("\n💬 ==================== メッセージ送信開始（広告チェック付き） ====================")
+        print("📤 送信メッセージ: \(text)")
+        print("📊 現在の親密度: \(character.intimacyLevel) (\(character.intimacyTitle))")
+        print("💬 現在のチャット回数: \(getCurrentChatCount())")
+
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ 認証またはキャラクター無効")
+            return
+        }
+
+        // チャット回数を増加
+        incrementChatCountAndCheckAd()
+        
+        // 既存のメッセージ送信処理
+        processSendMessage(text, with: currentDateSession)
+    }
+
     func autoClaimLoginBonusIfAvailable() {
         // 既に自動受け取り済みの場合はスキップ
         guard !hasAutoClaimedLoginBonus else {

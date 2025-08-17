@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		180365102E50C1260076CA2A /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 1803650F2E50C1260076CA2A /* GoogleMobileAds */; };
 		18E66EA02E3C73A4002E8F66 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66E9F2E3C73A4002E8F66 /* FirebaseAnalytics */; };
 		18E66EA22E3C73A4002E8F66 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA12E3C73A4002E8F66 /* FirebaseAuth */; };
 		18E66EA42E3C73A4002E8F66 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA32E3C73A4002E8F66 /* FirebaseCore */; };
@@ -38,9 +39,22 @@
 		18E66E612E3C5A3A002E8F66 /* osidateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = osidateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		188577C22E51653A00E02A73 /* Exceptions for "osidate" folder in "osidate" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 18E66E462E3C5A38002E8F66 /* osidate */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		18E66E492E3C5A38002E8F66 /* osidate */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				188577C22E51653A00E02A73 /* Exceptions for "osidate" folder in "osidate" target */,
+			);
 			path = osidate;
 			sourceTree = "<group>";
 		};
@@ -67,6 +81,7 @@
 				18E66EA62E3C73A4002E8F66 /* FirebaseDatabase in Frameworks */,
 				18E66EA82E3C73A4002E8F66 /* FirebaseStorage in Frameworks */,
 				18E66EA22E3C73A4002E8F66 /* FirebaseAuth in Frameworks */,
+				180365102E50C1260076CA2A /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,6 +148,7 @@
 				18E66EA52E3C73A4002E8F66 /* FirebaseDatabase */,
 				18E66EA72E3C73A4002E8F66 /* FirebaseStorage */,
 				18E671062E3CE1C1002E8F66 /* SwiftyCrop */,
+				1803650F2E50C1260076CA2A /* GoogleMobileAds */,
 			);
 			productName = osidate;
 			productReference = 18E66E472E3C5A38002E8F66 /* osidate.app */;
@@ -219,6 +235,7 @@
 			packageReferences = (
 				18E66E9E2E3C73A4002E8F66 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				18E671052E3CE1C1002E8F66 /* XCRemoteSwiftPackageReference "SwiftyCrop" */,
+				1803650E2E50C1260076CA2A /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 18E66E482E3C5A38002E8F66 /* Products */;
@@ -424,6 +441,7 @@
 				DEVELOPMENT_TEAM = F3XS565TSX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = osidate/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "推し恋";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -455,6 +473,7 @@
 				DEVELOPMENT_TEAM = F3XS565TSX;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = osidate/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "推し恋";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -589,6 +608,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		1803650E2E50C1260076CA2A /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.9.0;
+			};
+		};
 		18E66E9E2E3C73A4002E8F66 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -608,6 +635,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		1803650F2E50C1260076CA2A /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1803650E2E50C1260076CA2A /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
 		18E66E9F2E3C73A4002E8F66 /* FirebaseAnalytics */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 18E66E9E2E3C73A4002E8F66 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

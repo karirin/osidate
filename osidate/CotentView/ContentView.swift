@@ -1125,7 +1125,6 @@ struct ContentView: View {
 
         // 先にクリア＆必要ならフォーカスも外す
         messageText = ""
-        // isInputFocused = false  // 残る場合は有効化
 
         showCharacterListening()
 
@@ -1133,7 +1132,8 @@ struct ContentView: View {
             viewModel.updateDateSessionOnMessage(message)
         }
 
-        viewModel.sendMessage(text)
+        // 🌟 変更: 広告チェック付きのメッセージ送信メソッドを使用
+        viewModel.sendMessageWithAdCheck(text)
         triggerPulseAnimation()
     }
     
