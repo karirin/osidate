@@ -11,6 +11,7 @@ import GoogleMobileAds
 class AdMobManager: NSObject, ObservableObject {
     @Published var isAdLoaded = false
     @Published var isShowingAd = false
+    @Published var isLoading = false
     @Published var adLoadError: Error?
     
     private var rewardedAd: RewardedAd?
@@ -85,7 +86,7 @@ class AdMobManager: NSObject, ObservableObject {
 
 // MARK: - GADFullScreenContentDelegate
 extension AdMobManager: FullScreenContentDelegate {
-    func ad(_ ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
+    func ad( ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
         print("❌ 広告表示失敗: \(error.localizedDescription)")
         DispatchQueue.main.async {
             self.isShowingAd = false
@@ -96,7 +97,7 @@ extension AdMobManager: FullScreenContentDelegate {
         }
     }
     
-    func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {
+    func adWillPresentFullScreenContent( ad: FullScreenPresentingAd) {
         print("🎬 広告表示開始")
     }
     

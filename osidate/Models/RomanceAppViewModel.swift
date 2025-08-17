@@ -96,6 +96,240 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
+    func isAdRequiredForDate(at location: DateLocation) -> Bool {
+        // 全てのデートで広告視聴を必須にする場合
+        return true
+        
+        // 特定の条件でのみ広告を必須にしたい場合は以下のような条件を追加
+        /*
+        // 例：親密度500以上のデートスポットでは広告必須
+        return location.requiredIntimacy >= 500
+        
+        // 例：特別なデートスポットでは広告必須
+        return location.isSpecial
+        
+        // 例：一日に3回目以降のデートでは広告必須
+        let today = Calendar.current.startOfDay(for: Date())
+        let todayDates = messages.filter { message in
+            !message.isFromUser &&
+            message.dateLocation != nil &&
+            Calendar.current.startOfDay(for: message.timestamp) == today
+        }
+        return todayDates.count >= 2
+        */
+    }
+    
+    /// 広告視聴後にデートを開始する（推奨メソッド）
+    func startDateWithAdReward(at location: DateLocation, completion: @escaping (Bool) -> Void) {
+        print("🎬 広告必須デート開始処理: \(location.name)")
+        
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ 認証またはキャラクター無効")
+            completion(false)
+            return
+        }
+        
+        // 親密度要件チェック
+        guard location.requiredIntimacy <= character.intimacyLevel else {
+            print("❌ 親密度不足: 必要\(location.requiredIntimacy) vs 現在\(character.intimacyLevel)")
+            completion(false)
+            return
+        }
+        
+        // 広告が利用可能かチェック
+        guard adMobManager.canShowAd else {
+            print("❌ 広告が利用できません - 再読み込み試行")
+            adMobManager.loadRewardedAd()
+            
+            // 広告の準備を待ってからもう一度試行
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if self.adMobManager.canShowAd {
+                    self.startDateWithAdReward(at: location, completion: completion)
+                } else {
+                    completion(false)
+                }
+            }
+            return
+        }
+        
+        // 広告を表示
+        adMobManager.showRewardedAd { [weak self] success in
+            DispatchQueue.main.async {
+                guard let self = self else {
+                    completion(false)
+                    return
+                }
+                
+                if success {
+                    print("✅ 広告視聴完了 - デート開始")
+                    
+                    // 広告視聴感謝メッセージ
+                    self.sendAdThankYouMessage(for: location)
+                    
+                    // 広告視聴ボーナス親密度を付与
+                    self.increaseIntimacy(by: 1, reason: "広告視聴協力")
+                    
+                    // デートを開始
+                    self.startDate(at: location)
+                    
+                    completion(true)
+                    
+                } else {
+                    print("❌ 広告視聴失敗またはキャンセル")
+                    completion(false)
+                }
+            }
+        }
+    }
+    
+    /// 広告視聴感謝メッセージを送信
+    private func sendAdThankYouMessage(for location: DateLocation) {
+        let thankYouMessages = [
+            "広告を見てくれてありがとう！あなたの協力でアプリを続けられます💕 それでは\(location.name)での素敵なデートを始めましょうね✨",
+            "広告視聴へのご協力、本当にありがとうございます！お礼として親密度ボーナスをプレゼント🎁 さあ、\(location.name)で愛を深めましょう💖",
+            "広告を最後まで見てくれて嬉しいです！あなたのおかげでより良いアプリにできます✨ \(location.name)での特別な時間を楽しんでくださいね💕",
+            "ご協力ありがとうございます！広告収益でアプリの品質向上に努めています🌟 それでは\(location.name)でロマンチックな時間を過ごしましょう💑"
+        ]
+        
+        let selectedMessage = thankYouMessages.randomElement() ?? thankYouMessages[0]
+        
+        let adThanksMessage = Message(
+            text: selectedMessage,
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: location.name,
+            intimacyGained: 1
+        )
+        
+        DispatchQueue.main.async {
+            self.messages.append(adThanksMessage)
+            self.saveMessage(adThanksMessage)
+        }
+    }
+    
+    /// 広告が利用できない場合のエラーメッセージ
+    func sendAdNotAvailableMessage() {
+        let errorMessage = Message(
+            text: "申し訳ございません。現在広告の読み込みに問題が発生しています😣 ネットワーク接続を確認して、しばらく時間をおいてから再度お試しください。",
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil,
+            intimacyGained: 0
+        )
+        
+        DispatchQueue.main.async {
+            self.messages.append(errorMessage)
+            self.saveMessage(errorMessage)
+        }
+    }
+    
+    /// 広告視聴失敗時のメッセージ
+    func sendAdFailedMessage() {
+        let failMessages = [
+            "広告の視聴に失敗しました😢 ネットワーク環境を確認してから、もう一度お試しください。",
+            "申し訳ございません。広告の読み込みがうまくいきませんでした💦 少し時間をおいてから再度挑戦してみてくださいね。",
+            "広告の表示に問題が発生しました🙏 アプリを再起動してから試していただくか、しばらく時間をおいてからお試しください。"
+        ]
+        
+        let selectedMessage = failMessages.randomElement() ?? failMessages[0]
+        
+        let failMessage = Message(
+            text: selectedMessage,
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: nil,
+            intimacyGained: 0
+        )
+        
+        DispatchQueue.main.async {
+            self.messages.append(failMessage)
+            self.saveMessage(failMessage)
+        }
+    }
+    
+    // MARK: - 🌟 広告ステータス管理
+    
+    /// 広告システムの状態を取得
+    func getAdSystemStatus() -> AdSystemStatus {
+        return AdSystemStatus(
+            isAdManagerReady: adMobManager != nil,
+            canShowRewardedAd: adMobManager.canShowAd,
+            isAdLoading: adMobManager.isLoading,
+            lastAdLoadError: adMobManager.adLoadError?.localizedDescription
+        )
+    }
+    
+    /// 広告の強制再読み込み
+    func forceReloadAds() {
+        print("🔄 広告を強制再読み込み")
+        adMobManager.loadRewardedAd()
+        
+        // インタースティシャル広告も再読み込み
+        interstitialAdManager.loadInterstitialAd()
+    }
+    
+    /// デバッグ用：広告なしでデート開始（開発時のみ使用）
+    #if DEBUG
+    func startDateWithoutAd(at location: DateLocation) {
+        print("🚧 デバッグ: 広告なしでデート開始")
+        
+        guard isAuthenticated && hasValidCharacter else {
+            print("❌ 認証またはキャラクター無効")
+            return
+        }
+        
+        guard location.requiredIntimacy <= character.intimacyLevel else {
+            print("❌ 親密度不足")
+            return
+        }
+        
+        // デバッグメッセージ
+        let debugMessage = Message(
+            text: "🚧 デバッグモード: 広告をスキップしてデートを開始します。本番環境では広告視聴が必要になります。",
+            isFromUser: false,
+            timestamp: Date(),
+            dateLocation: location.name,
+            intimacyGained: 0
+        )
+        
+        DispatchQueue.main.async {
+            self.messages.append(debugMessage)
+            self.saveMessage(debugMessage)
+        }
+        
+        // デートを開始
+        startDate(at: location)
+    }
+    #endif
+    
+    // MARK: - 🌟 統計・分析
+    
+    /// 広告視聴回数の統計を取得
+    func getAdViewingStatistics() -> AdViewingStats {
+        let adThankYouMessages = messages.filter { message in
+            !message.isFromUser &&
+            (message.text.contains("広告") || message.text.contains("ご協力"))
+        }
+        
+        let totalAdViews = adThankYouMessages.count
+        let adViewsThisWeek = adThankYouMessages.filter { message in
+            let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+            return message.timestamp >= weekAgo
+        }.count
+        
+        let adViewsToday = adThankYouMessages.filter { message in
+            Calendar.current.isDateInToday(message.timestamp)
+        }.count
+        
+        return AdViewingStats(
+            totalViews: totalAdViews,
+            viewsThisWeek: adViewsThisWeek,
+            viewsToday: adViewsToday,
+            totalIntimacyFromAds: totalAdViews, // 1広告視聴につき+1親密度
+            averageViewsPerWeek: totalAdViews > 0 ? Double(totalAdViews) / max(1, Double(getTotalConversationDays()) / 7) : 0
+        )
+    }
+    
     func requestDateWithAd(at location: DateLocation) {
         print("🎬 広告付きデート開始要求: \(location.name)")
         
@@ -1774,6 +2008,45 @@ class RomanceAppViewModel: ObservableObject {
     
     var isAnonymousUser: Bool {
         return Auth.auth().currentUser?.isAnonymous ?? false
+    }
+}
+
+struct AdSystemStatus {
+    let isAdManagerReady: Bool
+    let canShowRewardedAd: Bool
+    let isAdLoading: Bool
+    let lastAdLoadError: String?
+    
+    var statusDescription: String {
+        if !isAdManagerReady {
+            return "広告システム初期化中..."
+        } else if isAdLoading {
+            return "広告読み込み中..."
+        } else if canShowRewardedAd {
+            return "広告利用可能"
+        } else {
+            return lastAdLoadError ?? "広告利用不可"
+        }
+    }
+}
+
+/// 広告視聴統計を表す構造体
+struct AdViewingStats {
+    let totalViews: Int
+    let viewsThisWeek: Int
+    let viewsToday: Int
+    let totalIntimacyFromAds: Int
+    let averageViewsPerWeek: Double
+    
+    var description: String {
+        return """
+        広告視聴統計:
+        - 総視聴回数: \(totalViews)回
+        - 今週の視聴: \(viewsThisWeek)回
+        - 今日の視聴: \(viewsToday)回
+        - 広告による親密度: +\(totalIntimacyFromAds)
+        - 週平均視聴回数: \(String(format: "%.1f", averageViewsPerWeek))回
+        """
     }
 }
 
