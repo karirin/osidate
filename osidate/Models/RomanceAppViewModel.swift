@@ -361,20 +361,15 @@ class RomanceAppViewModel: ObservableObject {
             DispatchQueue.main.async {
                 if success {
                     print("✅ 広告視聴完了 - デート開始")
+                    
+                    // 🚫 広告視聴感謝メッセージを無効化（コメントアウト）
+                    // self?.sendAdThankYouMessage(for: location)
+                    
+                    // 🚫 広告視聴ボーナス親密度も無効化する場合
+                    // self?.increaseIntimacy(by: 1, reason: "広告視聴協力")
+                    
+                    // デートを開始
                     self?.startDate(at: location)
-                    
-                    // デート開始メッセージ
-                    let adRewardMessage = Message(
-                        text: "広告を見てくれてありがとう！それでは素敵なデートを楽しみましょうね💕",
-                        isFromUser: false,
-                        timestamp: Date(),
-                        dateLocation: location.name,
-                        intimacyGained: 1
-                    )
-                    
-                    self?.messages.append(adRewardMessage)
-                    self?.saveMessage(adRewardMessage)
-                    self?.increaseIntimacy(by: 1, reason: "広告視聴協力")
                     
                 } else {
                     print("❌ 広告視聴失敗 - デート開始できません")

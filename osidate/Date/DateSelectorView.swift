@@ -1766,21 +1766,20 @@ struct DateDetailView: View {
     private func startDateAfterAdSuccess() {
         print("🎉 広告視聴成功 - デート開始処理")
         
-        // 感謝メッセージを送信
-        let adThanksMessage = Message(
-            text: "広告を見てくれてありがとう！あなたの協力でアプリを続けられます💕 それでは素敵なデートを始めましょうね✨",
-            isFromUser: false,
-            timestamp: Date(),
-            dateLocation: location.name,
-            intimacyGained: 1
-        )
-        
-        // ViewModelに追加
-        viewModel.messages.append(adThanksMessage)
-        viewModel.saveMessage(adThanksMessage)
-        
+        // 🚫 感謝メッセージを無効化（コメントアウト）
+        // let adThanksMessage = Message(
+        //     text: "広告を見てくれてありがとう！あなたの協力でアプリを続けられます💕 それでは素敵なデートを始めましょうね✨",
+        //     isFromUser: false,
+        //     timestamp: Date(),
+        //     dateLocation: location.name,
+        //     intimacyGained: 1
+        // )
+        //
+        // viewModel.messages.append(adThanksMessage)
+        // viewModel.saveMessage(adThanksMessage)
+        //
         // 広告視聴ボーナスの親密度を追加
-        viewModel.increaseIntimacy(by: 1, reason: "広告視聴協力")
+        // viewModel.increaseIntimacy(by: 1, reason: "広告視聴協力")
         
         // デートを開始
         onStartDate(location)
