@@ -1,5 +1,5 @@
 //
-//  TopView.swift - チュートリアル統合版
+//  TopView.swift - チュートリアル統合版 + タブ自動選択機能
 //  osidate
 //
 
@@ -16,6 +16,7 @@ struct TopView: View {
     @State private var showingTutorial = false
     @State private var showingAddCharacter = false
     @State private var showingSplash = true
+    @State private var selectedTab = 0
     
     var body: some View {
         ZStack {
@@ -40,17 +41,46 @@ struct TopView: View {
         .onChange(of: characterRegistry.characters.count) { _ in
             handleCharacterListChange()
         }
+        // 🌟 新機能：デート開始監視
+        .onChange(of: romanceViewModel.currentDateSession) { dateSession in
+            handleDateSessionChange(dateSession)
+        }
         .onAppear {
             initializeApp()
             if !showingSplash {
-                  initializeApp()
-              }
+                initializeApp()
+            }
+            setupNotificationObservers()
+        }
+        .onDisappear {
+            removeNotificationObservers()
         }
         .sheet(isPresented: $showingTutorial) {
             TutorialView(characterRegistry: characterRegistry, tutorialManager: tutorialManager)
         }
         .sheet(isPresented: $showingAddCharacter) {
             AddCharacterView(characterRegistry: characterRegistry)
+        }
+    }
+    
+    // MARK: - 🌟 デートセッション変更処理
+    private func handleDateSessionChange(_ dateSession: DateSession?) {
+        if let session = dateSession {
+            print("🏖️ TopView: デート開始を検出 - チャットタブに自動切り替え")
+            print("📍 開始場所: \(session.location.name)")
+            
+            // チャットタブ（インデックス0）に自動切り替え
+            withAnimation(.easeInOut(duration: 0.5)) {
+                selectedTab = 0
+            }
+            
+            // デート開始メッセージを表示するため少し遅延
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                // 必要に応じて追加のUI更新処理
+                print("✅ TopView: チャットタブ切り替え完了")
+            }
+        } else {
+            print("🏁 TopView: デート終了を検出")
         }
     }
     
@@ -265,14 +295,15 @@ struct TopView: View {
         .padding(.horizontal, 20)
     }
     
-    // MARK: - Main App Tab View
+    // MARK: - 🌟 Main App Tab View（タブ選択制御付き）
     private var mainAppTabView: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             ContentView(viewModel: romanceViewModel)
                 .tabItem {
                     Image(systemName: "bubble.left.and.bubble.right")
                     Text("チャット")
                 }
+                .tag(0)
                 .id("chat_\(currentCharacterId)")
             
             DateSelectorView(viewModel: romanceViewModel)
@@ -280,6 +311,7 @@ struct TopView: View {
                     Image(systemName: "heart.circle.fill")
                     Text("デート")
                 }
+                .tag(1)
                 .id("date_\(currentCharacterId)")
             
             CharacterEditView(viewModel: romanceViewModel)
@@ -287,6 +319,7 @@ struct TopView: View {
                     Image(systemName: "person.text.rectangle")
                     Text("推しの編集")
                 }
+                .tag(2)
                 .id("settings_\(currentCharacterId)")
             
             CharacterSelectorView(
@@ -297,14 +330,21 @@ struct TopView: View {
                 Image(systemName: "person.2")
                 Text("推しの変更")
             }
+            .tag(3)
             
             SettingsView()
             .tabItem {
                 Image(systemName: "gear")
                 Text("設定")
             }
+            .tag(4)
         }
         .id("main_tab_\(currentCharacterId)")
+        // 🌟 新機能：タブ変更時のデバッグログ
+        .onChange(of: selectedTab) { newTab in
+            let tabNames = ["チャット", "デート", "推し編集", "推し変更", "設定"]
+            print("📱 TopView: タブ変更 -> \(tabNames[safe: newTab] ?? "不明")")
+        }
     }
     
     // MARK: - Loading View
@@ -318,6 +358,44 @@ struct TopView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+    }
+    
+    // MARK: - 🌟 Notification Center 処理
+    private func setupNotificationObservers() {
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("SwitchToChatTab"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📱 TopView: チャットタブ切り替え通知を受信")
+            withAnimation(.easeInOut(duration: 0.5)) {
+                selectedTab = 0
+            }
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("SwitchToDateTab"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("📱 TopView: デートタブ切り替え通知を受信")
+            withAnimation(.easeInOut(duration: 0.5)) {
+                selectedTab = 1
+            }
+        }
+    }
+    
+    private func removeNotificationObservers() {
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSNotification.Name("SwitchToChatTab"),
+            object: nil
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSNotification.Name("SwitchToDateTab"),
+            object: nil
+        )
     }
     
     // MARK: - Character Management
@@ -384,6 +462,9 @@ struct TopView: View {
         hasInitialized = true
         currentCharacterId = characterRegistry.activeCharacterId
         
+        // 🌟 新機能：初期タブをチャットに設定
+        selectedTab = 0
+        
         // チュートリアルステータスをチェック
         if tutorialManager.shouldShowTutorial && characterRegistry.characters.isEmpty {
             print("📖 初回起動：チュートリアルを表示")
@@ -400,6 +481,22 @@ struct TopView: View {
         }
         
         print("🚀 TopView: アプリ初期化完了")
+    }
+    
+    // MARK: - 🌟 公開メソッド：外部からのタブ切り替え
+    func switchToTab(_ tabIndex: Int) {
+        print("🔄 TopView: 外部からタブ切り替え要求 - インデックス\(tabIndex)")
+        withAnimation(.easeInOut(duration: 0.3)) {
+            selectedTab = tabIndex
+        }
+    }
+    
+    func switchToChatTab() {
+        switchToTab(0)
+    }
+    
+    func switchToDateTab() {
+        switchToTab(1)
     }
 }
 
@@ -429,6 +526,13 @@ struct FeaturePreview: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Array Extension for Safe Access
+extension Array {
+    subscript(safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }
 

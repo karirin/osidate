@@ -163,11 +163,17 @@ class RomanceAppViewModel: ObservableObject {
                 if success {
                     print("✅ 広告視聴完了 - デート開始")
                     
-                    // 🔧 削除：広告視聴ボーナス親密度付与を削除
-                    // self.increaseIntimacy(by: 1, reason: "広告視聴協力")
-                    
                     // デートを開始
                     self.startDate(at: location)
+                    
+                    // 🌟 新機能：タブ切り替え通知を送信
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("SwitchToChatTab"),
+                            object: nil
+                        )
+                        print("📱 ViewModle: チャットタブ切り替え通知を送信")
+                    }
                     
                     completion(true)
                     

@@ -88,7 +88,7 @@ enum DateType: String, CaseIterable, Codable {
 }
 
 // MARK: - 拡張されたデートロケーション
-struct DateLocation: Identifiable, Codable {
+struct DateLocation: Identifiable, Codable, Equatable {
     let id = UUID()
     let name: String
     let type: DateType
@@ -103,7 +103,7 @@ struct DateLocation: Identifiable, Codable {
     let intimacyBonus: Int // デート完了時の追加親密度
     let isSpecial: Bool    // 特別なデート（記念日限定など）
     
-    enum Season: String, CaseIterable, Codable {
+    enum Season: String, CaseIterable, Codable, Equatable {
         case spring = "spring"
         case summer = "summer"
         case autumn = "autumn"
@@ -121,7 +121,7 @@ struct DateLocation: Identifiable, Codable {
         }
     }
     
-    enum TimeOfDay: String, CaseIterable, Codable {
+    enum TimeOfDay: String, CaseIterable, Codable, Equatable {
         case morning = "morning"
         case afternoon = "afternoon"
         case evening = "evening"
@@ -177,6 +177,22 @@ struct DateLocation: Identifiable, Codable {
     var isCurrentlyAvailable: Bool {
         let currentSeason = DateLocation.currentSeason
         return availableSeasons.contains(currentSeason) || availableSeasons.contains(.all)
+    }
+    
+    static func == (lhs: DateLocation, rhs: DateLocation) -> Bool {
+        return lhs.id == rhs.id &&
+               lhs.name == rhs.name &&
+               lhs.type == rhs.type &&
+               lhs.backgroundImage == rhs.backgroundImage &&
+               lhs.requiredIntimacy == rhs.requiredIntimacy &&
+               lhs.description == rhs.description &&
+               lhs.prompt == rhs.prompt &&
+               lhs.duration == rhs.duration &&
+               lhs.specialEffects == rhs.specialEffects &&
+               lhs.availableSeasons == rhs.availableSeasons &&
+               lhs.timeOfDay == rhs.timeOfDay &&
+               lhs.intimacyBonus == rhs.intimacyBonus &&
+               lhs.isSpecial == rhs.isSpecial
     }
 }
 

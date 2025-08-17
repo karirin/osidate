@@ -301,7 +301,7 @@ struct Message: Identifiable, Codable {
     }
 }
 
-struct DateSession {
+struct DateSession: Equatable {
     let location: DateLocation
     let startTime: Date
     var messagesExchanged: Int = 0
@@ -314,6 +314,15 @@ struct DateSession {
         self.characterName = characterName
         self.messagesExchanged = 0
         self.intimacyGained = 0
+    }
+    
+    // MARK: - Equatable準拠
+    static func == (lhs: DateSession, rhs: DateSession) -> Bool {
+        return lhs.location.id == rhs.location.id &&
+               lhs.startTime == rhs.startTime &&
+               lhs.messagesExchanged == rhs.messagesExchanged &&
+               lhs.intimacyGained == rhs.intimacyGained &&
+               lhs.characterName == rhs.characterName
     }
 }
 
