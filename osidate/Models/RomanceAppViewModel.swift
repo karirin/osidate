@@ -163,19 +163,20 @@ class RomanceAppViewModel: ObservableObject {
                 if success {
                     print("✅ 広告視聴完了 - デート開始")
                     
-                    // 広告視聴感謝メッセージ
-                    self.sendAdThankYouMessage(for: location)
                     
-                    // 広告視聴ボーナス親密度を付与
+                    // 🌟 修正：広告視聴ボーナス親密度を付与
                     self.increaseIntimacy(by: 1, reason: "広告視聴協力")
                     
-                    // デートを開始
+                    // 🌟 修正：ここが重要！実際のデートを開始する
                     self.startDate(at: location)
                     
+                    // 🌟 修正：成功を返す
                     completion(true)
                     
                 } else {
                     print("❌ 広告視聴失敗またはキャンセル")
+                    
+                    // 🌟 修正：失敗を返す
                     completion(false)
                 }
             }

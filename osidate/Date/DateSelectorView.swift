@@ -1728,7 +1728,7 @@ struct DateDetailView: View {
         }
     }
     
-    // MARK: - 🌟 広告視聴とデート開始処理
+
     private func watchAdAndStartDate() {
         print("🎬 広告視聴開始処理")
         
@@ -1743,20 +1743,19 @@ struct DateDetailView: View {
         
         isWatchingAd = true
         
-        // 広告を表示
-        viewModel.adMobManager.showRewardedAd { [weak viewModel] success in
+        // 🌟 修正：ViewModelのstartDateWithAdRewardメソッドを使用
+        let dismissAction = dismiss
+        viewModel.startDateWithAdReward(at: location) { success in
             DispatchQueue.main.async {
-                self.isWatchingAd = false
-                
+                isWatchingAd = false
+
                 if success {
-                    print("✅ 広告視聴完了 - デート開始")
-                    
-                    // デートを開始
-                    self.startDateAfterAdSuccess()
-                    
+                    print("✅ 広告視聴完了 - デート開始成功")
+                    // 詳細画面を閉じる
+                    dismissAction()
                 } else {
                     print("❌ 広告視聴失敗")
-                    self.showAdFailedAlert = true
+                    showAdFailedAlert = true
                 }
             }
         }
@@ -1766,23 +1765,8 @@ struct DateDetailView: View {
     private func startDateAfterAdSuccess() {
         print("🎉 広告視聴成功 - デート開始処理")
         
-        // 🚫 感謝メッセージを無効化（コメントアウト）
-        // let adThanksMessage = Message(
-        //     text: "広告を見てくれてありがとう！あなたの協力でアプリを続けられます💕 それでは素敵なデートを始めましょうね✨",
-        //     isFromUser: false,
-        //     timestamp: Date(),
-        //     dateLocation: location.name,
-        //     intimacyGained: 1
-        // )
-        //
-        // viewModel.messages.append(adThanksMessage)
-        // viewModel.saveMessage(adThanksMessage)
-        //
-        // 広告視聴ボーナスの親密度を追加
-        // viewModel.increaseIntimacy(by: 1, reason: "広告視聴協力")
-        
-        // デートを開始
-        onStartDate(location)
+        // 🌟 修正：ViewModelのstartDateメソッドを直接呼び出し
+        viewModel.startDate(at: location)
         
         // 詳細画面を閉じる
         dismiss()
