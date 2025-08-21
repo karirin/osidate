@@ -13,7 +13,7 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
     @Published var isPresenting = false
     
     private var interstitialAd: InterstitialAd?
-    private let adUnitID = "ca-app-pub-3940256099942544/4411468910" // テスト用ID
+    private let adUnitID = "ca-app-pub-4898800212808837/6818389246" // テスト用ID
     
     override init() {
         super.init()

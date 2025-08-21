@@ -522,6 +522,9 @@ struct SettingsView: View {
             .navigationDestination(isPresented: $showingShareSettings) {
                 TermsOfServiceView()
             }
+            .navigationDestination(isPresented: $showingBugReportForm) {
+                BugReportView()
+            }
         }
         .onAppear {
             checkAdminStatus()

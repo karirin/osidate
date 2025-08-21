@@ -179,10 +179,10 @@ struct DateSelectorView: View {
                     endPoint: .bottomTrailing
                 )
                 .ignoresSafeArea()
-                
                 ScrollView {
+                    BannerAdView()
+                        .frame(height: 60)
                     LazyVStack(spacing: 20) {
-                        
                         intimacyStatusSection
                         
                         // 🌟 新しい検索・フィルターボタンセクション
@@ -2549,5 +2549,6 @@ struct IntimacyFilterView: View {
 }
 
 #Preview {
-    DateSelectorView(viewModel: RomanceAppViewModel())
+//    DateSelectorView(viewModel: RomanceAppViewModel())
+    TopView()
 }

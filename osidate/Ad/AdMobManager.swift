@@ -18,7 +18,7 @@ class AdMobManager: NSObject, ObservableObject {
     private var adCompletionHandler: ((Bool) -> Void)?
     
     // テスト用ID（本番では実際のIDに変更）
-    private let adUnitID = "ca-app-pub-3940256099942544/1712485313" // テスト用ID
+    private let adUnitID = "ca-app-pub-4898800212808837/2039052898" // テスト用ID
     
     override init() {
         super.init()
