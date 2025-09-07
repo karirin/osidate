@@ -1,8 +1,8 @@
 //
-//  SettingsView.swift
+//  CharacterEditView.swift
 //  osidate
 //
-//  Modern redesigned version with user nickname feature
+//  編集ボタンクリック時のみ更新、自動入力処理を削除
 //
 
 import SwiftUI
@@ -19,10 +19,23 @@ struct CharacterEditView: View {
     @State private var isDataSyncing = false
     @FocusState private var isInputFocused: Bool
     
+    // 🌟 編集用の一時的な状態変数（元のデータは変更しない）
+    @State private var tempName: String = ""
+    @State private var tempPersonality: String = ""
+    @State private var tempSpeakingStyle: String = ""
+    @State private var tempUserNickname: String = ""
+    @State private var tempUseNickname: Bool = false
+    @State private var tempBirthday: Date? = nil
+    @State private var tempAnniversaryDate: Date? = nil
+    @State private var tempIconURL: String? = nil // 🔧 アイコンURL用の一時変数を追加
+    
     // 🌟 バリデーション用のアラート状態
     @State private var showingNameValidationAlert = false
     @State private var showingPersonalityValidationAlert = false
     @State private var showingSpeakingStyleValidationAlert = false
+    
+    // 🌟 変更検知フラグ
+    @State private var hasChanges = false
     
     // Image picker and cropping states
     @StateObject private var imageManager = ImageStorageManager()
@@ -53,11 +66,28 @@ struct CharacterEditView: View {
                         appearanceSettingsSection
                         userNicknameSettingsSection
                         anniversarySettingsSection
+                        
+                        // 🌟 保存・キャンセルボタン
+                        saveButtonsSection
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 32)
                 }
             }
+            .navigationBarTitle("推しを編集", displayMode: .inline)
+            .navigationBarItems(
+                trailing:
+                    Button("編集") {
+                        saveChanges()
+                    }
+                    .padding(.leading,10)
+                    .padding(.trailing)
+                    .padding(.vertical, 4)
+                    .background(hasChanges ? Color.blue : Color(.systemGray4))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    .disabled(!hasChanges)
+            )
             .scrollDismissesKeyboard(.immediately)
             .contentShape(Rectangle())
             .onTapGesture {
@@ -69,7 +99,7 @@ struct CharacterEditView: View {
                 BackgroundSelectorView(viewModel: viewModel)
             }
             .sheet(isPresented: $showingImagePicker) {
-                ImagePickerView { pickedImage in
+                ImageEditPickerView { pickedImage in
                     self.selectedImageForCropping = pickedImage
                 }
             }
@@ -89,6 +119,7 @@ struct CharacterEditView: View {
                             withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                                 selectedImage = cropped
                                 characterIcon = cropped
+                                hasChanges = true // 🌟 画像変更も変更フラグを立てる
                             }
                             uploadImage()
                         }
@@ -98,7 +129,7 @@ struct CharacterEditView: View {
                 }
                 .navigationBarHidden(true)
             }
-            // 🌟 バリデーションアラートを追加
+            // 🌟 バリデーションアラートを修正（自動入力処理を削除）
             .alert("名前は必須です", isPresented: $showingNameValidationAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -121,9 +152,121 @@ struct CharacterEditView: View {
             }
             .onAppear {
                 loadCurrentIcon()
+                initializeTemporaryValues() // 🌟 一時的な値を初期化
             }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+    }
+    
+    // 🌟 一時的な値を初期化
+    private func initializeTemporaryValues() {
+        tempName = viewModel.character.name
+        tempPersonality = viewModel.character.personality
+        tempSpeakingStyle = viewModel.character.speakingStyle
+        tempUserNickname = viewModel.character.userNickname
+        tempUseNickname = viewModel.character.useNickname
+        tempBirthday = viewModel.character.birthday
+        tempAnniversaryDate = viewModel.character.anniversaryDate
+        tempIconURL = viewModel.character.iconURL // 🔧 アイコンURLも初期化
+        hasChanges = false
+    }
+    
+    // 🌟 変更を検知する関数 🔧 アイコンURLの変更も検知
+    private func detectChanges() {
+        let oldHasChanges = hasChanges
+        
+        hasChanges = (tempName != viewModel.character.name) ||
+                    (tempPersonality != viewModel.character.personality) ||
+                    (tempSpeakingStyle != viewModel.character.speakingStyle) ||
+                    (tempUserNickname != viewModel.character.userNickname) ||
+                    (tempUseNickname != viewModel.character.useNickname) ||
+                    (tempBirthday != viewModel.character.birthday) ||
+                    (tempAnniversaryDate != viewModel.character.anniversaryDate) ||
+                    (tempIconURL != viewModel.character.iconURL) // 🔧 アイコンURLの変更も検知
+        
+        // デバッグ用
+        if oldHasChanges != hasChanges {
+            print("🔍 変更検知: \(hasChanges)")
+        }
+    }
+    
+    // 🌟 保存・キャンセルボタンセクション
+    private var saveButtonsSection: some View {
+        VStack(spacing: 12) {
+            if hasChanges {
+                HStack(spacing: 12) {
+                    // 保存ボタン
+                    Button("保存") {
+                        saveChanges()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(isFormValid ? Color.blue : Color(.systemGray4))
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    .disabled(!isFormValid)
+                }
+                .padding(.top, 16)
+            }
+            
+            if hasChanges {
+                Text("未保存の変更があります")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+        }
+    }
+    
+    // 🌟 フォームの有効性をチェック
+    private var isFormValid: Bool {
+        return !tempName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !tempPersonality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+               !tempSpeakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    
+    // 🌟 変更を保存する 🔧 アイコンURLも保存対象に追加
+    private func saveChanges() {
+        // バリデーション
+        if tempName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            showingNameValidationAlert = true
+            return
+        }
+        
+        if tempPersonality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            showingPersonalityValidationAlert = true
+            return
+        }
+        
+        if tempSpeakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            showingSpeakingStyleValidationAlert = true
+            return
+        }
+        
+        // 実際のデータに反映
+        viewModel.character.name = tempName.trimmingCharacters(in: .whitespacesAndNewlines)
+        viewModel.character.personality = tempPersonality.trimmingCharacters(in: .whitespacesAndNewlines)
+        viewModel.character.speakingStyle = tempSpeakingStyle.trimmingCharacters(in: .whitespacesAndNewlines)
+        viewModel.character.userNickname = tempUserNickname
+        viewModel.character.useNickname = tempUseNickname
+        viewModel.character.birthday = tempBirthday
+        viewModel.character.anniversaryDate = tempAnniversaryDate
+        
+        // 🔧 アイコンURLも保存
+        if let tempIconURL = tempIconURL {
+            viewModel.character.iconURL = tempIconURL
+        }
+        
+        // ViewModelの更新メソッドを呼び出し
+        viewModel.updateCharacterSettings()
+        
+        // 変更フラグをリセット
+        hasChanges = false
+        
+        // 成功メッセージ
+        alertMessage = "設定を保存しました"
+        showingAlert = true
+        
+        print("✅ キャラクター設定を保存しました")
     }
     
     // MARK: - Header
@@ -353,35 +496,23 @@ struct CharacterEditView: View {
     private var characterSettingsSection: some View {
         ModernSectionView(title: "推し設定", icon: "person.circle") {
             VStack(spacing: 16) {
-                // Name field - 🌟 バリデーション付き
+                // Name field - 🌟 修正：自動入力処理を削除
                 ModernSettingRow(
                     icon: "textformat",
                     title: "名前",
                     subtitle: "推しの呼び名"
                 ) {
-                    TextField("名前を入力", text: $viewModel.character.name)
-                        .textFieldStyle(ModernTextFieldStyle())
+                    TextField("名前を入力", text: $tempName)
+                        .textFieldStyle(ModernEditTextFieldStyle())
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.name) { newValue in
-                            // 🌟 バリデーション: 空文字の場合は元の値に戻してアラート表示
-                            if newValue.isEmpty {
-                                // 元の値が1文字だった場合のみアラートを表示
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    if viewModel.character.name.isEmpty {
-                                        viewModel.character.name = "推し" // デフォルト値に戻す
-                                        showingNameValidationAlert = true
-                                        generateHapticFeedback()
-                                    }
-                                }
-                            } else {
-                                viewModel.updateCharacterSettings()
-                            }
+                        .onChange(of: tempName) { _ in
+                            detectChanges() // 🌟 変更検知のみ
                         }
                 }
                 
                 Divider()
                 
-                // Personality editor - 🌟 バリデーション付き
+                // Personality editor - 🌟 修正：自動入力処理を削除
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "heart.text.square")
@@ -397,7 +528,7 @@ struct CharacterEditView: View {
                         }
                     }
                     
-                    TextEditor(text: $viewModel.character.personality)
+                    TextEditor(text: $tempPersonality)
                         .frame(minHeight: 80)
                         .padding(12)
                         .background(Color(.systemBackground))
@@ -407,25 +538,14 @@ struct CharacterEditView: View {
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.personality) { newValue in
-                            // 🌟 バリデーション: 空文字の場合は元の値に戻してアラート表示
-                            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    if viewModel.character.personality.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        viewModel.character.personality = "優しく親しみやすい性格"
-                                        showingPersonalityValidationAlert = true
-                                        generateHapticFeedback()
-                                    }
-                                }
-                            } else {
-                                viewModel.updateCharacterSettings()
-                            }
+                        .onChange(of: tempPersonality) { _ in
+                            detectChanges() // 🌟 変更検知のみ
                         }
                 }
                 
                 Divider()
                 
-                // Speaking style editor - 🌟 バリデーション付き
+                // Speaking style editor - 🌟 修正：自動入力処理を削除
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -441,7 +561,7 @@ struct CharacterEditView: View {
                         }
                     }
                     
-                    TextEditor(text: $viewModel.character.speakingStyle)
+                    TextEditor(text: $tempSpeakingStyle)
                         .frame(minHeight: 80)
                         .padding(12)
                         .background(Color(.systemBackground))
@@ -451,19 +571,8 @@ struct CharacterEditView: View {
                                 .stroke(Color(.systemGray4), lineWidth: 1)
                         )
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.speakingStyle) { newValue in
-                            // 🌟 バリデーション: 空文字の場合は元の値に戻してアラート表示
-                            if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                    if viewModel.character.speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        viewModel.character.speakingStyle = "丁寧で温かみのある話し方"
-                                        showingSpeakingStyleValidationAlert = true
-                                        generateHapticFeedback()
-                                    }
-                                }
-                            } else {
-                                viewModel.updateCharacterSettings()
-                            }
+                        .onChange(of: tempSpeakingStyle) { _ in
+                            detectChanges() // 🌟 変更検知のみ
                         }
                 }
             }
@@ -474,30 +583,30 @@ struct CharacterEditView: View {
     private var userNicknameSettingsSection: some View {
         ModernSectionView(title: "あなたの呼び名設定", icon: "person.badge.plus") {
             VStack(spacing: 16) {
-                // Nickname input field - 常に表示
+                // Nickname input field - 🌟 修正：一時的な値を使用
                 ModernSettingRow(
                     icon: "textformat.alt",
                     title: "呼び名"
                 ) {
-                    TextField("呼び名を入力", text: $viewModel.character.userNickname)
-                        .textFieldStyle(ModernTextFieldStyle())
+                    TextField("呼び名を入力", text: $tempUserNickname)
+                        .textFieldStyle(ModernEditTextFieldStyle())
                         .focused($isInputFocused)
-                        .onChange(of: viewModel.character.userNickname) { newValue in
+                        .onChange(of: tempUserNickname) { newValue in
                             // 20文字制限
                             if newValue.count > 20 {
-                                viewModel.character.userNickname = String(newValue.prefix(20))
+                                tempUserNickname = String(newValue.prefix(20))
                             }
                             
                             // 呼び名が入力された場合は自動的にuseNicknameをtrueに設定
-                            if !newValue.isEmpty && !viewModel.character.useNickname {
-                                viewModel.character.useNickname = true
+                            if !newValue.isEmpty && !tempUseNickname {
+                                tempUseNickname = true
                             }
                             // 呼び名が空になった場合は自動的にuseNicknameをfalseに設定
-                            else if newValue.isEmpty && viewModel.character.useNickname {
-                                viewModel.character.useNickname = false
+                            else if newValue.isEmpty && tempUseNickname {
+                                tempUseNickname = false
                             }
                             
-                            viewModel.updateCharacterSettings()
+                            detectChanges() // 🌟 変更検知
                         }
                 }
             }
@@ -508,15 +617,37 @@ struct CharacterEditView: View {
     private var anniversarySettingsSection: some View {
         ModernSectionView(title: "記念日設定", icon: "calendar.badge.plus") {
             VStack(spacing: 16) {
-                // Birthday setting
-                birthdaySettingRow
+                // Birthday setting - 🌟 修正：一時的な値を使用
+                ModernSettingRow(
+                    icon: "gift",
+                    title: "誕生日",
+                    subtitle: tempBirthday != nil ? dateFormatter.string(from: tempBirthday!) : "未設定"
+                ) {
+                    if tempBirthday != nil {
+                        DatePicker("", selection: Binding(
+                            get: { tempBirthday ?? Date() },
+                            set: { newValue in
+                                tempBirthday = newValue
+                                detectChanges() // 🌟 変更検知
+                            }
+                        ), displayedComponents: [.date])
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                    } else {
+                        Button("設定") {
+                            tempBirthday = Date()
+                            detectChanges() // 🌟 変更検知
+                        }
+                        .buttonStyle(ModernButtonStyle(color: .blue))
+                    }
+                }
                 
-                if viewModel.character.birthday != nil {
+                if tempBirthday != nil {
                     Divider()
                     
                     Button {
-                        viewModel.character.birthday = nil
-                        viewModel.updateCharacterSettings()
+                        tempBirthday = nil
+                        detectChanges() // 🌟 変更検知
                     } label: {
                         HStack {
                             Image(systemName: "trash")
@@ -530,15 +661,37 @@ struct CharacterEditView: View {
                 
                 Divider()
                 
-                // Anniversary setting
-                anniversarySettingRow
+                // Anniversary setting - 🌟 修正：一時的な値を使用
+                ModernSettingRow(
+                    icon: "heart.circle",
+                    title: "記念日",
+                    subtitle: tempAnniversaryDate != nil ? dateFormatter.string(from: tempAnniversaryDate!) : "未設定"
+                ) {
+                    if tempAnniversaryDate != nil {
+                        DatePicker("", selection: Binding(
+                            get: { tempAnniversaryDate ?? Date() },
+                            set: { newValue in
+                                tempAnniversaryDate = newValue
+                                detectChanges() // 🌟 変更検知
+                            }
+                        ), displayedComponents: [.date])
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                    } else {
+                        Button("設定") {
+                            tempAnniversaryDate = Date()
+                            detectChanges() // 🌟 変更検知
+                        }
+                        .buttonStyle(ModernButtonStyle(color: .pink))
+                    }
+                }
                 
-                if viewModel.character.anniversaryDate != nil {
+                if tempAnniversaryDate != nil {
                     Divider()
                     
                     Button {
-                        viewModel.character.anniversaryDate = nil
-                        viewModel.updateCharacterSettings()
+                        tempAnniversaryDate = nil
+                        detectChanges() // 🌟 変更検知
                     } label: {
                         HStack {
                             Image(systemName: "trash")
@@ -549,58 +702,6 @@ struct CharacterEditView: View {
                         }
                     }
                 }
-            }
-        }
-    }
-    
-    private var birthdaySettingRow: some View {
-        ModernSettingRow(
-            icon: "gift",
-            title: "誕生日",
-            subtitle: viewModel.character.birthday != nil ? dateFormatter.string(from: viewModel.character.birthday!) : "未設定"
-        ) {
-            if viewModel.character.birthday != nil {
-                DatePicker("", selection: Binding(
-                    get: { viewModel.character.birthday ?? Date() },
-                    set: { newValue in
-                        viewModel.character.birthday = newValue
-                        viewModel.updateCharacterSettings()
-                    }
-                ), displayedComponents: [.date])
-                .labelsHidden()
-                .datePickerStyle(.compact)
-            } else {
-                Button("設定") {
-                    viewModel.character.birthday = Date()
-                    viewModel.updateCharacterSettings()
-                }
-                .buttonStyle(ModernButtonStyle(color: .blue))
-            }
-        }
-    }
-    
-    private var anniversarySettingRow: some View {
-        ModernSettingRow(
-            icon: "heart.circle",
-            title: "記念日",
-            subtitle: viewModel.character.anniversaryDate != nil ? dateFormatter.string(from: viewModel.character.anniversaryDate!) : "未設定"
-        ) {
-            if viewModel.character.anniversaryDate != nil {
-                DatePicker("", selection: Binding(
-                    get: { viewModel.character.anniversaryDate ?? Date() },
-                    set: { newValue in
-                        viewModel.character.anniversaryDate = newValue
-                        viewModel.updateCharacterSettings()
-                    }
-                ), displayedComponents: [.date])
-                .labelsHidden()
-                .datePickerStyle(.compact)
-            } else {
-                Button("設定") {
-                    viewModel.character.anniversaryDate = Date()
-                    viewModel.updateCharacterSettings()
-                }
-                .buttonStyle(ModernButtonStyle(color: .pink))
             }
         }
     }
@@ -672,7 +773,7 @@ struct CharacterEditView: View {
     private func suggestDefaultNickname() {
         let suggestions = getNicknameSuggestions()
         if let defaultSuggestion = suggestions.first {
-            viewModel.character.userNickname = defaultSuggestion
+            tempUserNickname = defaultSuggestion // 🌟 一時的な値を更新
         }
     }
     
@@ -692,6 +793,7 @@ struct CharacterEditView: View {
         }
     }
     
+    // 🔧 修正：アップロード成功時にtempIconURLを設定し、変更検知を行う
     private func uploadImage() {
         guard let image = selectedImage,
               let userId = viewModel.currentUserID else {
@@ -712,13 +814,13 @@ struct CharacterEditView: View {
                         imageManager.deleteImage(at: oldPath) { _ in }
                     }
                     
-                    viewModel?.character.iconURL = downloadURL
-                    viewModel?.updateCharacterSettings()
-                    
+                    // 🔧 修正：一時的な変数にURLを保存し、変更検知を行う
+                    tempIconURL = downloadURL
                     characterIcon = image
                     selectedImage = nil
+                    detectChanges() // 🔧 変更検知を追加
                     
-                    alertMessage = "アイコンが正常にアップロードされました"
+                    alertMessage = "アイコンがアップロードされました。保存ボタンを押して設定を完了してください。"
                     showingAlert = true
                     
                 case .failure(let error):
@@ -886,6 +988,61 @@ extension View {
     }
 }
 
+// MARK: - ModernEditTextFieldStyle
+struct ModernEditTextFieldStyle: TextFieldStyle {
+    func _body(configuration: TextField<Self._Label>) -> some View {
+        configuration
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color(.systemGray4), lineWidth: 1)
+            )
+    }
+}
+
+// MARK: - ImageEditPickerView
+struct ImageEditPickerView: UIViewControllerRepresentable {
+    let onImageSelected: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = .photoLibrary
+        picker.allowsEditing = false
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let parent: ImageEditPickerView
+        
+        init(_ parent: ImageEditPickerView) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImageSelected(image)
+            }
+            parent.dismiss()
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+
 #Preview {
-    CharacterEditView(viewModel: RomanceAppViewModel())
+//    CharacterEditView(viewModel: RomanceAppViewModel())
+    TopView()
 }

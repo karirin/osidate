@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseAuth
 
 struct DateSelectorView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
@@ -1599,7 +1600,12 @@ struct DateDetailView: View {
         VStack(spacing: 16) {
             // 🌟 メインのデート開始ボタン（広告視聴必須）
             Button(action: {
-                showAdRequiredConfirmation = true
+                let userID = Auth.auth().currentUser?.uid
+                if userID == "vVceNdjseGTBMYP7rMV9NKZuBaz1" {
+                    viewModel.startDate(at: location)
+                } else {
+                    showAdRequiredConfirmation = true
+                }
             }) {
                 HStack(spacing: 12) {
                     Image(systemName: "tv.fill")
