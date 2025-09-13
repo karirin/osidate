@@ -9,7 +9,9 @@ import SwiftUI
 import FirebaseCore
 import FirebaseDatabase
 import FirebaseAuth
+import Combine
 
+@MainActor
 class RomanceAppViewModel: ObservableObject {
 
     // MARK: - Published State
@@ -62,6 +64,8 @@ class RomanceAppViewModel: ObservableObject {
 
     @Published var hasValidCharacter = false
     
+    private var cancellables = Set<AnyCancellable>()
+    
     var chatDisplayMode: ChatDisplayMode {
         get {
             if let modeString = UserDefaults.standard.string(forKey: "chatDisplayMode"),
@@ -88,6 +92,7 @@ class RomanceAppViewModel: ObservableObject {
             UserDefaults.standard.set(characterId, forKey: "characterId")
         }
         setupAuthStateListener()
+//        initializeWithSubscription()
     }
 
     deinit {
@@ -741,6 +746,41 @@ class RomanceAppViewModel: ObservableObject {
     func forceUpdateCharacterProperties() {
         DispatchQueue.main.async { [weak self] in
             self?.objectWillChange.send()
+        }
+    }
+    
+    @MainActor
+    func setupSubscriptionIntegration() {
+        // サブスクリプション状態の変更を監視
+        SubscriptionManager.shared.$isSubscribed
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isSubscribed in
+                self?.handleSubscriptionStatusChange(isSubscribed: isSubscribed)
+            }
+            .store(in: &cancellables)
+    }
+    
+    func sendMessageWithSubscriptionCheck(_ text: String) {
+        // SubscriptionManagerが利用可能でない場合は既存のメソッドを使用
+        if SubscriptionManager.shared.shouldShowAds {
+            sendMessageWithAdCheck(text)  // 既存のメソッド
+        } else {
+            sendMessage(text)  // 既存のメソッド（広告なし）
+        }
+    }
+
+    // handleSubscriptionStatusChangeメソッド
+    func handleSubscriptionStatusChange(isSubscribed: Bool) {
+        print("📱 サブスクリプション状態変更: \(isSubscribed ? "有効" : "無効")")
+    }
+    
+    /// ViewModelの初期化時にサブスクリプション統合をセットアップ
+    func initializeWithSubscription() {
+        setupSubscriptionIntegration()
+        
+        // サブスクリプション状態を即座に更新
+        Task {
+            await SubscriptionManager.shared.refreshSubscriptionStatus()
         }
     }
     

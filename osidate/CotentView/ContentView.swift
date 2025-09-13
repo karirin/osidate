@@ -1160,8 +1160,8 @@ struct ContentView: View {
             viewModel.updateDateSessionOnMessage(message)
         }
 
-        // 🌟 変更: 広告チェック付きのメッセージ送信メソッドを使用
-        viewModel.sendMessageWithAdCheck(text)
+        // 🌟 変更: サブスクリプション対応のメッセージ送信メソッドを使用
+        viewModel.sendMessageWithSubscriptionCheck(text)
         triggerPulseAnimation()
     }
     

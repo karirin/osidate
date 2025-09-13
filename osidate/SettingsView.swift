@@ -26,6 +26,9 @@ struct SettingsView: View {
     @State private var isShowingOshiSelector = false
     @State private var showAddOshiForm = false
     
+    @State private var showingSubscriptionView = false
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    
     // For bug reporting and App Store review
     @State private var showingBugReportForm = false
     @State private var showingReviewConfirmation = false
@@ -94,7 +97,6 @@ struct SettingsView: View {
                     }
                     .padding(.horizontal)
                     .padding(.top)
-                    
                     // 管理者専用セクション
                     if isAdmin {
                         VStack(spacing: 10) {
@@ -184,10 +186,10 @@ struct SettingsView: View {
 //                            Text("推しを編集")
 //                                .foregroundColor(.secondary)
 //                                .frame(alignment: .leading)
-//                            
+//
 //                            Spacer()
 //                        }.padding(.horizontal)
-//                        
+//
 //                        VStack(spacing: 15) {
 //                            HStack {
 //                                // プロフィール画像
@@ -213,29 +215,29 @@ struct SettingsView: View {
 //                                                .foregroundColor(primaryColor)
 //                                        )
 //                                }
-//                                
+//
 //                                VStack(alignment: .leading, spacing: 4) {
 //                                    HStack {
 //                                        Text(username)
 //                                            .font(.headline)
 //                                            .foregroundColor(.primary)
-//                                        
+//
 //                                        if isAdmin {
 //                                            Image(systemName: "crown.fill")
 //                                                .foregroundColor(.orange)
 //                                                .font(.system(size: 12))
 //                                        }
 //                                    }
-//                                    
+//
 //                                    Text("アイコンをタップして変更")
 //                                        .font(.caption)
 //                                        .foregroundColor(.secondary)
 //                                }
-//                                
+//
 //                                Spacer()
 //                            }
 //                            .padding(.vertical, 8)
-//                            
+//
 //                            Button(action: {
 //                               withAnimation(.spring()) {
 //                                   isShowingOshiSelector = true
@@ -277,6 +279,8 @@ struct SettingsView: View {
 //                        }
 //                    }
                     VStack(spacing: 10) {
+                        
+                        subscriptionSection
                         HStack {
                             Text("フィードバック")
                                 .foregroundColor(.secondary)
@@ -553,6 +557,250 @@ struct SettingsView: View {
                 secondaryButton: .cancel(Text("後で"))
             )
         }
+        .fullScreenCover(isPresented: $showingSubscriptionView) {
+            SubscriptionView()
+        }
+    }
+    
+    // MARK: - Subscription Section for Settings
+    var subscriptionSection: some View {
+        VStack{
+            Section {
+                subscriptionStatusRow
+                
+                if SubscriptionManager.shared.isSubscribed {
+                    subscriptionManagementRows
+                } else {
+                    upgradeToePremiumRow
+                }
+            } header: {
+            }
+        }
+        .padding(.horizontal)
+    }
+    
+    // MARK: - Subscription Status Row
+    private var subscriptionStatusRow: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(SubscriptionManager.shared.isSubscribed ?
+                          Color.purple.opacity(0.2) :
+                          Color.gray.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                
+                Image(systemName: SubscriptionManager.shared.isSubscribed ? "crown.fill" : "crown")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(SubscriptionManager.shared.isSubscribed ? .purple : .gray)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("プランステータス")
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                
+                Text(SubscriptionManager.shared.isSubscribed ? "プレミアムプラン" : "無料プラン")
+                    .font(.caption)
+                    .foregroundColor(SubscriptionManager.shared.isSubscribed ? .purple : .secondary)
+                    .fontWeight(SubscriptionManager.shared.isSubscribed ? .semibold : .regular)
+            }
+            
+            Spacer()
+            
+            if SubscriptionManager.shared.isSubscribed {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("アクティブ")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.green)
+                    
+                    if let displayName = SubscriptionManager.shared.subscriptionDisplayName {
+                        Text(displayName)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    // MARK: - Premium Upgrade Row
+    private var upgradeToePremiumRow: some View {
+        Button(action: {
+            showingSubscriptionView = true
+        }) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ).opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "arrow.up.circle.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(LinearGradient(
+                            colors: [.blue, .purple],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ))
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("プレミアムにアップグレード")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Text("広告なし • 無制限メッセージ • 限定機能")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    // MARK: - Subscription Management Rows
+    private var subscriptionManagementRows: some View {
+        Group {
+            // サブスクリプション詳細
+            subscriptionDetailsRow
+            
+            // 購入履歴復元
+            restorePurchasesRow
+            
+            // サブスクリプション管理（App Store）
+            manageSubscriptionRow
+        }
+    }
+    
+    private var subscriptionDetailsRow: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("プレミアム特典")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+            
+            VStack(spacing: 8) {
+                SubscriptionBenefit(
+                    icon: "xmark.circle.fill",
+                    text: "広告なしで快適利用",
+                    isEnabled: true
+                )
+                
+                SubscriptionBenefit(
+                    icon: "infinity.circle.fill",
+                    text: "無制限メッセージ",
+                    isEnabled: true
+                )
+                
+                SubscriptionBenefit(
+                    icon: "heart.circle.fill",
+                    text: "限定デートスポット",
+                    isEnabled: true
+                )
+                
+                SubscriptionBenefit(
+                    icon: "sparkles",
+                    text: "高度なカスタマイズ",
+                    isEnabled: true
+                )
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var restorePurchasesRow: some View {
+        Button(action: {
+            Task {
+                await SubscriptionManager.shared.restorePurchases()
+            }
+        }) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "arrow.clockwise.circle.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.blue)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("購入履歴を復元")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text("他のデバイスでの購入を復元します")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                if SubscriptionManager.shared.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(SubscriptionManager.shared.isLoading)
+    }
+    
+    private var manageSubscriptionRow: some View {
+        Button(action: {
+            // App StoreのSubscription管理画面を開く
+            if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                UIApplication.shared.open(url)
+            }
+        }) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: "gear.circle.fill")
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(.gray)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("サブスクリプションを管理")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.primary)
+                    
+                    Text("App Storeで変更・キャンセル")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Image(systemName: "arrow.up.right")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
     
     private func exportAllDataToCSV() {
@@ -719,6 +967,33 @@ struct SettingsView: View {
             //            authManager.isLoggedIn = false
         } catch {
             print("ログアウトエラー: \(error.localizedDescription)")
+        }
+    }
+}
+
+struct SubscriptionBenefit: View {
+    let icon: String
+    let text: String
+    let isEnabled: Bool
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(isEnabled ? .green : .gray)
+                .frame(width: 16)
+            
+            Text(text)
+                .font(.caption)
+                .foregroundColor(isEnabled ? .primary : .secondary)
+            
+            Spacer()
+            
+            if isEnabled {
+                Image(systemName: "checkmark")
+                    .font(.caption)
+                    .foregroundColor(.green)
+            }
         }
     }
 }

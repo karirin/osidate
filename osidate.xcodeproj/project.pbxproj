@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		180365102E50C1260076CA2A /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 1803650F2E50C1260076CA2A /* GoogleMobileAds */; };
+		18B993AC2E75844100D29ECC /* oshikoi.storekit in Resources */ = {isa = PBXBuildFile; fileRef = 18B993AB2E75844100D29ECC /* oshikoi.storekit */; };
 		18E66EA02E3C73A4002E8F66 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66E9F2E3C73A4002E8F66 /* FirebaseAnalytics */; };
 		18E66EA22E3C73A4002E8F66 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA12E3C73A4002E8F66 /* FirebaseAuth */; };
 		18E66EA42E3C73A4002E8F66 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 18E66EA32E3C73A4002E8F66 /* FirebaseCore */; };
@@ -34,6 +35,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		18B993AB2E75844100D29ECC /* oshikoi.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = oshikoi.storekit; sourceTree = "<group>"; };
 		18E66E472E3C5A38002E8F66 /* osidate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = osidate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		18E66E572E3C5A3A002E8F66 /* osidateTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = osidateTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		18E66E612E3C5A3A002E8F66 /* osidateUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = osidateUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -105,6 +107,7 @@
 		18E66E3E2E3C5A38002E8F66 = {
 			isa = PBXGroup;
 			children = (
+				18B993AB2E75844100D29ECC /* oshikoi.storekit */,
 				18E66E492E3C5A38002E8F66 /* osidate */,
 				18E66E5A2E3C5A3A002E8F66 /* osidateTests */,
 				18E66E642E3C5A3A002E8F66 /* osidateUITests */,
@@ -254,6 +257,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				18B993AC2E75844100D29ECC /* oshikoi.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
