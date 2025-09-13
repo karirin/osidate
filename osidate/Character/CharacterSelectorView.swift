@@ -25,6 +25,10 @@ struct CharacterSelectorView: View {
     @State private var animationOpacity: Double = 0
     @State private var shimmerOffset: CGFloat = -100
     
+    // 🌟 サブスクリプション関連の状態
+    @State private var showingSubscriptionView = false
+    @StateObject private var subscriptionManager = SubscriptionManager.shared
+    
     // フィルタリングされたキャラクター
     private var filteredCharacters: [Character] {
         if searchText.isEmpty {
@@ -70,53 +74,129 @@ struct CharacterSelectorView: View {
                 .ignoresSafeArea()
                 
                 if characterRegistry.isLoading {
-                    modernLoadingView
-                } else {
-                    VStack(spacing: 0) {
-                        // ヘッダーセクション
-                        headerSection
+                     modernLoadingView
+                 } else {
+                     VStack(spacing: 0) {
+                         // ヘッダーセクション
+                         headerSection
+                         
+                         // 🌟 キャラクター制限表示セクション
+                         characterLimitSection
+                         
+                         // 検索バー（条件付き表示）
+                         if showingSearchBar {
+                             searchSection
+                                 .transition(.move(edge: .top).combined(with: .opacity))
+                         }
+                         
+                         // メインコンテンツ
+                         if filteredCharacters.isEmpty && searchText.isEmpty {
+                             emptyStateView
+                         } else if filteredCharacters.isEmpty && !searchText.isEmpty {
+                             noSearchResultsView
+                         } else {
+                             characterGridView
+                         }
+                     }
+                 }
+             }
+             .navigationTitle("")
+             .navigationBarHidden(true)
+             .sheet(isPresented: $showingAddCharacter) {
+                 AddCharacterView(characterRegistry: characterRegistry)
+             }
+             // 🌟 サブスクリプション画面
+             .sheet(isPresented: $showingSubscriptionView) {
+                 SubscriptionView()
+             }
+             // 🌟 制限アラート
+             .alert("キャラクター数制限", isPresented: $characterRegistry.showingCharacterLimitAlert) {
+                 Button("プレミアムプラン") {
+                     showingSubscriptionView = true
+                 }
+                 Button("キャンセル", role: .cancel) { }
+             } message: {
+                 Text("無料版では\(characterRegistry.getCharacterLimitInfo().maxCount ?? 0)人までしか推しを登録できません。プレミアムプランで無制限に楽しめます！")
+             }
+             .alert("推しを削除", isPresented: $showingDeleteConfirmation) {
+                 Button("削除", role: .destructive) {
+                     if let character = characterToDelete {
+                         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                             characterRegistry.deleteCharacter(character)
+                         }
+                     }
+                 }
+                 Button("キャンセル", role: .cancel) { }
+             } message: {
+                 if let character = characterToDelete {
+                     Text("「\(character.name)」を削除しますか？\nこの操作は取り消せません。")
+                 }
+             }
+             .onAppear {
+                 animateAppearance()
+             }
+         }
+         .navigationViewStyle(StackNavigationViewStyle())
+     }
+    
+    private var characterLimitSection: some View {
+        let limitInfo = characterRegistry.getCharacterLimitInfo()
+        
+        return Group {
+            if !limitInfo.isSubscribed {
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "person.3.fill")
+                            .foregroundColor(.blue)
                         
-                        // 検索バー（条件付き表示）
-                        if showingSearchBar {
-                            searchSection
-                                .transition(.move(edge: .top).combined(with: .opacity))
+                        Text(limitInfo.displayText)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        Button("プレミアム") {
+                            showingSubscriptionView = true
                         }
-                        
-                        // メインコンテンツ
-                        if filteredCharacters.isEmpty && searchText.isEmpty {
-                            emptyStateView
-                        } else if filteredCharacters.isEmpty && !searchText.isEmpty {
-                            noSearchResultsView
-                        } else {
-                            characterGridView
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(
+                            LinearGradient(
+                                colors: [.blue, .purple],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(12)
+                    }
+                    
+                    // 制限近づきの警告
+                    if let warningText = limitInfo.warningText {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                                .font(.caption)
+                            
+                            Text(warningText)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            
+                            Spacer()
                         }
                     }
                 }
-            }
-            .navigationTitle("")
-            .navigationBarHidden(true)
-            .sheet(isPresented: $showingAddCharacter) {
-                AddCharacterView(characterRegistry: characterRegistry)
-            }
-            .alert("推しを削除", isPresented: $showingDeleteConfirmation) {
-                Button("削除", role: .destructive) {
-                    if let character = characterToDelete {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                            characterRegistry.deleteCharacter(character)
-                        }
-                    }
-                }
-                Button("キャンセル", role: .cancel) { }
-            } message: {
-                if let character = characterToDelete {
-                    Text("「\(character.name)」を削除しますか？\nこの操作は取り消せません。")
-                }
-            }
-            .onAppear {
-                animateAppearance()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(.ultraThinMaterial)
+                .cornerRadius(12)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
             }
         }
-        .navigationViewStyle(StackNavigationViewStyle())
     }
     
     // MARK: - ヘッダーセクション
@@ -270,7 +350,16 @@ struct CharacterSelectorView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
                 
-                Text("右下の + ボタンから\n新しい推しを追加してみてください！")
+                let limitInfo = characterRegistry.getCharacterLimitInfo()
+                let buttonText = limitInfo.canCreateMore ?
+                    "最初の推しを追加" :
+                    "プレミアムプランで無制限に"
+                
+                let actionText = limitInfo.canCreateMore ?
+                    "右下の + ボタンから\n新しい推しを追加してみてください！" :
+                    "無料版では\(limitInfo.maxCount ?? 0)人まで。\nプレミアムプランで無制限に楽しめます！"
+                
+                Text(actionText)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -278,12 +367,16 @@ struct CharacterSelectorView: View {
                 
                 // CTA ボタン
                 Button(action: {
-                    showingAddCharacter = true
+                    if limitInfo.canCreateMore {
+                        showingAddCharacter = true
+                    } else {
+                        showingSubscriptionView = true
+                    }
                 }) {
                     HStack(spacing: 12) {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: limitInfo.canCreateMore ? "plus.circle.fill" : "crown.fill")
                             .font(.title3)
-                        Text("最初の推しを追加")
+                        Text(buttonText)
                             .font(.headline)
                             .fontWeight(.semibold)
                     }
@@ -292,7 +385,9 @@ struct CharacterSelectorView: View {
                     .padding(.vertical, 16)
                     .background(
                         LinearGradient(
-                            colors: [primaryColor, accentColor],
+                            colors: limitInfo.canCreateMore ?
+                                [primaryColor, accentColor] :
+                                [.blue, .purple],
                             startPoint: .leading,
                             endPoint: .trailing
                         )
@@ -404,26 +499,44 @@ struct CharacterSelectorView: View {
         )
     }
     
-    // MARK: - フローティング追加ボタン
+    // MARK: - 修正されたフローティング追加ボタン
     private var floatingAddButton: some View {
-        Button(action: {
-            showingAddCharacter = true
+        let canCreate = characterRegistry.canCreateNewCharacter()
+        
+        return Button(action: {
+            if canCreate {
+                showingAddCharacter = true
+            } else {
+                showingSubscriptionView = true
+            }
         }) {
             ZStack {
                 Circle()
                     .fill(
+                        canCreate ?
                         LinearGradient(
                             colors: [primaryColor, accentColor],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
+                        ) :
+                        LinearGradient(
+                            colors: [.gray.opacity(0.6)],
+                            startPoint: .leading,
+                            endPoint: .trailing
                         )
                     )
                     .frame(width: 60, height: 60)
                     .shadow(color: primaryColor.opacity(0.4), radius: 15, x: 0, y: 8)
                 
-                Image(systemName: "plus")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundColor(.white)
+                if canCreate {
+                    Image(systemName: "plus")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                } else {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                }
             }
         }
         .scaleEffect(shimmerOffset > 0 ? 1.05 : 1.0)
@@ -898,6 +1011,9 @@ struct AddCharacterView: View {
     // アイコンアニメーション用の状態
     @State private var iconScale: CGFloat = 1.0
     @State private var deleteButtonScale: CGFloat = 1.0
+    
+    @State private var showingSubscriptionView = false
+    @State private var showingLimitAlert = false
     
     private struct CroppingItem: Identifiable {
         let id = UUID()
@@ -1800,14 +1916,22 @@ struct AddCharacterView: View {
     private func createCharacter() {
         guard isFormComplete else { return }
         
+        print("🎭 キャラクター作成開始")
+        
+        // 🌟 事前にキャラクター数制限をチェック
+        let limitInfo = characterRegistry.getCharacterLimitInfo()
+        if !limitInfo.canCreateMore {
+            print("❌ キャラクター数制限により作成をブロック")
+            showingLimitAlert = true
+            return
+        }
+        
         isCreating = true
         
         // アイコンアップロードが完了していない場合は待機
         if imageManager.isUploading {
-            // アップロード完了を待ってからキャラクター作成
             waitForUploadCompletionAndCreateCharacter()
         } else {
-            // 即座にキャラクター作成
             performCharacterCreation()
         }
     }
@@ -1824,17 +1948,24 @@ struct AddCharacterView: View {
     
     private func performCharacterCreation() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            let newCharacter = characterRegistry.createNewCharacter(
+            // 🌟 createNewCharacterの戻り値をチェック
+            guard let newCharacter = characterRegistry.createNewCharacter(
                 name: name.trimmingCharacters(in: .whitespacesAndNewlines),
                 personality: personality.trimmingCharacters(in: .whitespacesAndNewlines),
                 speakingStyle: speakingStyle.trimmingCharacters(in: .whitespacesAndNewlines)
-            )
+            ) else {
+                print("❌ キャラクター作成失敗 - 制限に達している可能性")
+                isCreating = false
+                // 制限アラートは CharacterRegistry 側で表示されるのでここでは何もしない
+                return
+            }
+            
+            print("✅ キャラクター作成成功: \(newCharacter.name)")
             
             // アイコンURLが設定されている場合は適用
             if let iconURL = iconUploadURL {
                 newCharacter.iconURL = iconURL
-                // 🔧 修正: CharacterRegistryにupdateCharacterメソッドが存在するかを確認
-                // 存在しない場合は別の方法で更新
+                // CharacterRegistryにupdateCharacterメソッドがある場合
                 if let index = characterRegistry.characters.firstIndex(where: { $0.id == newCharacter.id }) {
                     characterRegistry.characters[index].iconURL = iconURL
                 }

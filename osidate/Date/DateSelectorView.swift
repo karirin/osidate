@@ -181,8 +181,10 @@ struct DateSelectorView: View {
                 )
                 .ignoresSafeArea()
                 ScrollView {
-                    BannerAdView()
-                        .frame(height: 60)
+                    if viewModel.shouldShowBannerAds {
+                        BannerAdView()
+                            .frame(height: 60)
+                    }
                     LazyVStack(spacing: 20) {
                         intimacyStatusSection
                         
@@ -719,7 +721,7 @@ struct DateSelectorView: View {
                                 .background(location.type.color.opacity(0.8))
                                 .cornerRadius(6)
                                 
-                                // 🌟 親密度表示（利用可能性に応じて色分け）
+                                // 親密度表示
                                 HStack(spacing: 2) {
                                     Image(systemName: "heart.fill")
                                         .font(.system(size: 8))
@@ -738,20 +740,60 @@ struct DateSelectorView: View {
                             }
                             Spacer()
                             
-                            // 🌟 親密度ボーナス表示
-                            if location.intimacyBonus > 0 {
-                                VStack(spacing: 2) {
-                                    Text("+\(location.intimacyBonus)")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.yellow)
-                                    
-                                    Image(systemName: "heart.fill")
-                                        .font(.system(size: 8))
-                                        .foregroundColor(.yellow)
+                            // 🌟 サブスク対応のステータス表示
+                            VStack(spacing: 4) {
+                                // 🔧 修正：プレミアム会員は広告マークを表示しない
+                                if !viewModel.isPremiumUser &&
+                                   viewModel.isAdRequiredForDate(at: location) &&
+                                   location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "tv.fill")
+                                            .font(.system(size: 8))
+                                        Text("広告")
+                                            .font(.system(size: 8, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 2)
+                                    .background(Color.blue.opacity(0.8))
+                                    .cornerRadius(4)
+                                } else if viewModel.isPremiumUser &&
+                                         location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                    // プレミアム会員表示
+                                    HStack(spacing: 2) {
+                                        Image(systemName: "crown.fill")
+                                            .font(.system(size: 8))
+                                        Text("Premium")
+                                            .font(.system(size: 7, weight: .bold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        LinearGradient(
+                                            colors: [.yellow.opacity(0.8), .purple.opacity(0.8)],
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(4)
                                 }
-                                .padding(4)
-                                .background(Color.black.opacity(0.6))
-                                .cornerRadius(6)
+                                
+                                // 親密度ボーナス表示
+                                if location.intimacyBonus > 0 {
+                                    VStack(spacing: 2) {
+                                        Text("+\(location.intimacyBonus)")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundColor(.yellow)
+                                        
+                                        Image(systemName: "heart.fill")
+                                            .font(.system(size: 8))
+                                            .foregroundColor(.yellow)
+                                    }
+                                    .padding(4)
+                                    .background(Color.black.opacity(0.6))
+                                    .cornerRadius(6)
+                                }
                             }
                         }
                         Spacer()
@@ -767,7 +809,7 @@ struct DateSelectorView: View {
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.6)
                                 
-                                // 🌟 ロック状態表示
+                                // ロック状態表示
                                 if location.requiredIntimacy > viewModel.character.intimacyLevel {
                                     HStack(spacing: 2) {
                                         Image(systemName: "lock.fill")
@@ -818,9 +860,31 @@ struct DateSelectorView: View {
                         }
                         .foregroundColor(.secondary)
                         
+                        // 🌟 サブスク対応の広告表示
+                        if !viewModel.isPremiumUser &&
+                           viewModel.isAdRequiredForDate(at: location) &&
+                           location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                            HStack(spacing: 4) {
+                                Image(systemName: "tv")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(.blue)
+                        } else if viewModel.isPremiumUser {
+                            HStack(spacing: 4) {
+                                Image(systemName: "crown.fill")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                Text("広告なし")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(.purple)
+                        }
+                        
                         Spacer()
                         
-                        // 🌟 拡張された利用可能性表示
+                        // 利用可能性表示
                         Group {
                             if location.requiredIntimacy <= viewModel.character.intimacyLevel {
                                 HStack(spacing: 4) {
@@ -851,7 +915,7 @@ struct DateSelectorView: View {
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
             
-            // 🌟 利用不可時のオーバーレイ（改善版）
+            // ロック状態のオーバーレイ（既存コードと同じ）
             .overlay(
                 Group {
                     if location.requiredIntimacy > viewModel.character.intimacyLevel {
@@ -882,7 +946,6 @@ struct DateSelectorView: View {
                                             .cornerRadius(8)
                                     }
                                     
-                                    // 🌟 解放のヒント
                                     Text("💕 もっと会話して親密度を上げよう")
                                         .font(.system(size: 9))
                                         .foregroundColor(.white.opacity(0.8))
@@ -897,41 +960,7 @@ struct DateSelectorView: View {
                     }
                 }
             )
-            
-            // 🌟 無限モードデートの特別表示
-            .overlay(
-                Group {
-                    if location.type == .infinite {
-                        VStack {
-                            HStack {
-                                Spacer()
-                                HStack(spacing: 4) {
-                                    Image(systemName: "infinity")
-                                        .font(.caption2)
-                                    Text("∞")
-                                        .font(.caption2)
-                                        .fontWeight(.bold)
-                                }
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 3)
-                                .background(
-                                    LinearGradient(
-                                        colors: [.purple, .blue],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(8)
-                            }
-                            Spacer()
-                        }
-                        .padding(8)
-                    }
-                }
-            )
         }
-        // 🌟 ロック状態に関係なくタップ可能（詳細は見れるが開始はできない）
         .scaleEffect(location.requiredIntimacy > viewModel.character.intimacyLevel ? 0.95 : 1.0)
         .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
     }

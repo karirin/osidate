@@ -63,6 +63,7 @@ class RomanceAppViewModel: ObservableObject {
     private var authStateListener: AuthStateDidChangeListenerHandle?
 
     @Published var hasValidCharacter = false
+    @Published var subscriptionManager = SubscriptionManager.shared
     
     private var cancellables = Set<AnyCancellable>()
     
@@ -101,27 +102,66 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
-    func isAdRequiredForDate(at location: DateLocation) -> Bool {
-        // 全てのデートで広告視聴を必須にする場合
-        return true
+    func canCreateNewCharacter() -> Bool {
+        // CharacterRegistryがない場合は基本制限を適用
+        let currentCharacterCount = 1 // 現在のキャラクター（このViewModelが管理している1人）
+        let maxFreeCharacters = 3
         
-        // 特定の条件でのみ広告を必須にしたい場合は以下のような条件を追加
-        /*
-        // 例：親密度500以上のデートスポットでは広告必須
-        return location.requiredIntimacy >= 500
+        return SubscriptionManager.shared.isSubscribed || currentCharacterCount < maxFreeCharacters
+    }
+    
+    /// キャラクター制限情報を取得
+    func getCharacterLimitStatus() -> (canCreate: Bool, currentCount: Int, maxCount: Int?, isSubscribed: Bool) {
+        let currentCount = 1 // このViewModelは1つのキャラクターを管理
+        let maxCount = SubscriptionManager.shared.isSubscribed ? nil : 3
+        let canCreate = SubscriptionManager.shared.isSubscribed || currentCount < 3
         
-        // 例：特別なデートスポットでは広告必須
-        return location.isSpecial
-        
-        // 例：一日に3回目以降のデートでは広告必須
-        let today = Calendar.current.startOfDay(for: Date())
-        let todayDates = messages.filter { message in
-            !message.isFromUser &&
-            message.dateLocation != nil &&
-            Calendar.current.startOfDay(for: message.timestamp) == today
+        return (
+            canCreate: canCreate,
+            currentCount: currentCount,
+            maxCount: maxCount,
+            isSubscribed: SubscriptionManager.shared.isSubscribed
+        )
+    }
+    
+    /// プレミアム機能の利用可否をチェック
+    func canUsePremiumFeature(_ feature: PremiumFeature) -> Bool {
+        switch feature {
+        case .unlimitedCharacters:
+            return SubscriptionManager.shared.isSubscribed
+        case .noAds:
+            return SubscriptionManager.shared.isSubscribed
+        case .premiumDateSpots:
+            return SubscriptionManager.shared.isSubscribed
+        case .advancedCustomization:
+            return SubscriptionManager.shared.isSubscribed
         }
-        return todayDates.count >= 2
-        */
+    }
+    
+    /// プレミアム機能制限メッセージを表示
+    func showPremiumFeatureRequiredMessage(for feature: PremiumFeature) {
+        let messages: [PremiumFeature: String] = [
+            .unlimitedCharacters: "🌟 無制限キャラクター登録はプレミアム機能です。現在は3人まで登録できます。プレミアムプランで無制限に楽しみませんか？✨",
+            .noAds: "🎯 広告なし機能はプレミアム特典です。プレミアムプランで快適な体験をお楽しみください！",
+            .premiumDateSpots: "💎 特別なデートスポットはプレミアム限定です。プレミアムプランでロマンチックな場所を解放しましょう！",
+            .advancedCustomization: "⚙️ 高度なカスタマイズ機能はプレミアム特典です。プレミアムプランでより詳細な設定ができます！"
+        ]
+        
+        let message = messages[feature] ?? "この機能はプレミアム限定です。プレミアムプランにアップグレードしてお楽しみください！"
+        
+        sendSystemMessage(message)
+    }
+    
+    func isAdRequiredForDate(at location: DateLocation) -> Bool {
+        // サブスク会員は広告不要
+        if subscriptionManager.isPremiumUser {
+            print("✨ サブスク会員のため広告不要 - \(location.name)")
+            return false
+        }
+        
+        // 非サブスク会員は広告必要
+        print("📺 非サブスク会員のため広告必要 - \(location.name)")
+        return true
     }
     
     /// 広告視聴後にデートを開始する（推奨メソッド）
@@ -769,9 +809,23 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
 
-    // handleSubscriptionStatusChangeメソッド
+    /// サブスクリプション状態が変更された時の処理
     func handleSubscriptionStatusChange(isSubscribed: Bool) {
         print("📱 サブスクリプション状態変更: \(isSubscribed ? "有効" : "無効")")
+        
+        // キャラクター作成制限の更新など、必要に応じて処理を追加
+        if isSubscribed {
+            // サブスクリプション有効時の処理
+            sendSystemMessage("🎉 プレミアムプランにアップグレードしました！無制限に推しを登録して、より深い関係を築いていけますね✨")
+        } else {
+            // サブスクリプション無効時の処理（必要に応じて）
+            print("ℹ️ 無料版に戻りました")
+        }
+        
+        // UI更新
+        DispatchQueue.main.async {
+            self.objectWillChange.send()
+        }
     }
     
     /// ViewModelの初期化時にサブスクリプション統合をセットアップ
@@ -851,6 +905,67 @@ class RomanceAppViewModel: ObservableObject {
         print("✅ 有効なキャラクター: \(hasValidCharacter ? "YES" : "NO")")
         print("🔐 認証状態: \(isAuthenticated ? "認証済み" : "未認証")")
         print("==================== デバッグ情報終了 ====================\n")
+    }
+    
+    /// バナー広告を表示すべきかチェック（サブスク対応）
+    var shouldShowBannerAds: Bool {
+        return !subscriptionManager.isPremiumUser
+    }
+    
+    /// サブスク会員向けの直接デート開始
+    func startDateDirectly(at location: DateLocation) {
+        print("🎯 サブスク会員向け直接デート開始 - \(location.name)")
+        
+        // 親密度チェック
+        guard location.requiredIntimacy <= character.intimacyLevel else {
+            print("❌ 親密度不足のため開始不可")
+            return
+        }
+        
+        // 直接デートを開始（広告なし）
+        startDate(at: location)
+    }
+    
+    /// サブスク対応のデート開始統合メソッド
+    func startDateWithSubscriptionCheck(at location: DateLocation, completion: @escaping (Bool) -> Void) {
+        print("🔍 サブスク状態チェックしてデート開始 - \(location.name)")
+        
+        // 親密度チェック
+        guard location.requiredIntimacy <= character.intimacyLevel else {
+            print("❌ 親密度不足")
+            completion(false)
+            return
+        }
+        
+        // サブスク会員かチェック
+        if subscriptionManager.isPremiumUser {
+            // サブスク会員は直接開始
+            print("✨ プレミアム会員 - 広告なしでデート開始")
+            startDate(at: location)
+            completion(true)
+        } else {
+            // 非サブスク会員は広告視聴が必要
+            print("📺 非サブスク会員 - 広告視聴してデート開始")
+            startDateWithAdReward(at: location, completion: completion)
+        }
+    }
+    
+    var isPremiumUser: Bool {
+        return subscriptionManager.isPremiumUser
+    }
+    
+    /// 現在のサブスクリプションプラン名
+    var subscriptionPlanName: String? {
+        return subscriptionManager.subscriptionDisplayName
+    }
+    
+    /// サブスクリプション状態の表示テキスト
+    var subscriptionStatusText: String {
+        if subscriptionManager.isSubscribed {
+            return "プレミアム会員"
+        } else {
+            return "無料プラン"
+        }
     }
     
     /// 🔧 最適化：キャラクターの全データを保存（親密度含む）
@@ -2076,5 +2191,38 @@ struct AdSystemStatus {
 extension Image {
     static func safe(_ name: String, fallback: String = "bg_fallback") -> Image {
         UIImage(named: name) != nil ? Image(name) : Image(fallback)
+    }
+}
+
+enum PremiumFeature {
+    case unlimitedCharacters    // 無制限キャラクター登録
+    case noAds                 // 広告なし
+    case premiumDateSpots      // プレミアムデートスポット
+    case advancedCustomization // 高度なカスタマイズ
+    
+    var displayName: String {
+        switch self {
+        case .unlimitedCharacters:
+            return "無制限キャラクター登録"
+        case .noAds:
+            return "広告なし"
+        case .premiumDateSpots:
+            return "プレミアムデートスポット"
+        case .advancedCustomization:
+            return "高度なカスタマイズ"
+        }
+    }
+    
+    var description: String {
+        switch self {
+        case .unlimitedCharacters:
+            return "推しを無制限に登録できます"
+        case .noAds:
+            return "全ての広告が非表示になります"
+        case .premiumDateSpots:
+            return "特別なデートスポットが利用できます"
+        case .advancedCustomization:
+            return "キャラクターをより詳細に設定できます"
+        }
     }
 }
