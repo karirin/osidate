@@ -7,6 +7,7 @@
 
 import SwiftUI
 import Combine
+import FirebaseAuth
 
 struct ContentView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
@@ -960,6 +961,14 @@ struct ContentView: View {
         return viewModel.character.intimacyStage.color
     }
     
+    private var isSpecialUser: Bool {
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            return true
+        }
+        return false
+    }
+    
     // MARK: - Modern Chat View
     private var modernChatView: some View {
         ScrollViewReader { proxy in
@@ -993,9 +1002,28 @@ struct ContentView: View {
                     }
                     
                     ForEach(recentMessages) { message in
-                        ModernMessageBubble(message: message)
+//                        ModernMessageBubble(message: message)
+//                            .id(message.id)
+//                            .padding(.horizontal, 16)
+                        if isSpecialUser {
+                            // 🌟 特定ユーザーには編集可能なメッセージバブルを表示
+                            EditableMessageBubble(
+                                message: message,
+                                onEdit: { msg, newText in
+                                    viewModel.editMessage(msg, newText: newText)
+                                },
+                                onDelete: { msg in
+                                    viewModel.deleteMessage(msg)
+                                }
+                            )
                             .id(message.id)
                             .padding(.horizontal, 16)
+                        } else {
+                            // 通常ユーザーには既存のメッセージバブルを表示
+                            ModernMessageBubble(message: message)
+                                .id(message.id)
+                                .padding(.horizontal, 16)
+                        }
                     }
                     
                     Color.clear
@@ -1455,6 +1483,253 @@ struct ModernMessageBubble: View {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+struct EditableMessageBubble: View {
+    let message: Message
+    let onEdit: (Message, String) -> Void
+    let onDelete: (Message) -> Void
+    
+    @State private var showingEditSheet = false
+    @State private var showingDeleteAlert = false
+    @State private var editedText = ""
+    @State private var showingActionMenu = false
+    @State private var showAnimation = false
+    
+    // 特定ユーザーかどうかチェック
+    private var isSpecialUser: Bool {
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            return true
+        }
+        return false
+    }
+    
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            if message.isFromUser {
+                Spacer()
+                userMessageView
+            } else {
+                aiMessageView
+                Spacer()
+            }
+        }
+        .scaleEffect(showAnimation ? 1.0 : 0.8)
+        .opacity(showAnimation ? 1.0 : 0.0)
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1)) {
+                showAnimation = true
+            }
+        }
+        .onLongPressGesture {
+            if isSpecialUser {
+                showingActionMenu = true
+            }
+        }
+        .actionSheet(isPresented: $showingActionMenu) {
+            actionSheet
+        }
+        .sheet(isPresented: $showingEditSheet) {
+            editMessageSheet
+        }
+        .alert("メッセージを削除", isPresented: $showingDeleteAlert) {
+            Button("削除", role: .destructive) {
+                onDelete(message)
+            }
+            Button("キャンセル", role: .cancel) { }
+        } message: {
+            Text("このメッセージを削除しますか？")
+        }
+    }
+    
+    private var userMessageView: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+//                if isSpecialUser {
+//                    // 編集・削除ボタン（特定ユーザーのみ）
+//                    Button(action: {
+//                        showingActionMenu = true
+//                    }) {
+//                        Image(systemName: "ellipsis")
+//                            .foregroundColor(.white.opacity(0.7))
+//                            .font(.caption)
+//                    }
+//                    .padding(.trailing, 4)
+//                }
+                
+            Text(message.text)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(
+                     RoundedRectangle(cornerRadius: 20)
+                         .fill(
+                             LinearGradient(
+                                 colors: [.blue, .blue.opacity(0.8)],
+                                 startPoint: .topLeading,
+                                 endPoint: .bottomTrailing
+                             )
+                         )
+
+                         .shadow(color: .blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                 )
+                .foregroundColor(.white)
+            HStack(spacing: 8) {
+ 
+                if let location = message.dateLocation {
+                    Label(location, systemImage: "location.fill")
+ 
+ 
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                
+                Text(timeString(from: message.timestamp))
+ 
+ 
+ 
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+ 
+        }
+        .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .trailing)
+    }
+    
+    private var aiMessageView: some View {
+        VStack(alignment: .leading, spacing: 4) {
+                Text(message.text)
+                    .font(.body)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.ultraThinMaterial)
+     
+     
+     
+                            .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+     
+                    )
+                    .foregroundColor(.primary)
+                HStack(spacing: 8) {
+                Text(timeString(from: message.timestamp))
+                       .font(.caption2)
+                       .foregroundColor(.secondary)
+    
+                   
+    
+                if let location = message.dateLocation {
+                    Label(location, systemImage: "location.fill")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                    if message.intimacyGained > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "heart.fill")
+                                .font(.system(size: 8))
+                            Text("+\(message.intimacyGained)")
+                                .font(.system(size: 8, weight: .bold))
+                        }
+                        .foregroundColor(.pink)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.pink.opacity(0.1))
+                        .clipShape(Capsule())
+                    }
+            }
+        }
+    }
+    
+    private func timeString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+    
+    private var actionSheet: ActionSheet {
+        ActionSheet(
+            title: Text("メッセージの操作"),
+            buttons: [
+                .default(Text("編集")) {
+                    editedText = message.text.replacingOccurrences(of: " (編集済み)", with: "")
+                    showingEditSheet = true
+                },
+                .destructive(Text("削除")) {
+                    showingDeleteAlert = true
+                },
+                .cancel()
+            ]
+        )
+    }
+    
+    private var editMessageSheet: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("メッセージを編集")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .padding(.top)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("メッセージ内容")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    if message.isFromUser {
+                        TextField("メッセージを入力", text: $editedText, axis: .vertical)
+                            .textFieldStyle(.roundedBorder)
+                            .lineLimit(5...10)
+                    } else {
+                        TextEditor(text: $editedText)
+                            .frame(minHeight: 100)
+                            .padding(8)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color(.systemGray4), lineWidth: 1)
+                            )
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+            }
+            .navigationTitle("編集")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        showingEditSheet = false
+                    }
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("保存") {
+                        saveEditedMessage()
+                    }
+                    .disabled(editedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+    
+    private func saveEditedMessage() {
+        let finalText = editedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !finalText.isEmpty else { return }
+        
+        // 編集済みマーカーを追加（既にある場合は追加しない）
+        let editedText = finalText.contains("(編集済み)") ? finalText : finalText + " (編集済み)"
+        
+        onEdit(message, editedText)
+        showingEditSheet = false
     }
 }
 

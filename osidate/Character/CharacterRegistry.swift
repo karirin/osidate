@@ -37,6 +37,12 @@ class CharacterRegistry: ObservableObject {
             backgroundName: "defaultBG"
         )
         
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            character.intimacyLevel = 3000
+            print("🎯 特別ユーザー検出: キャラクター作成時に親密度を3000に設定")
+        }
+        
         characters.append(character)
         saveCharacter(character)
         

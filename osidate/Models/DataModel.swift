@@ -276,7 +276,7 @@ enum IntimacyStage: String, CaseIterable {
 
 struct Message: Identifiable, Codable {
     let id: UUID
-    let text: String
+    var text: String
     let isFromUser: Bool
     let timestamp: Date
     let dateLocation: String?

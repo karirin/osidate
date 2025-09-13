@@ -378,6 +378,89 @@ class RomanceAppViewModel: ObservableObject {
         print("🔄 チャット回数をリセット: \(character.name)")
     }
     
+    func editMessage(_ message: Message, newText: String) {
+        // 特定ユーザーかチェック
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            print("❌ 編集権限がありません")
+            return
+        }
+        
+        print("✏️ メッセージ編集開始: \(message.id)")
+        print("   - 編集前: \(message.text)")
+        print("   - 編集後: \(newText)")
+        
+        // ローカルメッセージリストを更新
+        if let index = messages.firstIndex(where: { $0.id == message.id }) {
+            var editedMessage = messages[index]
+            editedMessage.text = newText
+            
+            DispatchQueue.main.async {
+                self.messages[index] = editedMessage
+            }
+            
+            // Firebaseも更新
+            updateMessageInFirebase(editedMessage)
+            
+            print("✅ メッセージ編集完了")
+        } else {
+            print("❌ 編集対象メッセージが見つかりません")
+        }
+    }
+    
+    private func updateMessageInFirebase(_ message: Message) {
+        let messageData: [String: Any] = [
+            "id": message.id.uuidString,
+            "text": message.text,
+            "isFromUser": message.isFromUser,
+            "timestamp": message.timestamp.timeIntervalSince1970,
+            "dateLocation": message.dateLocation as Any,
+            "intimacyGained": message.intimacyGained,
+            "lastEditedAt": Date().timeIntervalSince1970 // 編集時刻を追加
+        ]
+        
+        database.child("messages").child(message.id.uuidString).updateChildValues(messageData) { error, _ in
+            if let error = error {
+                print("❌ Firebase更新エラー: \(error.localizedDescription)")
+            } else {
+                print("✅ Firebase更新成功")
+            }
+        }
+    }
+
+    /// メッセージを削除する（特定ユーザーのみ）
+    func deleteMessage(_ message: Message) {
+        // 特定ユーザーかチェック
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            print("❌ 削除権限がありません")
+            return
+        }
+        
+        print("🗑️ メッセージ削除開始: \(message.id)")
+        print("   - 削除対象: \(message.text)")
+        
+        // ローカルメッセージリストから削除
+        DispatchQueue.main.async {
+            self.messages.removeAll { $0.id == message.id }
+        }
+        
+        // Firebaseからも削除
+        deleteMessageFromFirebase(message)
+        
+        print("✅ メッセージ削除完了")
+    }
+    
+    private func deleteMessageFromFirebase(_ message: Message) {
+        database.child("messages").child(message.id.uuidString).removeValue { error, _ in
+            if let error = error {
+                print("❌ Firebase削除エラー: \(error.localizedDescription)")
+            } else {
+                print("✅ Firebase削除成功")
+            }
+        }
+    }
+    
     // チャット回数を増加させてインタースティシャル表示をチェック
     private func incrementChatCountAndCheckAd() {
         let currentCount = getCurrentChatCount()
@@ -411,7 +494,10 @@ class RomanceAppViewModel: ObservableObject {
         }
 
         // チャット回数を増加
-        incrementChatCountAndCheckAd()
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            incrementChatCountAndCheckAd()
+        }
         
         // 既存のメッセージ送信処理
         processSendMessage(text, with: currentDateSession)
@@ -1640,6 +1726,35 @@ class RomanceAppViewModel: ObservableObject {
     private func handleIntimacyLevelUp(from oldStage: IntimacyStage, to newStage: IntimacyStage, gainedIntimacy: Int) {
         print("🎉 レベルアップ! \(oldStage.displayName) -> \(newStage.displayName)")
         
+        // 🌟 特定ユーザーの場合はレベルアップメッセージを表示しない
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            print("🎯 特別ユーザー: レベルアップメッセージをスキップ")
+            
+            // 新しいデートスポット解放通知のみ処理
+            let newLocations = DateLocation.availableLocations(for: character.intimacyLevel).filter {
+                $0.requiredIntimacy > (character.intimacyLevel - gainedIntimacy)
+            }
+            
+            if !newLocations.isEmpty {
+                let unlockMessage = createLocationUnlockMessage(locations: newLocations)
+                let unlockNotification = Message(
+                    text: unlockMessage,
+                    isFromUser: false,
+                    timestamp: Date(),
+                    dateLocation: nil
+                )
+                
+                DispatchQueue.main.async { [weak self] in
+                    self?.messages.append(unlockNotification)
+                }
+                saveMessage(unlockNotification)
+            }
+            
+            return // ここで処理を終了
+        }
+        
+        // 🌟 通常ユーザーの場合は従来通りレベルアップメッセージを表示
         let levelUpMessage = createLevelUpMessage(newStage: newStage)
         let message = Message(
             text: levelUpMessage,
@@ -1871,6 +1986,8 @@ class RomanceAppViewModel: ObservableObject {
         let totalDays = getTotalConversationDays()
         return totalDays > 0 ? Double(messages.count) / Double(totalDays) : 0
     }
+    
+    
 
     // MARK: - 認証メソッド
 

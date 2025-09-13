@@ -1600,8 +1600,8 @@ struct DateDetailView: View {
         VStack(spacing: 16) {
             // 🌟 メインのデート開始ボタン（広告視聴必須）
             Button(action: {
-                let userID = Auth.auth().currentUser?.uid
-                if userID == "vVceNdjseGTBMYP7rMV9NKZuBaz1" {
+                if let userID = Auth.auth().currentUser?.uid,
+                   ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
                     viewModel.startDate(at: location)
                 } else {
                     showAdRequiredConfirmation = true
