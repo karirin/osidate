@@ -19,7 +19,7 @@ struct SubscriptionView: View {
     @State private var showingSuccess = false
     
     private let primaryGradient = LinearGradient(
-        colors: [Color.blue, Color.purple],
+        colors: [Color.pink, Color.purple],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -56,7 +56,7 @@ struct SubscriptionView: View {
                 LinearGradient(
                     colors: [
                         Color(.systemBackground),
-                        Color.blue.opacity(0.05),
+                        Color.pink.opacity(0.05),
                         Color.purple.opacity(0.05)
                     ],
                     startPoint: .topLeading,
@@ -105,13 +105,13 @@ struct SubscriptionView: View {
             }
             
             VStack(spacing: 12) {
-                Text("プレミアムプランで\n特別な体験を")
+                Text("プレミアムプラン")
                     .font(.title)
                     .fontWeight(.bold)
                     .multilineTextAlignment(.center)
-                    .foregroundColor(.primary)
+                    .foregroundStyle(primaryGradient)
                 
-                Text("広告なしで快適に、より深い関係を築けます")
+                Text("広告なしで推し活をもっと楽しく\n特別な機能で推しとの時間をより豊かに")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -122,38 +122,34 @@ struct SubscriptionView: View {
     // MARK: - Benefits Section
     private var benefitsSection: some View {
         VStack(spacing: 20) {
-            Text("プレミアム特典")
+            Text("プラン加入特典")
                 .font(.headline)
                 .fontWeight(.bold)
                 .foregroundColor(.primary)
             
             VStack(spacing: 16) {
                 BenefitRow(
+                    icon: "message.fill",
+                    iconBackground: Color.purple.opacity(0.2),
+                    iconColor: Color.purple,
+                    title: "推しとのチャットが無制限に",
+                    description: "どれだけ推しとチャットしても制限が無く\n広告も表示されません"
+                )
+                
+                BenefitRow(
                     icon: "xmark.circle.fill",
-                    title: "広告なし",
-                    description: "チャット中の広告が一切表示されません",
-                    color: .green
+                    iconBackground: Color.red.opacity(0.2),
+                    iconColor: Color.red,
+                    title: "広告が非表示に",
+                    description: "アプリ内で表示されている全ての広告が\n非表示になります"
                 )
                 
                 BenefitRow(
-                    icon: "infinity.circle.fill",
-                    title: "無制限メッセージ",
-                    description: "メッセージ数の制限なしで会話できます",
-                    color: .blue
-                )
-                
-                BenefitRow(
-                    icon: "heart.circle.fill",
-                    title: "限定デートスポット",
-                    description: "プレミアム限定の特別な場所でデートできます",
-                    color: .pink
-                )
-                
-                BenefitRow(
-                    icon: "sparkles",
-                    title: "高度なカスタマイズ",
-                    description: "キャラクターをより詳細に設定できます",
-                    color: .purple
+                    icon: "person.2.fill",
+                    iconBackground: Color.blue.opacity(0.2),
+                    iconColor: Color.blue,
+                    title: "推しの登録が無制限に",
+                    description: "何人推しを登録しても制限がかからなくなります"
                 )
             }
             .padding(.horizontal, 16)
@@ -253,7 +249,7 @@ struct SubscriptionView: View {
                 )
                 .cornerRadius(16)
                 .shadow(
-                    color: selectedProductId != nil ? Color.blue.opacity(0.3) : .clear,
+                    color: selectedProductId != nil ? Color.pink.opacity(0.3) : .clear,
                     radius: 8,
                     x: 0,
                     y: 4
@@ -350,20 +346,21 @@ struct SubscriptionView: View {
 
 struct BenefitRow: View {
     let icon: String
+    let iconBackground: Color
+    let iconColor: Color
     let title: String
     let description: String
-    let color: Color
     
     var body: some View {
         HStack(spacing: 16) {
             ZStack {
                 Circle()
-                    .fill(color.opacity(0.2))
-                    .frame(width: 40, height: 40)
+                    .fill(iconBackground)
+                    .frame(width: 44, height: 44)
                 
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundColor(color)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(iconColor)
             }
             
             VStack(alignment: .leading, spacing: 4) {

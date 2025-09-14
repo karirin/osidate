@@ -428,7 +428,7 @@ class RomanceAppViewModel: ObservableObject {
         if let userID = Auth.auth().currentUser?.uid,
            ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
             print("❌ 編集権限がありません")
-            return
+//            return
         }
         
         print("✏️ メッセージ編集開始: \(message.id)")
@@ -479,7 +479,7 @@ class RomanceAppViewModel: ObservableObject {
         if let userID = Auth.auth().currentUser?.uid,
            ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
             print("❌ 削除権限がありません")
-            return
+//            return
         }
         
         print("🗑️ メッセージ削除開始: \(message.id)")
