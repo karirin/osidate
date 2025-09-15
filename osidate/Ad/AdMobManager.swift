@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import FirebaseAuth
 import GoogleMobileAds
 
 class AdMobManager: NSObject, ObservableObject {
@@ -22,7 +23,10 @@ class AdMobManager: NSObject, ObservableObject {
     
     override init() {
         super.init()
-        loadRewardedAd()
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {}else{
+               loadRewardedAd()
+           }
     }
     
     // 追加（AdMobManager 内）

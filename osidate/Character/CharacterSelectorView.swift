@@ -143,7 +143,7 @@ struct CharacterSelectorView: View {
         let limitInfo = characterRegistry.getCharacterLimitInfo()
         
         return Group {
-            if !limitInfo.isSubscribed {
+            if !limitInfo.isSubscribed && !limitInfo.isSpecialUser {
                 VStack(spacing: 8) {
                     HStack {
                         Image(systemName: "person.3.fill")
@@ -193,6 +193,41 @@ struct CharacterSelectorView: View {
                 .padding(.vertical, 12)
                 .background(.ultraThinMaterial)
                 .cornerRadius(12)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+            } else if limitInfo.isSpecialUser {
+                // 🌟 特別ユーザー向けの表示
+                VStack(spacing: 8) {
+                    HStack {
+                        Image(systemName: "crown.fill")
+                            .foregroundColor(.gold)
+                        
+                        Text("特別アカウント: 無制限")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Spacer()
+                        
+                        Image(systemName: "infinity")
+                            .font(.title3)
+                            .foregroundColor(.gold)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(
+                        colors: [Color.gold.opacity(0.1), Color.orange.opacity(0.1)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gold.opacity(0.3), lineWidth: 1)
+                )
                 .padding(.horizontal, 20)
                 .padding(.bottom, 16)
             }
@@ -350,53 +385,8 @@ struct CharacterSelectorView: View {
                     .fontWeight(.bold)
                     .foregroundColor(.primary)
                 
-                let limitInfo = characterRegistry.getCharacterLimitInfo()
-                let buttonText = limitInfo.canCreateMore ?
-                    "最初の推しを追加" :
-                    "プレミアムプランで無制限に"
-                
-                let actionText = limitInfo.canCreateMore ?
-                    "右下の + ボタンから\n新しい推しを追加してみてください！" :
-                    "無料版では\(limitInfo.maxCount ?? 0)人まで。\nプレミアムプランで無制限に楽しめます！"
-                
-                Text(actionText)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(4)
-                
-                // CTA ボタン
-                Button(action: {
-                    if limitInfo.canCreateMore {
-                        showingAddCharacter = true
-                    } else {
-                        showingSubscriptionView = true
-                    }
-                }) {
-                    HStack(spacing: 12) {
-                        Image(systemName: limitInfo.canCreateMore ? "plus.circle.fill" : "crown.fill")
-                            .font(.title3)
-                        Text(buttonText)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 32)
-                    .padding(.vertical, 16)
-                    .background(
-                        LinearGradient(
-                            colors: limitInfo.canCreateMore ?
-                                [primaryColor, accentColor] :
-                                [.blue, .purple],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .cornerRadius(25)
-                    .shadow(color: primaryColor.opacity(0.3), radius: 15, x: 0, y: 8)
-                }
-                .scaleEffect(shimmerOffset > 0 ? 1.02 : 1.0)
-                .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: shimmerOffset)
+                // 🌟 修正: 分岐を関数に分離
+                buttonAndTextContent
             }
             Spacer()
             Spacer()
@@ -417,6 +407,132 @@ struct CharacterSelectorView: View {
         .offset(y: animationOffset)
         .opacity(animationOpacity)
         .animation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.3), value: animationOffset)
+    }
+
+    // 🌟 修正: 条件分岐を別の computed property に分離
+    private var buttonAndTextContent: some View {
+        let limitInfo = characterRegistry.getCharacterLimitInfo()
+        
+        return Group {
+            // テキスト表示
+            Group {
+                if limitInfo.isSpecialUser {
+                    Text("特別アカウントなので\n無制限に推しを追加できます！")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                } else if limitInfo.canCreateMore {
+                    Text("右下の + ボタンから\n新しい推しを追加してみてください！")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                } else {
+                    Text("無料版では\(limitInfo.maxCount ?? 0)人まで。\nプレミアムプランで無制限に楽しめます！")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                }
+            }
+            
+            // CTA ボタン
+            Group {
+                if limitInfo.isSpecialUser {
+                    createSpecialUserButton(limitInfo: limitInfo)
+                } else if limitInfo.canCreateMore {
+                    createStandardUserButton(limitInfo: limitInfo)
+                } else {
+                    createUpgradeButton(limitInfo: limitInfo)
+                }
+            }
+        }
+    }
+
+    // 🌟 各ボタンを個別の関数に分離
+    private func createSpecialUserButton(limitInfo: CharacterLimitInfo) -> some View {
+        Button(action: {
+            showingAddCharacter = true
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "crown.fill")
+                    .font(.title3)
+                Text("最初の推しを追加")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [.gold, .orange],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(25)
+            .shadow(color: Color.gold.opacity(0.3), radius: 15, x: 0, y: 8)
+        }
+        .scaleEffect(shimmerOffset > 0 ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: shimmerOffset)
+    }
+
+    private func createStandardUserButton(limitInfo: CharacterLimitInfo) -> some View {
+        Button(action: {
+            showingAddCharacter = true
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.title3)
+                Text("最初の推しを追加")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [primaryColor, accentColor],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(25)
+            .shadow(color: primaryColor.opacity(0.3), radius: 15, x: 0, y: 8)
+        }
+        .scaleEffect(shimmerOffset > 0 ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: shimmerOffset)
+    }
+
+    private func createUpgradeButton(limitInfo: CharacterLimitInfo) -> some View {
+        Button(action: {
+            showingSubscriptionView = true
+        }) {
+            HStack(spacing: 12) {
+                Image(systemName: "crown.fill")
+                    .font(.title3)
+                Text("プレミアムプランで無制限に")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 16)
+            .background(
+                LinearGradient(
+                    colors: [.blue, .purple],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .cornerRadius(25)
+            .shadow(color: Color.blue.opacity(0.3), radius: 15, x: 0, y: 8)
+        }
+        .scaleEffect(shimmerOffset > 0 ? 1.02 : 1.0)
+        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: shimmerOffset)
     }
     
     // MARK: - 検索結果なしビュー
@@ -501,7 +617,8 @@ struct CharacterSelectorView: View {
     
     // MARK: - 修正されたフローティング追加ボタン
     private var floatingAddButton: some View {
-        let canCreate = characterRegistry.canCreateNewCharacter()
+        let limitInfo = characterRegistry.getCharacterLimitInfo()
+        let canCreate = limitInfo.canCreateMore
         
         return Button(action: {
             if canCreate {
@@ -515,7 +632,7 @@ struct CharacterSelectorView: View {
                     .fill(
                         canCreate ?
                         LinearGradient(
-                            colors: [primaryColor, accentColor],
+                            colors: limitInfo.isSpecialUser ? [.gold, .orange] : [primaryColor, accentColor],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ) :
@@ -529,8 +646,8 @@ struct CharacterSelectorView: View {
                     .shadow(color: primaryColor.opacity(0.4), radius: 15, x: 0, y: 8)
                 
                 if canCreate {
-                    Image(systemName: "plus")
-                        .font(.system(size: 24, weight: .bold))
+                    Image(systemName: limitInfo.isSpecialUser ? "crown.fill" : "plus")
+                        .font(.system(size: limitInfo.isSpecialUser ? 20 : 24, weight: .bold))
                         .foregroundColor(.white)
                 } else {
                     Image(systemName: "crown.fill")
@@ -542,6 +659,7 @@ struct CharacterSelectorView: View {
         .scaleEffect(shimmerOffset > 0 ? 1.05 : 1.0)
         .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: shimmerOffset)
     }
+
     
     // MARK: - Helper Functions
     private func selectCharacter(_ character: Character) {

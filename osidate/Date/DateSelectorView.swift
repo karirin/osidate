@@ -67,37 +67,12 @@ struct DateSelectorView: View {
         }
     }
     
-    // カラーテーマ
-    private var primaryColor: Color {
-        viewModel.character.intimacyStage.color
-    }
-    
-    private var accentColor: Color {
-        Color(.systemPurple)
-    }
-    
-    private var backgroundColor: Color {
-        colorScheme == .dark ? Color(.systemBackground) : Color(.systemGray6)
-    }
-    
-    private var cardColor: Color {
-        colorScheme == .dark ? Color(.systemGray6) : Color.white
-    }
-    
-    // 🌟 すべてのデートスポット取得（無限モード含む）
-    private var allDateLocations: [DateLocation] {
-        var locations = DateLocation.availableDateLocations
-        
-        return locations
-    }
-    
-    // 🌟 フィルタリングされたロケーション（全スポット対応）
     private var filteredLocations: [DateLocation] {
         var locations = allDateLocations
         
-        // 🌟 解放済みフィルター
+        // 🌟 解放済みフィルター（デバッグアカウント対応）
         if showUnlockedOnly {
-            locations = locations.filter { $0.requiredIntimacy <= viewModel.character.intimacyLevel }
+            locations = locations.filter { $0.requiredIntimacy <= effectiveIntimacyLevel }
         }
         
         // 親密度範囲フィルター
@@ -130,6 +105,47 @@ struct DateSelectorView: View {
         return locations.sorted { $0.requiredIntimacy < $1.requiredIntimacy }
     }
     
+    // 🌟 利用可能・ロック済みの統計（デバッグアカウント対応）
+    private var availabilityStats: (available: Int, locked: Int) {
+        let available = allDateLocations.filter { $0.requiredIntimacy <= effectiveIntimacyLevel }.count
+        let locked = allDateLocations.filter { $0.requiredIntimacy > effectiveIntimacyLevel }.count
+        return (available: available, locked: locked)
+    }
+    
+    // カラーテーマ
+    private var primaryColor: Color {
+        viewModel.character.intimacyStage.color
+    }
+    
+    private var accentColor: Color {
+        Color(.systemPurple)
+    }
+    
+    private var backgroundColor: Color {
+        colorScheme == .dark ? Color(.systemBackground) : Color(.systemGray6)
+    }
+    
+    private var cardColor: Color {
+        colorScheme == .dark ? Color(.systemGray6) : Color.white
+    }
+    
+    // 🌟 すべてのデートスポット取得（無限モード含む）
+    private var allDateLocations: [DateLocation] {
+        var locations = DateLocation.availableDateLocations
+        
+        return locations
+    }
+    
+    private var isDebugAccount: Bool {
+        guard let userID = Auth.auth().currentUser?.uid else { return false }
+        return ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID)
+    }
+    
+    // デバッグアカウントの場合は最大値、そうでなければ実際の親密度を返す
+    private var effectiveIntimacyLevel: Int {
+        return isDebugAccount ? 3000 : viewModel.character.intimacyLevel
+    }
+    
     // 🌟 親密度レベル別のロケーション数（全スポット対応）
     private var locationCounts: [IntimacyRange: Int] {
         let allLocations = allDateLocations
@@ -147,13 +163,6 @@ struct DateSelectorView: View {
         }
         
         return counts
-    }
-    
-    // 🌟 利用可能・ロック済みの統計
-    private var availabilityStats: (available: Int, locked: Int) {
-        let available = allDateLocations.filter { $0.requiredIntimacy <= viewModel.character.intimacyLevel }.count
-        let locked = allDateLocations.filter { $0.requiredIntimacy > viewModel.character.intimacyLevel }.count
-        return (available: available, locked: locked)
     }
     
     // 🌟 アクティブなフィルター数を計算
@@ -520,14 +529,26 @@ struct DateSelectorView: View {
     private func handleDateStart(_ dateLocation: DateLocation) {
         print("🔧 DateSelectorView: 広告必須デート開始処理")
         
-        // 親密度チェック
-        guard dateLocation.requiredIntimacy <= viewModel.character.intimacyLevel else {
+        // 🌟 親密度チェック（デバッグアカウント対応）
+        guard dateLocation.requiredIntimacy <= effectiveIntimacyLevel else {
             print("❌ 親密度不足のため詳細画面のみ表示")
             selectedLocation = nil
             return
         }
         
-        // 🌟 広告必須チェック
+        // 🌟 デバッグアカウントは広告をスキップ
+        if isDebugAccount {
+            print("🔧 デバッグアカウント: 広告をスキップしてデート開始")
+            viewModel.startDate(at: dateLocation)
+            selectedLocation = nil
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                dismiss()
+            }
+            return
+        }
+        
+        // 🌟 通常の広告必須チェック
         if viewModel.isAdRequiredForDate(at: dateLocation) {
             print("📺 広告視聴が必要なデート - ViewModelで処理")
             
@@ -575,41 +596,14 @@ struct DateSelectorView: View {
     private var intimacyStatusSection: some View {
         VStack(spacing: 16) {
             HStack {
-//                if let urlString = viewModel.character.iconURL,
-//                   let url = URL(string: urlString),
-//                   !urlString.isEmpty {
-//
-//                    AsyncImage(url: url) { phase in
-//                        switch phase {
-//                        case .success(let image):
-//                            image
-//                                .resizable()
-//                                .aspectRatio(contentMode: .fill)
-//                                .frame(width: 30, height: 30)
-//                                .clipShape(Circle())
-//                        case .failure(_):
-//                            defaultIcon   // 読み込み失敗時
-//
-//                        case .empty:
-//                            Circle()      // 読み込み中
-//                                .fill(Color.gray.opacity(0.3))
-//                                .frame(width: 30, height: 30)
-//                                .overlay(ProgressView().scaleEffect(0.8))
-//
-//                        @unknown default:
-//                            defaultIcon
-//                        }
-//                    }
-//                    .id(urlString)
-//
-//                } else {
-//                    defaultIcon           // iconURL が無いとき
-//                }
                 CharacterIconView(character: viewModel.character, size: 30, enableFloating: false)
-                Text("関係性: \(viewModel.character.intimacyTitle)")
-                    .font(.headline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("関係性: \(viewModel.character.intimacyTitle)")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.primary)
+                }
                 
                 Spacer()
                 
@@ -628,20 +622,16 @@ struct DateSelectorView: View {
                         
                         Spacer()
                         
-                        if viewModel.character.intimacyToNextLevel > 0 {
+                        if viewModel.character.intimacyToNextLevel > 0 && !isDebugAccount {
                             Text("次の関係性まで: \(viewModel.character.intimacyToNextLevel)")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
-                        } else {
-                            Text("最高レベル達成！")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(primaryColor)
                         }
                     }
                     
-                    ProgressView(value: viewModel.character.intimacyProgress)
-                        .progressViewStyle(LinearProgressViewStyle(tint: primaryColor))
+                    // 🌟 デバッグアカウントは進捗バーを満タンで表示
+                    ProgressView(value: isDebugAccount ? 1.0 : viewModel.character.intimacyProgress)
+                        .progressViewStyle(LinearProgressViewStyle(tint: isDebugAccount ? .orange : primaryColor))
                         .frame(height: 8)
                         .background(Color.gray.opacity(0.2))
                         .cornerRadius(4)
@@ -721,7 +711,7 @@ struct DateSelectorView: View {
                                 .background(location.type.color.opacity(0.8))
                                 .cornerRadius(6)
                                 
-                                // 親密度表示
+                                // 🌟 親密度表示（デバッグアカウント対応）
                                 HStack(spacing: 2) {
                                     Image(systemName: "heart.fill")
                                         .font(.system(size: 8))
@@ -732,7 +722,8 @@ struct DateSelectorView: View {
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 2)
                                 .background(
-                                    location.requiredIntimacy <= viewModel.character.intimacyLevel
+                                    // 🌟 デバッグアカウントは常に緑色
+                                    location.requiredIntimacy <= effectiveIntimacyLevel
                                     ? Color.green.opacity(0.8)
                                     : Color.red.opacity(0.8)
                                 )
@@ -740,12 +731,11 @@ struct DateSelectorView: View {
                             }
                             Spacer()
                             
-                            // 🌟 サブスク対応のステータス表示
                             VStack(spacing: 4) {
-                                // 🔧 修正：プレミアム会員は広告マークを表示しない
+                                
                                 if !viewModel.isPremiumUser &&
                                    viewModel.isAdRequiredForDate(at: location) &&
-                                   location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                   location.requiredIntimacy <= effectiveIntimacyLevel {
                                     HStack(spacing: 2) {
                                         Image(systemName: "tv.fill")
                                             .font(.system(size: 8))
@@ -758,7 +748,7 @@ struct DateSelectorView: View {
                                     .background(Color.blue.opacity(0.8))
                                     .cornerRadius(4)
                                 } else if viewModel.isPremiumUser &&
-                                         location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                                         location.requiredIntimacy <= effectiveIntimacyLevel {
                                     // プレミアム会員表示
                                     HStack(spacing: 2) {
                                         Image(systemName: "crown.fill")
@@ -809,8 +799,8 @@ struct DateSelectorView: View {
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.6)
                                 
-                                // ロック状態表示
-                                if location.requiredIntimacy > viewModel.character.intimacyLevel {
+                                // 🌟 ロック状態表示（デバッグアカウント対応）
+                                if location.requiredIntimacy > effectiveIntimacyLevel {
                                     HStack(spacing: 2) {
                                         Image(systemName: "lock.fill")
                                             .font(.system(size: 8))
@@ -863,7 +853,7 @@ struct DateSelectorView: View {
                         // 🌟 サブスク対応の広告表示
                         if !viewModel.isPremiumUser &&
                            viewModel.isAdRequiredForDate(at: location) &&
-                           location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                           location.requiredIntimacy <= effectiveIntimacyLevel {
                             HStack(spacing: 4) {
                                 Image(systemName: "tv")
                                     .font(.caption2)
@@ -884,15 +874,12 @@ struct DateSelectorView: View {
                         
                         Spacer()
                         
-                        // 利用可能性表示
+                        // 🌟 利用可能性表示（デバッグアカウント対応）
                         Group {
-                            if location.requiredIntimacy <= viewModel.character.intimacyLevel {
+                            if location.requiredIntimacy <= effectiveIntimacyLevel {
                                 HStack(spacing: 4) {
                                     Image(systemName: "checkmark.circle.fill")
                                         .font(.caption2)
-                                    Text("利用可能")
-                                        .font(.caption2)
-                                        .fontWeight(.medium)
                                 }
                                 .foregroundColor(.green)
                             } else {
@@ -915,10 +902,10 @@ struct DateSelectorView: View {
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
             
-            // ロック状態のオーバーレイ（既存コードと同じ）
+            // 🌟 ロック状態のオーバーレイ（デバッグアカウント対応）
             .overlay(
                 Group {
-                    if location.requiredIntimacy > viewModel.character.intimacyLevel {
+                    if location.requiredIntimacy > effectiveIntimacyLevel {
                         RoundedRectangle(cornerRadius: 16)
                             .fill(Color.black.opacity(0.4))
                             .overlay(
@@ -956,13 +943,13 @@ struct DateSelectorView: View {
                                         .cornerRadius(6)
                                 }
                             )
-                            .animation(.easeInOut(duration: 0.3), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
+                            .animation(.easeInOut(duration: 0.3), value: location.requiredIntimacy > effectiveIntimacyLevel)
                     }
                 }
             )
         }
-        .scaleEffect(location.requiredIntimacy > viewModel.character.intimacyLevel ? 0.95 : 1.0)
-        .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > viewModel.character.intimacyLevel)
+        .scaleEffect(location.requiredIntimacy > effectiveIntimacyLevel ? 0.95 : 1.0)
+        .animation(.easeInOut(duration: 0.2), value: location.requiredIntimacy > effectiveIntimacyLevel)
     }
     
     // MARK: - 🌟 新しい検索・フィルターボタンセクション
@@ -1540,7 +1527,14 @@ struct DateDetailView: View {
     }
     
     private var isUnlocked: Bool {
-        location.requiredIntimacy <= viewModel.character.intimacyLevel
+        // デバッグアカウントのチェック
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            return true  // デバッグアカウントは常に解放済み
+        }
+        
+        // 通常のアカウントは親密度による判定
+        return location.requiredIntimacy <= viewModel.character.intimacyLevel
     }
     
     private var intimacyDeficit: Int {

@@ -71,9 +71,8 @@ struct SettingsView: View {
     
     // 管理者UserIDのリスト
     private let adminUserIds = [
-        ""
-//        "3UDNienzhkdheKIy77lyjMJhY4D3",
-//        "bZwehJdm4RTQ7JWjl20yaxTWS7l2"
+        "3UDNienzhkdheKIy77lyjMJhY4D3",
+        "bZwehJdm4RTQ7JWjl20yaxTWS7l2"
     ]
     
     var body: some View {
@@ -631,45 +630,88 @@ struct SettingsView: View {
         Button(action: {
             showingSubscriptionView = true
         }) {
-            HStack(spacing: 16) {
+            HStack(spacing: 0) {
+                // アイコンセクション
                 ZStack {
-                    Circle()
+                    RoundedRectangle(cornerRadius: 12)
                         .fill(LinearGradient(
-                            colors: [.blue, .purple],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ).opacity(0.2))
-                        .frame(width: 40, height: 40)
-                    
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 18, weight: .medium))
-                        .foregroundStyle(LinearGradient(
-                            colors: [.blue, .purple],
+                            colors: [Color(.systemBlue), Color(.systemPurple)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ))
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("プレミアムにアップグレード")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.primary)
+                        .frame(width: 48, height: 48)
                     
-                    Text("広告なし • 無制限メッセージ • 限定機能")
-                        .font(.caption)
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.white)
+                }
+                .padding(.trailing, 16)
+                
+                // テキストセクション
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        Text("プレミアムにアップグレード")
+                            .font(.system(.subheadline, design: .rounded))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.primary)
+                        
+                        // NEW バッジ
+                        Text("NEW")
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(
+                                Capsule()
+                                    .fill(Color.orange)
+                            )
+                    }
+                    
+                    Text("広告なし • 無制限メッセージ")
+                        .font(.system(.caption, design: .default))
                         .foregroundColor(.secondary)
+                        .lineLimit(1)
                 }
                 
                 Spacer()
                 
+                // 矢印アイコン
                 Image(systemName: "chevron.right")
-                    .font(.caption)
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.secondary)
+                    .padding(.leading, 8)
             }
-            .padding(.vertical, 8)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color(.secondarySystemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [Color.blue.opacity(0.4), Color.purple.opacity(0.4)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                    )
+                    .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
+            )
         }
-        .buttonStyle(PlainButtonStyle())
+        .buttonStyle(PremiumButtonStyle())
+    }
+
+    // 改良されたカスタムボタンスタイル
+    struct PremiumButtonStyle: ButtonStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+                .opacity(configuration.isPressed ? 0.85 : 1.0)
+                .brightness(configuration.isPressed ? -0.05 : 0)
+                .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+        }
     }
     
     // MARK: - Subscription Management Rows

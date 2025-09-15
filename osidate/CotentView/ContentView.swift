@@ -24,6 +24,9 @@ struct ContentView: View {
     @State private var customerFlag: Bool = false
     @State private var helpFlag: Bool = false
     
+    // 🌟 サブスクリプション表示フラグ
+    @State private var subscriptionFlag: Bool = false
+    
     // 🌟 新機能：チャット表示モード
     @State private var chatDisplayMode: ChatDisplayMode = .traditional
     @State private var showingModeSelector = false
@@ -51,7 +54,7 @@ struct ContentView: View {
         )
         .map { $0 && $1 && $2 && $3 }
         .removeDuplicates()
-        .debounce(for: .milliseconds(300), scheduler: RunLoop.main) // フラつき防止
+        .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
         .eraseToAnyPublisher()
     }
     
@@ -91,6 +94,10 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingModeSelector) {
             ChatModeSelectionView(selectedMode: $chatDisplayMode)
+        }
+        // 🌟 サブスクリプション画面表示
+        .sheet(isPresented: $subscriptionFlag) {
+            SubscriptionView()
         }
         // 🌟 親密度レベルアップ通知
         .sheet(isPresented: $viewModel.showingIntimacyLevelUp) {
@@ -462,6 +469,8 @@ struct ContentView: View {
                                 if userFlag == 0 {
                                     executeProcessEveryfifTimes()
                                     executeProcessEveryThreeTimes()
+                                    // 🌟 サブスクリプション表示処理を追加
+                                    executeSubscriptionProcessEveryThreeTimes()
                                 }
                             }
                         }
@@ -473,18 +482,47 @@ struct ContentView: View {
         .navigationViewStyle(StackNavigationViewStyle())
     }
     
-    func executeProcessEveryThreeTimes() {
+    func executeSubscriptionProcessEveryThreeTimes() {
         // UserDefaultsからカウンターを取得
-        let count = UserDefaults.standard.integer(forKey: "launchCount") + 1
+        let count = UserDefaults.standard.integer(forKey: "adDisplayCount") + 1
         
         // カウンターを更新
-        UserDefaults.standard.set(count, forKey: "launchCount")
+        UserDefaults.standard.set(count, forKey: "adDisplayCount")
         
-        // 3回に1回の割合で処理を実行
+        print("📱 ContentView: 広告表示カウント - \(count)回")
         
-        if count % 10 == 0 {
-            customerFlag = true
+        // 3回に1回の割合でサブスクリプション画面を表示
+        if count % 3 == 0 {
+            // サブスクリプション状態をチェックしてから表示
+            checkAndShowSubscription()
         }
+    }
+    
+    private func checkAndShowSubscription() {
+        // 既にサブスクリプション中の場合は表示しない
+        if SubscriptionManager.shared.isSubscribed {
+            print("✅ ContentView: 既にサブスクリプション中のため表示をスキップ")
+            return
+        }
+        
+        print("🎯 ContentView: サブスクリプション画面を表示")
+        
+        // 少し遅延させて他のモーダルと競合しないようにする
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            subscriptionFlag = true
+        }
+    }
+    
+    // MARK: - 🌟 広告表示完了時に呼び出すメソッド（広告SDKから呼び出し想定）
+    func onAdDisplayCompleted() {
+        print("📺 ContentView: 広告表示完了")
+        executeSubscriptionProcessEveryThreeTimes()
+    }
+    
+    // MARK: - 🌟 広告表示カウンターリセット（デバッグ用）
+    private func resetAdDisplayCounter() {
+        UserDefaults.standard.set(0, forKey: "adDisplayCount")
+        print("🔧 ContentView: 広告表示カウンターをリセット")
     }
     
     func executeProcessEveryfifTimes() {
@@ -495,6 +533,19 @@ struct ContentView: View {
         UserDefaults.standard.set(count, forKey: "launchHelpCount")
         if count % 15 == 0 {
             helpFlag = true
+        }
+    }
+    
+    func executeProcessEveryThreeTimes() {
+        // UserDefaultsからカウンターを取得
+        let count = UserDefaults.standard.integer(forKey: "launchCount") + 1
+        
+        // カウンターを更新
+        UserDefaults.standard.set(count, forKey: "launchCount")
+        
+        // 10回に1回の割合で処理を実行
+        if count % 10 == 0 {
+            customerFlag = true
         }
     }
     

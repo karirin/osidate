@@ -7,6 +7,7 @@
 
 import GoogleMobileAds
 import SwiftUI
+import FirebaseAuth
 
 class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelegate {
     @Published var isLoading = false
@@ -17,7 +18,10 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
     
     override init() {
         super.init()
-        loadInterstitialAd()
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {} else {
+               loadInterstitialAd()
+           }
     }
     
     func loadInterstitialAd() {

@@ -31,6 +31,9 @@ class CharacterRegistry: ObservableObject {
     // 🌟 制限設定
     private let freeMaxCharacters = 3  // 無料版では3人まで
     
+    // 🌟 特別ユーザーID（無制限作成可能）
+    private let specialUserIDs = ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"]
+    
     // Combine用
     private var cancellables = Set<AnyCancellable>()
     
@@ -54,17 +57,27 @@ class CharacterRegistry: ObservableObject {
         }
     }
     
+    // MARK: - 🌟 特別ユーザーかどうかをチェック
+    private func isSpecialUser() -> Bool {
+        guard let userID = Auth.auth().currentUser?.uid else { return false }
+        return specialUserIDs.contains(userID)
+    }
+    
     // MARK: - Character Management
     
-    /// 🌟 新しいキャラクターを作成（サブスク制限チェック付き）
+    /// 🌟 新しいキャラクターを作成（サブスク制限チェック付き + 特別ユーザー対応）
     func createNewCharacter(name: String, personality: String, speakingStyle: String) -> Character? {
         print("🎭 新キャラクター作成要求: \(name)")
         print("   - 現在のキャラクター数: \(characters.count)")
         print("   - 制限数: \(freeMaxCharacters)")
         print("   - サブスク状態: \(isSubscribed)")
+        print("   - 特別ユーザー: \(isSpecialUser())")
         
-        // 🌟 サブスクリプション制限チェック
-        if !isSubscribed && characters.count >= freeMaxCharacters {
+        // 🌟 特別ユーザーまたはサブスク加入者は無制限
+        let hasUnlimitedAccess = isSpecialUser() || isSubscribed
+        
+        // 🌟 サブスクリプション制限チェック（特別ユーザーは除外）
+        if !hasUnlimitedAccess && characters.count >= freeMaxCharacters {
             print("❌ キャラクター数制限に達しました")
             showingCharacterLimitAlert = true
             return nil
@@ -78,8 +91,8 @@ class CharacterRegistry: ObservableObject {
             backgroundName: "defaultBG"
         )
         
-        if let userID = Auth.auth().currentUser?.uid,
-           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+        // 🌟 特別ユーザーの場合は親密度を3000に設定
+        if isSpecialUser() {
             character.intimacyLevel = 3000
             print("🎯 特別ユーザー検出: キャラクター作成時に親密度を3000に設定")
         }
@@ -91,27 +104,31 @@ class CharacterRegistry: ObservableObject {
         return character
     }
     
-    /// 🌟 キャラクター作成可否をチェック
+    /// 🌟 キャラクター作成可否をチェック（特別ユーザー対応）
     func canCreateNewCharacter() -> Bool {
-        return isSubscribed || characters.count < freeMaxCharacters
+        let hasUnlimitedAccess = isSpecialUser() || isSubscribed
+        return hasUnlimitedAccess || characters.count < freeMaxCharacters
     }
     
-    /// 🌟 残り作成可能キャラクター数を取得
+    /// 🌟 残り作成可能キャラクター数を取得（特別ユーザー対応）
     func remainingCharacterSlots() -> Int {
-        if isSubscribed {
-            return Int.max // サブスク加入者は無制限
+        let hasUnlimitedAccess = isSpecialUser() || isSubscribed
+        if hasUnlimitedAccess {
+            return Int.max // 特別ユーザーまたはサブスク加入者は無制限
         } else {
             return max(0, freeMaxCharacters - characters.count)
         }
     }
     
-    /// 🌟 制限情報を取得
+    /// 🌟 制限情報を取得（特別ユーザー対応）
     func getCharacterLimitInfo() -> CharacterLimitInfo {
+        let hasUnlimitedAccess = isSpecialUser() || isSubscribed
         return CharacterLimitInfo(
             currentCount: characters.count,
-            maxCount: isSubscribed ? nil : freeMaxCharacters,
+            maxCount: hasUnlimitedAccess ? nil : freeMaxCharacters,
             canCreateMore: canCreateNewCharacter(),
-            isSubscribed: isSubscribed
+            isSubscribed: hasUnlimitedAccess, // 特別ユーザーもサブスク扱いにする
+            isSpecialUser: isSpecialUser()
         )
     }
     
@@ -285,16 +302,19 @@ class CharacterRegistry: ObservableObject {
     }
 }
 
-// MARK: - 🌟 サポート構造体（既存と同じ）
+// MARK: - 🌟 サポート構造体（特別ユーザー対応）
 
 struct CharacterLimitInfo {
     let currentCount: Int
     let maxCount: Int?  // nilの場合は無制限
     let canCreateMore: Bool
     let isSubscribed: Bool
+    let isSpecialUser: Bool // 🌟 特別ユーザーフラグを追加
     
     var displayText: String {
-        if isSubscribed {
+        if isSpecialUser {
+            return "特別アカウント: 無制限" // 🌟 特別ユーザー向けメッセージ
+        } else if isSubscribed {
             return "プレミアムプラン: 無制限"
         } else {
             return "\(currentCount)/\(maxCount ?? 0)人"
@@ -302,7 +322,8 @@ struct CharacterLimitInfo {
     }
     
     var warningText: String? {
-        guard !isSubscribed else { return nil }
+        // 🌟 特別ユーザーの場合は警告を表示しない
+        guard !isSpecialUser && !isSubscribed else { return nil }
         
         if currentCount >= (maxCount ?? 0) {
             return "無料版では\(maxCount ?? 0)人までしか登録できません"

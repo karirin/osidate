@@ -14,8 +14,8 @@
             filePath = "osidate/Character/CharacterSelectorView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "2101"
-            endingLineNumber = "2101"
+            startingLineNumber = "2219"
+            endingLineNumber = "2219"
             landmarkName = "makeUIViewController(context:)"
             landmarkType = "7">
          </BreakpointContent>
@@ -30,8 +30,8 @@
             filePath = "osidate/Date/DateSelectorView.swift"
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
-            startingLineNumber = "671"
-            endingLineNumber = "671"
+            startingLineNumber = "661"
+            endingLineNumber = "661"
             landmarkName = "dateLocationCard(location:)"
             landmarkType = "7">
          </BreakpointContent>
