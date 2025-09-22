@@ -690,39 +690,36 @@ struct CharacterSelectorView: View {
     }
 }
 
-struct StatisticCard: View {
-    let icon: String
-    let title: String
-    let value: String
-    let color: Color
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(color)
-                .frame(width: 24)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Text(value)
-                    .font(.subheadline)
-                    .fontWeight(.bold)
-                    .foregroundColor(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
-    }
-}
+// MARK: - StatisticCard コンポーネント
+//struct StatisticCard: View {
+//    let title: String
+//    let value: String
+//    let icon: String
+//    let color: Color
+//    
+//    var body: some View {
+//        VStack(spacing: 8) {
+//            Image(systemName: icon)
+//                .font(.title2)
+//                .foregroundColor(color)
+//            
+//            Text(value)
+//                .font(.title3)
+//                .fontWeight(.bold)
+//                .foregroundColor(.primary)
+//            
+//            Text(title)
+//                .font(.caption)
+//                .foregroundColor(.secondary)
+//                .multilineTextAlignment(.center)
+//        }
+//        .frame(maxWidth: .infinity)
+//        .padding(.vertical, 12)
+//        .background(Color(.systemBackground))
+//        .cornerRadius(12)
+//        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+//    }
+//}
 
 struct ModernCharacterCard: View {
     let character: Character

@@ -1,8 +1,6 @@
 //
-//  InterstitialAdManager.swift
+//  InterstitialAdManager.swift - 最適化版
 //  osidate
-//
-//  Created by Apple on 2025/08/17.
 //
 
 import GoogleMobileAds
@@ -14,17 +12,94 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
     @Published var isPresenting = false
     
     private var interstitialAd: InterstitialAd?
-    private let adUnitID = "ca-app-pub-4898800212808837/6818389246" // テスト用ID
+    private var hasInitializedAds = false
+    private let adUnitID = "ca-app-pub-4898800212808837/6818389246"
     
     override init() {
         super.init()
-        if let userID = Auth.auth().currentUser?.uid,
-           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {} else {
-               loadInterstitialAd()
-           }
+        // 初期化時は重い処理を行わない
+        scheduleInitialAdLoad()
     }
     
+    // MARK: - 初期化の最適化
+    
+    /// アプリ起動への影響を最小限にするため、遅延読み込みをスケジュール
+    private func scheduleInitialAdLoad() {
+        // 特定ユーザーは広告不要
+        if shouldSkipAds() {
+            print("🎯 インタースティシャル広告スキップ対象ユーザー")
+            return
+        }
+        
+        // チャット頻度を考慮してより長い遅延を設定
+        // 初回起動時は10秒、2回目以降は5秒後に読み込み
+        let delay = isFirstAppLaunch() ? 10.0 : 5.0
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.performInitialAdLoad()
+        }
+    }
+    
+    /// 実際の広告読み込みを実行
+    private func performInitialAdLoad() {
+        guard !hasInitializedAds else { return }
+        hasInitializedAds = true
+        
+        print("📱 遅延読み込み: インタースティシャル広告読み込み開始")
+        loadInterstitialAd()
+    }
+    
+    // MARK: - 条件判定メソッド
+    
+    /// 広告をスキップすべきかチェック
+    private func shouldSkipAds() -> Bool {
+        // 特定ユーザーチェック
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            return true
+        }
+        
+        // サブスクリプション会員チェック（今後の拡張用）
+        // if SubscriptionManager.shared.isSubscribed {
+        //     return true
+        // }
+        
+        return false
+    }
+    
+    /// 初回起動かチェック
+    private func isFirstAppLaunch() -> Bool {
+        let key = "hasLaunchedInterstitialBefore"
+        let hasLaunched = UserDefaults.standard.bool(forKey: key)
+        
+        if !hasLaunched {
+            UserDefaults.standard.set(true, forKey: key)
+            return true
+        }
+        
+        return false
+    }
+    
+    // MARK: - オンデマンド読み込み
+    
+    /// 広告が必要になった時点で確実に読み込み
+    private func ensureAdIsReady() {
+        if !hasInitializedAds {
+            performInitialAdLoad()
+        } else if interstitialAd == nil && !isLoading {
+            // 既に初期化済みだが広告が利用できない場合は再読み込み
+            loadInterstitialAd()
+        }
+    }
+    
+    // MARK: - 広告読み込み（最適化）
+    
     func loadInterstitialAd() {
+        // 広告をスキップすべきユーザーは読み込みしない
+        if shouldSkipAds() {
+            return
+        }
+        
         isLoading = true
         let request = Request()
         
@@ -47,7 +122,18 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
         }
     }
     
+    // MARK: - 広告表示（最適化）
+    
     func showInterstitialAd() {
+        // 広告をスキップすべきユーザーの場合は何もしない
+        if shouldSkipAds() {
+            print("🎯 インタースティシャル広告スキップ")
+            return
+        }
+        
+        // オンデマンドで広告を準備
+        ensureAdIsReady()
+        
         guard let interstitialAd = interstitialAd else {
             print("⚠️ インタースティシャル広告が準備できていません")
             // 広告が準備できていない場合は再読み込み
@@ -66,21 +152,28 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
         interstitialAd.present(from: rootViewController)
     }
     
-    // MARK: - GADFullScreenContentDelegate
+    // MARK: - GADFullScreenContentDelegate（既存）
     
     func adDidDismissFullScreenContent(_ ad: FullScreenPresentingAd) {
         print("📱 インタースティシャル広告が閉じられました")
         isPresenting = false
         interstitialAd = nil
-        // 次の広告を事前読み込み
-        loadInterstitialAd()
+        
+        // 次の広告を事前読み込み（少し遅延させる）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            self.loadInterstitialAd()
+        }
     }
     
     func ad(_ ad: FullScreenPresentingAd, didFailToPresentFullScreenContentWithError error: Error) {
         print("🚫 インタースティシャル広告表示失敗: \(error.localizedDescription)")
         isPresenting = false
         interstitialAd = nil
-        loadInterstitialAd()
+        
+        // 失敗時も少し遅延してから再読み込み
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.loadInterstitialAd()
+        }
     }
     
     func adWillPresentFullScreenContent(_ ad: FullScreenPresentingAd) {

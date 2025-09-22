@@ -71,8 +71,8 @@ struct SettingsView: View {
     
     // 管理者UserIDのリスト
     private let adminUserIds = [
-        "3UDNienzhkdheKIy77lyjMJhY4D3",
-        "bZwehJdm4RTQ7JWjl20yaxTWS7l2"
+        "vVceNdjseGTBMYP7rMV9NKZuBaz1",
+        "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"
     ]
     
     var body: some View {
@@ -277,6 +277,9 @@ struct SettingsView: View {
 //                            isShowingEditOshiView = true
 //                        }
 //                    }
+                    if isAdmin {
+                        adminFunctionsSection
+                    }
                     VStack(spacing: 10) {
                         
                         subscriptionSection
@@ -532,6 +535,15 @@ struct SettingsView: View {
         .onAppear {
             checkAdminStatus()
         }
+        .sheet(isPresented: $showingAdminChatAnalytics) {
+            AdminChatAnalyticsView()
+        }
+        .sheet(isPresented: $showingAdminGroupChatAnalytics) {
+            AdminGroupChatAnalyticsView()
+        }
+        .sheet(isPresented: $showingAdminDataOverview) {
+            AdminDataOverviewView()
+        }
         .alert(isPresented: $isShowingLogoutAlert) {
             Alert(
                 title: Text("ログアウト"),
@@ -561,6 +573,33 @@ struct SettingsView: View {
         }
     }
     
+    struct AdminDataOverviewView: View {
+        @Environment(\.dismiss) private var dismiss
+        
+        var body: some View {
+            NavigationView {
+                VStack {
+                    Text("全データ表示")
+                        .font(.title)
+                        .padding()
+                    
+                    Text("この画面では全システムデータの概要を表示します。")
+                        .padding()
+                    
+                    Spacer()
+                }
+                .navigationTitle("全データ表示")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("閉じる") {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
+    }
     // MARK: - Subscription Section for Settings
     var subscriptionSection: some View {
         VStack{
@@ -576,6 +615,79 @@ struct SettingsView: View {
             }
         }
         .padding(.horizontal)
+    }
+    
+    private var adminFunctionsSection: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text("管理者機能")
+                    .foregroundColor(.secondary)
+                    .frame(alignment: .leading)
+                Spacer()
+            }
+            .padding(.leading)
+            
+            VStack(spacing: 15) {
+                // チャット監視
+                SettingRow(
+                    icon: "message.badge.filled.fill",
+                    title: "チャット監視",
+                    color: .green,
+                    action: {
+                        generateHapticFeedback()
+                        showingAdminChatAnalytics = true
+                    }
+                )
+                
+                // グループチャット監視
+                SettingRow(
+                    icon: "person.3.sequence.fill",
+                    title: "グループチャット監視",
+                    color: .orange,
+                    action: {
+                        generateHapticFeedback()
+                        showingAdminGroupChatAnalytics = true
+                    }
+                )
+                
+                // 全データ表示
+                SettingRow(
+                    icon: "list.bullet.rectangle.portrait.fill",
+                    title: "全データ表示",
+                    color: .purple,
+                    action: {
+                        generateHapticFeedback()
+                        showingAdminDataOverview = true
+                    }
+                )
+                
+                // データエクスポート
+                SettingRow(
+                    icon: "square.and.arrow.up.fill",
+                    title: "データエクスポート",
+                    color: .indigo,
+                    action: {
+                        generateHapticFeedback()
+                        exportAllDataToCSV()
+                    }
+                )
+            }
+            .padding()
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.orange.opacity(0.1), Color.red.opacity(0.1)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+            )
+            .shadow(color: Color.orange.opacity(0.2), radius: 5, x: 0, y: 2)
+            .padding(.horizontal)
+        }
     }
     
     // MARK: - Subscription Status Row

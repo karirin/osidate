@@ -1,8 +1,6 @@
 //
-//  AdMobManager.swift
+//  AdMobManager.swift - 最適化版
 //  osidate
-//
-//  Created by Apple on 2025/08/17.
 //
 
 import SwiftUI
@@ -17,71 +15,115 @@ class AdMobManager: NSObject, ObservableObject {
     
     private var rewardedAd: RewardedAd?
     private var adCompletionHandler: ((Bool) -> Void)?
+    private var hasInitializedAds = false
     
-    // テスト用ID（本番では実際のIDに変更）
-    private let adUnitID = "ca-app-pub-4898800212808837/2039052898" // テスト用ID
+    private let adUnitID = "ca-app-pub-4898800212808837/2039052898"
     
     override init() {
         super.init()
-        if let userID = Auth.auth().currentUser?.uid,
-           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {}else{
-               loadRewardedAd()
-           }
+        // 初期化時は重い処理を行わない
+        scheduleInitialAdLoad()
     }
     
-    // 追加（AdMobManager 内）
-    private func topViewController(base: UIViewController? = UIApplication.shared
-        .connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-        .first(where: { $0.activationState == .foregroundActive })?
-        .windows.first(where: { $0.isKeyWindow })?
-        .rootViewController) -> UIViewController? {
-        if let nav = base as? UINavigationController { return topViewController(base: nav.visibleViewController) }
-        if let tab = base as? UITabBarController, let selected = tab.selectedViewController { return topViewController(base: selected) }
-        if let presented = base?.presentedViewController { return topViewController(base: presented) }
-        return base
-    }
+    // MARK: - 初期化の最適化
     
-    private func topPresentableViewController() -> UIViewController? {
-        guard let top = topViewController() else { return nil }
-        // アラートが最前面なら、その presenting 側から出す
-        if let alert = top as? UIAlertController {
-            return alert.presentingViewController ?? top
-        }
-        return top
-    }
-
-    // MARK: - 広告読み込み
-    func loadRewardedAd() {
-        print("🎬 リワード広告読み込み開始")
-        
-        let request = Request()
-        RewardedAd.load(with: adUnitID, request: request) { [weak self] ad, error in
-            DispatchQueue.main.async {
-                if let error = error {
-                    print("❌ 広告読み込み失敗: \(error.localizedDescription)")
-                    self?.adLoadError = error
-                    self?.isAdLoaded = false
-                } else {
-                    print("✅ 広告読み込み成功")
-                    self?.rewardedAd = ad
-                    self?.isAdLoaded = true
-                    self?.adLoadError = nil
-                    
-                    // 広告デリゲートを設定
-                    self?.rewardedAd?.fullScreenContentDelegate = self
-                }
-            }
-        }
-    }
-    
-    // MARK: - 広告表示
-    func showRewardedAd(completion: @escaping (Bool) -> Void) {
-        guard let rewardedAd = rewardedAd, isAdLoaded else {
-            print("❌ 広告が読み込まれていません")
-            completion(false)
+    /// アプリ起動への影響を最小限にするため、遅延読み込みをスケジュール
+    private func scheduleInitialAdLoad() {
+        // 特定ユーザーは広告不要
+        if shouldSkipAds() {
+            print("🎯 広告スキップ対象ユーザー")
             return
         }
+        
+        // 初回起動時は長めの遅延（5秒）
+        // 2回目以降は短めの遅延（2秒）
+        let delay = isFirstAppLaunch() ? 5.0 : 2.0
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.performInitialAdLoad()
+        }
+    }
+    
+    /// 実際の広告読み込みを実行
+    private func performInitialAdLoad() {
+        guard !hasInitializedAds else { return }
+        hasInitializedAds = true
+        
+        print("📱 遅延読み込み: 広告読み込み開始")
+        loadRewardedAd()
+    }
+    
+    // MARK: - 条件判定メソッド
+    
+    /// 広告をスキップすべきかチェック
+    private func shouldSkipAds() -> Bool {
+        // 特定ユーザーチェック
+        if let userID = Auth.auth().currentUser?.uid,
+           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+            return true
+        }
+        
+        // サブスクリプション会員チェック（今後の拡張用）
+        // if SubscriptionManager.shared.isSubscribed {
+        //     return true
+        // }
+        
+        return false
+    }
+    
+    /// 初回起動かチェック
+    private func isFirstAppLaunch() -> Bool {
+        let key = "hasLaunchedBefore"
+        let hasLaunched = UserDefaults.standard.bool(forKey: key)
+        
+        if !hasLaunched {
+            UserDefaults.standard.set(true, forKey: key)
+            return true
+        }
+        
+        return false
+    }
+    
+    // MARK: - オンデマンド読み込み
+    
+    /// 広告が必要になった時点で確実に読み込み
+    private func ensureAdIsReady() {
+        if !hasInitializedAds {
+            performInitialAdLoad()
+        } else if !isAdLoaded && !isLoading {
+            // 既に初期化済みだが広告が利用できない場合は再読み込み
+            loadRewardedAd()
+        }
+    }
+    
+    // MARK: - 既存のメソッド（最適化）
+    
+    func showRewardedAd(completion: @escaping (Bool) -> Void) {
+        // 広告をスキップすべきユーザーの場合
+        if shouldSkipAds() {
+            print("🎯 広告スキップ - 直接成功を返す")
+            completion(true)
+            return
+        }
+        
+        // オンデマンドで広告を準備
+        ensureAdIsReady()
+        
+        guard let rewardedAd = rewardedAd, isAdLoaded else {
+            print("❌ 広告が読み込まれていません - 再読み込み後にリトライ")
+            loadRewardedAd()
+            
+            // 2秒後にリトライ
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                if self.isAdLoaded {
+                    self.showRewardedAd(completion: completion)
+                } else {
+                    completion(false)
+                }
+            }
+            return
+        }
+        
         guard !isShowingAd else {
             print("⚠️ すでに広告表示処理中")
             completion(false)
@@ -91,7 +133,6 @@ class AdMobManager: NSObject, ObservableObject {
         adCompletionHandler = completion
         isShowingAd = true
 
-        // ここ重要：必ずメインスレッド＋最前面の “出せる” VC を使う
         DispatchQueue.main.async {
             guard let presentVC = self.topPresentableViewController() else {
                 print("❌ 表示用のViewControllerが取得できません")
@@ -112,13 +153,69 @@ class AdMobManager: NSObject, ObservableObject {
         }
     }
     
+    // MARK: - 広告読み込み（既存のロジックを保持）
+    
+    func loadRewardedAd() {
+        // 広告をスキップすべきユーザーは読み込みしない
+        if shouldSkipAds() {
+            return
+        }
+        
+        print("🎬 リワード広告読み込み開始")
+        
+        let request = Request()
+        RewardedAd.load(with: adUnitID, request: request) { [weak self] ad, error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("❌ 広告読み込み失敗: \(error.localizedDescription)")
+                    self?.adLoadError = error
+                    self?.isAdLoaded = false
+                } else {
+                    print("✅ 広告読み込み成功")
+                    self?.rewardedAd = ad
+                    self?.isAdLoaded = true
+                    self?.adLoadError = nil
+                    self?.rewardedAd?.fullScreenContentDelegate = self
+                }
+            }
+        }
+    }
+    
+    // MARK: - ViewController取得（既存）
+    
+    private func topViewController(base: UIViewController? = UIApplication.shared
+        .connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .first(where: { $0.activationState == .foregroundActive })?
+        .windows.first(where: { $0.isKeyWindow })?
+        .rootViewController) -> UIViewController? {
+        if let nav = base as? UINavigationController { return topViewController(base: nav.visibleViewController) }
+        if let tab = base as? UITabBarController, let selected = tab.selectedViewController { return topViewController(base: selected) }
+        if let presented = base?.presentedViewController { return topViewController(base: presented) }
+        return base
+    }
+    
+    private func topPresentableViewController() -> UIViewController? {
+        guard let top = topViewController() else { return nil }
+        if let alert = top as? UIAlertController {
+            return alert.presentingViewController ?? top
+        }
+        return top
+    }
+    
     // MARK: - 広告が利用可能かチェック
+    
     var canShowAd: Bool {
+        // 広告をスキップすべきユーザーは常にtrueを返す
+        if shouldSkipAds() {
+            return true
+        }
         return isAdLoaded && rewardedAd != nil
     }
 }
 
-// MARK: - GADFullScreenContentDelegate
+// MARK: - GADFullScreenContentDelegate（既存のデリゲートメソッド）
+
 extension AdMobManager: FullScreenContentDelegate {
     func ad(_ ad: FullScreenPresentingAd,
             didFailToPresentFullScreenContentWithError error: Error) {
@@ -140,7 +237,6 @@ extension AdMobManager: FullScreenContentDelegate {
         print("🎬 広告表示終了")
         DispatchQueue.main.async {
             self.isShowingAd = false
-            // リワード未獲得で閉じた場合のフォールバック
             if self.adCompletionHandler != nil {
                 self.adCompletionHandler?(false)
                 self.adCompletionHandler = nil
