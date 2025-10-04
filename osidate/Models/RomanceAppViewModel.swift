@@ -539,10 +539,10 @@ class RomanceAppViewModel: ObservableObject {
         }
 
         // チャット回数を増加
-        if let userID = Auth.auth().currentUser?.uid,
-           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
+//        if let userID = Auth.auth().currentUser?.uid,
+//           ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
             incrementChatCountAndCheckAd()
-        }
+//        }
         
         // 既存のメッセージ送信処理
         processSendMessage(text, with: currentDateSession)
