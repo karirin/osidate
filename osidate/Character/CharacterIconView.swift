@@ -16,6 +16,7 @@ struct CharacterIconView: View {
     @State private var animationTimer: Timer? = nil
     @State private var glowAnimation = false
     @State private var shimmerOffset: CGFloat = -100
+    @State private var lastLoadedURL: String? = nil
     
     // デフォルトでアニメーションを有効にするイニシャライザ
     init(character: Character, size: CGFloat, enableFloating: Bool = true) {
@@ -625,39 +626,38 @@ struct CharacterIconView: View {
     
     private func loadIconIfNeeded() {
         guard let iconURL = character.iconURL,
-              !iconURL.isEmpty,
-              let url = URL(string: iconURL) else {
-            print("CharacterIconView: アイコンURLが空またはキャラクターが無効 - デフォルトアイコンを表示")
+              !iconURL.isEmpty else {
+            print("CharacterIconView: アイコンURLが空 - デフォルトアイコンを表示")
             iconImage = nil
             return
         }
         
-        if iconImage != nil && character.iconURL == iconURL {
+        // ✅ 既に同じURLの画像がロード済みならスキップ
+        guard iconImage == nil || lastLoadedURL != iconURL else {
+            print("CharacterIconView: 既にロード済み - \(iconURL.suffix(30))")
             return
         }
         
-        print("CharacterIconView: アイコン画像を読み込み中 - \(iconURL)")
+        print("CharacterIconView: アイコン画像を読み込み中 - \(iconURL.suffix(30))")
         isLoading = true
+        lastLoadedURL = iconURL
         
         Task {
             do {
-                let (data, _) = try await URLSession.shared.data(from: url)
+                // ✅ キャッシュマネージャーを使用
+                let image = try await ImageCacheManager.shared.loadImage(from: iconURL)
                 
                 await MainActor.run {
-                    if let loadedImage = UIImage(data: data) {
-                        self.iconImage = loadedImage
-                        print("CharacterIconView: アイコン読み込み成功")
-                    } else {
-                        print("CharacterIconView: アイコンデータの変換に失敗")
-                        self.iconImage = nil
-                    }
+                    self.iconImage = image
                     self.isLoading = false
+                    print("CharacterIconView: アイコン読み込み成功")
                 }
             } catch {
                 print("CharacterIconView: アイコン読み込みエラー - \(error.localizedDescription)")
                 await MainActor.run {
                     self.iconImage = nil
                     self.isLoading = false
+                    self.lastLoadedURL = nil
                 }
             }
         }

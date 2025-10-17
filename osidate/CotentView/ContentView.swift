@@ -592,7 +592,7 @@ struct ContentView: View {
                 )
                 .animation(.spring(response: 0.3, dampingFraction: 0.6), value: characterTalkingAnimation)
                 // 🔧 修正: キャラクターID変更時にアニメーションをリスタートさせるためのID追加
-                .id("floating_icon_\(viewModel.character.id)_\(viewModel.character.iconURL ?? "default")")
+                .id("character_icon_\(viewModel.character.id)")
             }
             .padding(.vertical, 20)
             .offset(y: iconOffset)

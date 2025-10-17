@@ -67,6 +67,13 @@ class RomanceAppViewModel: ObservableObject {
     
     private var cancellables = Set<AnyCancellable>()
     
+    @Published var isLoadingMoreMessages = false
+    @Published var hasMoreMessages = false
+    private var messagesObserver: DatabaseHandle?
+    private var isInitialLoad = true
+    private let initialMessageLimit = 4  // 初回読み込み件数
+    private let additionalMessageLimit = 50  // 追加読み込み件数
+    
     var chatDisplayMode: ChatDisplayMode {
         get {
             if let modeString = UserDefaults.standard.string(forKey: "chatDisplayMode"),
@@ -97,6 +104,10 @@ class RomanceAppViewModel: ObservableObject {
     }
 
     deinit {
+        // 🌟 メインアクター外で直接実行
+        if let handle = messagesObserver {
+            database.child("messages").removeObserver(withHandle: handle)
+        }
         if let h = authStateListener {
             Auth.auth().removeStateDidChangeListener(h)
         }
@@ -739,46 +750,38 @@ class RomanceAppViewModel: ObservableObject {
         }
     }
     
-    /// 🔧 最適化：推しを切り替える（charactersテーブル直接管理）
     func switchToCharacter(_ newCharacter: Character) {
         print("\n🔄 ==================== キャラクター切り替え開始 ====================")
         print("📤 切り替え前: \(character.name) (ID: \(character.id))")
         print("📥 切り替え後: \(newCharacter.name) (ID: \(newCharacter.id))")
         
-        // 🔧 修正：キャラクター切り替え時に現在のデートセッションを終了
         if let currentSession = currentDateSession {
             print("🏁 キャラクター切り替えのため現在のデートセッションを終了: \(currentSession.location.name)")
             endDate()
         }
         
-        // 現在の状態を保存（有効なキャラクターの場合のみ）
         if character.isValidCharacter {
             saveCurrentCharacterState()
         }
         
-        // 🔧 修正：メインスレッドで確実に更新
+        // 🌟 メッセージ読み込みフラグをリセット
+        isInitialLoad = true
+        hasMoreMessages = false
+        
+        // オブザーバーをクリーンアップ
+        cleanupMessagesObserver()
+        
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             
-            // キャラクターを切り替え
             self.character = newCharacter
-            
-            // 🔧 修正：デートセッションをクリア（念のため）
             self.currentDateSession = nil
-            
-            // 🔧 修正：明示的に更新通知を送信
             self.objectWillChange.send()
             
-            // 新しいキャラクターのデータを読み込み
+            // 新しいキャラクターのデータを読み込み（最新4件のみ）
             self.loadCharacterDataComplete()
             
             print("✅ キャラクター切り替え完了")
-            print("🎭 新キャラクター情報:")
-            print("   - 名前: \(self.character.name)")
-            print("   - ID: \(self.character.id)")
-            print("   - アイコンURL: \(self.character.iconURL ?? "なし")")
-            print("   - 親密度: \(self.character.intimacyLevel)")
-            print("   - デートセッション: \(self.currentDateSession?.location.name ?? "なし")")
             print("==================== キャラクター切り替え終了 ====================\n")
         }
     }
@@ -1661,28 +1664,118 @@ class RomanceAppViewModel: ObservableObject {
     private func loadMessages() {
         guard let conversationId = getConversationId(), hasValidCharacter else { return }
         
-        database.child("messages")
+        print("📥 初回メッセージ読み込み開始（最新\(initialMessageLimit)件）")
+        
+        // 既存のオブザーバーをクリーンアップ
+        cleanupMessagesObserver()
+        
+        // 最新N件のみをクエリ
+        messagesObserver = database.child("messages")
             .queryOrdered(byChild: "conversationId")
             .queryEqual(toValue: conversationId)
             .observe(.value, with: { [weak self] snapshot in
                 guard let self = self else { return }
                 
-                var loadedMessages: [Message] = []
+                var allMessages: [Message] = []
                 
                 if let messagesData = snapshot.value as? [String: [String: Any]] {
                     for (_, messageData) in messagesData {
                         if let message = self.messageFromFirebaseData(messageData) {
-                            loadedMessages.append(message)
+                            allMessages.append(message)
                         }
                     }
                     
-                    loadedMessages.sort { $0.timestamp < $1.timestamp }
+                    // タイムスタンプでソート
+                    allMessages.sort { $0.timestamp < $1.timestamp }
+                    
+                    // 初回は最新4件のみ、それ以降は全件表示
+                    let messagesToShow: [Message]
+                    let totalCount = allMessages.count
+                    
+                    if self.isInitialLoad {
+                        // 初回は最新4件のみ
+                        messagesToShow = Array(allMessages.suffix(self.initialMessageLimit))
+                        self.hasMoreMessages = totalCount > self.initialMessageLimit
+                        self.isInitialLoad = false
+                        
+                        print("✅ 初回読み込み完了: 表示\(messagesToShow.count)件 / 全\(totalCount)件")
+                    } else {
+                        // 過去のメッセージを読み込んだ後は全件表示
+                        messagesToShow = allMessages
+                        self.hasMoreMessages = false
+                        
+                        print("✅ 全メッセージ読み込み完了: \(messagesToShow.count)件")
+                    }
                     
                     DispatchQueue.main.async {
-                        self.messages = loadedMessages
+                        self.messages = messagesToShow
+                    }
+                } else {
+                    print("ℹ️ メッセージが存在しません")
+                    DispatchQueue.main.async {
+                        self.messages = []
+                        self.hasMoreMessages = false
                     }
                 }
             })
+    }
+    
+    func loadMoreMessages() {
+        guard !isLoadingMoreMessages, hasMoreMessages else {
+            print("⚠️ 追加読み込み条件不足: ローディング中=\(isLoadingMoreMessages), さらなるメッセージ=\(hasMoreMessages)")
+            return
+        }
+        
+        print("📥 過去のメッセージ追加読み込み開始")
+        isLoadingMoreMessages = true
+        
+        guard let conversationId = getConversationId() else {
+            isLoadingMoreMessages = false
+            return
+        }
+        
+        // 全メッセージを取得
+        database.child("messages")
+            .queryOrdered(byChild: "conversationId")
+            .queryEqual(toValue: conversationId)
+            .observeSingleEvent(of: .value, with: { [weak self] snapshot in
+                guard let self = self else { return }
+                
+                var allMessages: [Message] = []
+                
+                if let messagesData = snapshot.value as? [String: [String: Any]] {
+                    for (_, messageData) in messagesData {
+                        if let message = self.messageFromFirebaseData(messageData) {
+                            allMessages.append(message)
+                        }
+                    }
+                    
+                    allMessages.sort { $0.timestamp < $1.timestamp }
+                    
+                    print("✅ 過去のメッセージ読み込み完了: 全\(allMessages.count)件")
+                    
+                    DispatchQueue.main.async {
+                        self.messages = allMessages
+                        self.hasMoreMessages = false
+                        self.isLoadingMoreMessages = false
+                        
+                        // 🌟 以降は全件監視モードに切り替え
+                        self.isInitialLoad = false
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.isLoadingMoreMessages = false
+                    }
+                }
+            })
+    }
+    
+    private func cleanupMessagesObserver() {
+        if let handle = messagesObserver {
+            database.child("messages").removeObserver(withHandle: handle)
+            messagesObserver = nil
+            print("🗑️ メッセージオブザーバーをクリーンアップ")
+        }
     }
     
     private func messageFromFirebaseData(_ data: [String: Any]) -> Message? {

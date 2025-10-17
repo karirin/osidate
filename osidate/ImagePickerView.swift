@@ -62,6 +62,19 @@ class ImageStorageManager: ObservableObject {
     @Published var isUploading = false
     @Published var uploadProgress: Double = 0.0
     
+    func compressImage(_ image: UIImage, maxSizeKB: Int = 500) -> Data? {
+        var compression: CGFloat = 0.8
+        var imageData = image.jpegData(compressionQuality: compression)
+        
+        while let data = imageData, data.count > maxSizeKB * 1024 && compression > 0.1 {
+            compression -= 0.1
+            imageData = image.jpegData(compressionQuality: compression)
+        }
+        
+        print("📏 画像圧縮完了: \(imageData?.count ?? 0) bytes (圧縮率: \(Int(compression * 100))%)")
+        return imageData
+    }
+    
     func uploadImage(_ image: UIImage, path: String, completion: @escaping (Result<String, Error>) -> Void) {
         guard let imageData = image.jpegData(compressionQuality: 0.7) else {
             completion(.failure(NSError(domain: "ImageError", code: 0, userInfo: [NSLocalizedDescriptionKey: "画像データの変換に失敗しました"])))
