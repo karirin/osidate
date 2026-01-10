@@ -106,7 +106,7 @@ class RomanceAppViewModel: ObservableObject {
     deinit {
         // 🌟 メインアクター外で直接実行
         if let handle = messagesObserver {
-            database.child("messages").removeObserver(withHandle: handle)
+            database.child("messages_v2").removeObserver(withHandle: handle)
         }
         if let h = authStateListener {
             Auth.auth().removeStateDidChangeListener(h)
@@ -465,6 +465,12 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func updateMessageInFirebase(_ message: Message) {
+        guard let userId = self.userId,
+              let conversationId = getConversationId() else {
+            print("❌ Firebase更新条件不足")
+            return
+        }
+        
         let messageData: [String: Any] = [
             "id": message.id.uuidString,
             "text": message.text,
@@ -472,16 +478,21 @@ class RomanceAppViewModel: ObservableObject {
             "timestamp": message.timestamp.timeIntervalSince1970,
             "dateLocation": message.dateLocation as Any,
             "intimacyGained": message.intimacyGained,
-            "lastEditedAt": Date().timeIntervalSince1970 // 編集時刻を追加
+            "lastEditedAt": Date().timeIntervalSince1970
         ]
         
-        database.child("messages").child(message.id.uuidString).updateChildValues(messageData) { error, _ in
-            if let error = error {
-                print("❌ Firebase更新エラー: \(error.localizedDescription)")
-            } else {
-                print("✅ Firebase更新成功")
+        // 🔧 修正: 階層構造に基づいた更新
+        database.child("messages_v2")
+            .child(userId)
+            .child(conversationId)
+            .child(message.id.uuidString)
+            .updateChildValues(messageData) { error, _ in
+                if let error = error {
+                    print("❌ Firebase更新エラー: \(error.localizedDescription)")
+                } else {
+                    print("✅ Firebase更新成功")
+                }
             }
-        }
     }
 
     /// メッセージを削除する（特定ユーザーのみ）
@@ -508,13 +519,24 @@ class RomanceAppViewModel: ObservableObject {
     }
     
     private func deleteMessageFromFirebase(_ message: Message) {
-        database.child("messages").child(message.id.uuidString).removeValue { error, _ in
-            if let error = error {
-                print("❌ Firebase削除エラー: \(error.localizedDescription)")
-            } else {
-                print("✅ Firebase削除成功")
-            }
+        guard let userId = self.userId,
+              let conversationId = getConversationId() else {
+            print("❌ Firebase削除条件不足")
+            return
         }
+        
+        // 🔧 修正: 階層構造に基づいた削除
+        database.child("messages_v2")
+            .child(userId)
+            .child(conversationId)
+            .child(message.id.uuidString)
+            .removeValue { error, _ in
+                if let error = error {
+                    print("❌ Firebase削除エラー: \(error.localizedDescription)")
+                } else {
+                    print("✅ Firebase削除成功")
+                }
+            }
     }
     
     // チャット回数を増加させてインタースティシャル表示をチェック
@@ -615,11 +637,10 @@ class RomanceAppViewModel: ObservableObject {
             return
         }
         
+        // 🔧 修正: 階層構造を最適化
+        // messages/{userId}/{conversationId}/{messageId}
         let messageData: [String: Any] = [
             "id": message.id.uuidString,
-            "conversationId": conversationId,
-            "senderId": message.isFromUser ? userId : character.id,
-            "receiverId": message.isFromUser ? character.id : userId,
             "text": message.text,
             "isFromUser": message.isFromUser,
             "timestamp": message.timestamp.timeIntervalSince1970,
@@ -628,7 +649,12 @@ class RomanceAppViewModel: ObservableObject {
             "messageType": "text"
         ]
         
-        database.child("messages").child(message.id.uuidString).setValue(messageData)
+        // 🔧 新しい階層構造でメッセージを保存
+        database.child("messages_v2")
+            .child(userId)
+            .child(conversationId)
+            .child(message.id.uuidString)
+            .setValue(messageData)
     }
     
     // MARK: - 🌟 getConversationIdメソッド（public）
@@ -1662,17 +1688,20 @@ class RomanceAppViewModel: ObservableObject {
     // MARK: - メッセージ管理
 
     private func loadMessages() {
-        guard let conversationId = getConversationId(), hasValidCharacter else { return }
+        guard let userId = self.userId,
+              let conversationId = getConversationId(),
+              hasValidCharacter else { return }
         
         print("📥 初回メッセージ読み込み開始（最新\(initialMessageLimit)件）")
         
         // 既存のオブザーバーをクリーンアップ
         cleanupMessagesObserver()
         
-        // 最新N件のみをクエリ
-        messagesObserver = database.child("messages")
-            .queryOrdered(byChild: "conversationId")
-            .queryEqual(toValue: conversationId)
+        // 🔧 修正: 階層構造に基づいた効率的なクエリ
+        messagesObserver = database.child("messages_v2")
+            .child(userId)
+            .child(conversationId)
+            .queryOrdered(byChild: "timestamp")
             .observe(.value, with: { [weak self] snapshot in
                 guard let self = self else { return }
                 
@@ -1719,7 +1748,21 @@ class RomanceAppViewModel: ObservableObject {
                 }
             })
     }
-    
+
+    private func cleanupMessagesObserver() {
+        if let handle = messagesObserver,
+           let userId = self.userId,
+           let conversationId = getConversationId() {
+            // 🔧 修正: 階層構造に基づいたクリーンアップ
+            database.child("messages_v2")
+                .child(userId)
+                .child(conversationId)
+                .removeObserver(withHandle: handle)
+            messagesObserver = nil
+            print("🗑️ メッセージオブザーバーをクリーンアップ")
+        }
+    }
+
     func loadMoreMessages() {
         guard !isLoadingMoreMessages, hasMoreMessages else {
             print("⚠️ 追加読み込み条件不足: ローディング中=\(isLoadingMoreMessages), さらなるメッセージ=\(hasMoreMessages)")
@@ -1729,15 +1772,17 @@ class RomanceAppViewModel: ObservableObject {
         print("📥 過去のメッセージ追加読み込み開始")
         isLoadingMoreMessages = true
         
-        guard let conversationId = getConversationId() else {
+        guard let userId = self.userId,
+              let conversationId = getConversationId() else {
             isLoadingMoreMessages = false
             return
         }
         
-        // 全メッセージを取得
-        database.child("messages")
-            .queryOrdered(byChild: "conversationId")
-            .queryEqual(toValue: conversationId)
+        // 🔧 修正: 階層構造に基づいた効率的なクエリ
+        database.child("messages_v2")
+            .child(userId)
+            .child(conversationId)
+            .queryOrdered(byChild: "timestamp")
             .observeSingleEvent(of: .value, with: { [weak self] snapshot in
                 guard let self = self else { return }
                 
@@ -1768,14 +1813,6 @@ class RomanceAppViewModel: ObservableObject {
                     }
                 }
             })
-    }
-    
-    private func cleanupMessagesObserver() {
-        if let handle = messagesObserver {
-            database.child("messages").removeObserver(withHandle: handle)
-            messagesObserver = nil
-            print("🗑️ メッセージオブザーバーをクリーンアップ")
-        }
     }
     
     private func messageFromFirebaseData(_ data: [String: Any]) -> Message? {
@@ -2155,8 +2192,7 @@ class RomanceAppViewModel: ObservableObject {
     
     /// データ削除（テスト用）
     func clearAllData() {
-        guard let userId = self.userId,
-              let conversationId = getConversationId() else { return }
+        guard let userId = self.userId else { return }
         
         // ユーザーデータ削除
         database.child("users").child(userId).removeValue()
@@ -2166,17 +2202,10 @@ class RomanceAppViewModel: ObservableObject {
             database.child("characters").child(character.id).removeValue()
         }
         
-        // メッセージ削除
-        database.child("messages")
-            .queryOrdered(byChild: "conversationId")
-            .queryEqual(toValue: conversationId)
-            .observeSingleEvent(of: .value) { snapshot in
-                if let messagesData = snapshot.value as? [String: Any] {
-                    for (messageId, _) in messagesData {
-                        self.database.child("messages").child(messageId).removeValue()
-                    }
-                }
-            }
+        // 🔧 修正: 階層構造に基づいたメッセージ削除
+        database.child("messages_v2")
+            .child(userId)
+            .removeValue()
         
         // UserDefaultsからキャラクターIDを削除
         UserDefaults.standard.removeObject(forKey: "characterId")
