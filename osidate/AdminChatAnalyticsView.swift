@@ -200,53 +200,54 @@ struct AdminChatAnalyticsView: View {
         VStack(spacing: 12) {
             HStack(spacing: 20) {
                 StatisticCard(
-                    title: "総メッセージ数",
-                    value: "\(allMessages.count)",
                     icon: "message",
-                    color: .blue
+                    title: "総メッセージ数",
+                    value: allMessages.count,
+                    gradient: LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
-                
+
                 StatisticCard(
-                    title: "アクティブユーザー",
-                    value: "\(users.count)",
                     icon: "person.3",
-                    color: .green
+                    title: "アクティブユーザー",
+                    value: users.count,
+                    gradient: LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
-                
+
                 StatisticCard(
-                    title: "登録キャラクター",
-                    value: "\(characters.count)",
                     icon: "person.crop.circle",
-                    color: .purple
+                    title: "登録キャラクター",
+                    value: characters.count,
+                    gradient: LinearGradient(colors: [.purple, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
             }
-            
+
             HStack(spacing: 20) {
                 StatisticCard(
-                    title: "今日のメッセージ",
-                    value: "\(todayMessageCount)",
                     icon: "clock",
-                    color: .orange
+                    title: "今日のメッセージ",
+                    value: todayMessageCount,
+                    gradient: LinearGradient(colors: [.orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
-                
+
                 StatisticCard(
-                    title: "ユーザーメッセージ",
-                    value: "\(userMessageCount)",
                     icon: "person.crop.circle.badge.plus",
-                    color: .red
+                    title: "ユーザーメッセージ",
+                    value: userMessageCount,
+                    gradient: LinearGradient(colors: [.red, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
-                
+
                 StatisticCard(
-                    title: "AIメッセージ",
-                    value: "\(aiMessageCount)",
                     icon: "brain",
-                    color: .mint
+                    title: "AIメッセージ",
+                    value: aiMessageCount,
+                    gradient: LinearGradient(colors: [.mint, .teal], startPoint: .topLeading, endPoint: .bottomTrailing)
                 )
             }
         }
         .padding()
         .background(Color(.secondarySystemBackground))
     }
+
     
     // MARK: - 日別統計セクション
     private var dailyStatsSection: some View {
@@ -658,7 +659,7 @@ struct AdminChatAnalyticsView: View {
 }
 
 // MARK: - StatisticCard コンポーネント（新規追加）
-struct StatisticCard: View {
+struct StatisticCard1: View {
     let title: String
     let value: String
     let icon: String

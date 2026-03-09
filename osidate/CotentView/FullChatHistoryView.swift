@@ -2,7 +2,7 @@
 //  FullChatHistoryView.swift
 //  osidate
 //
-//  全メッセージ履歴を表示するビュー - アップデート版
+//  全メッセージ履歴を表示するビュー - モダンUI/UXアップデート版
 //
 
 import SwiftUI
@@ -11,38 +11,41 @@ struct FullChatHistoryView: View {
     @ObservedObject var viewModel: RomanceAppViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
-    
+
+    // State
     @State private var searchText = ""
     @State private var selectedDateFilter: DateFilter = .all
     @State private var showingSearchFilter = false
     @State private var isSearchFocused = false
-    @State private var isSearchSectionVisible = true // 検索セクションの表示状態
-    
-    // Modern Design Constants
-    private let primaryGradient = LinearGradient(
-        colors: [Color(.systemBlue), Color(.systemIndigo)],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
-    
-    private let accentGradient = LinearGradient(
-        colors: [Color(.systemPurple), Color(.systemPink)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-    
-    // フィルタリングされたメッセージ
+    @State private var isSearchSectionVisible = true
+    @State private var headerAppeared = false
+    @State private var contentAppeared = false
+
+    // Design Constants
+    private var primaryGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: "667EEA"), Color(hex: "764BA2")],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: "F093FB"), Color(hex: "F5576C")],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    // Filtered Messages
     private var filteredMessages: [Message] {
         var messages = viewModel.messages
-        
-        // 検索フィルター
+
         if !searchText.isEmpty {
-            messages = messages.filter { message in
-                message.text.localizedCaseInsensitiveContains(searchText)
-            }
+            messages = messages.filter { $0.text.localizedCaseInsensitiveContains(searchText) }
         }
-        
-        // 日付フィルター
+
         switch selectedDateFilter {
         case .today:
             messages = messages.filter { Calendar.current.isDateInToday($0.timestamp) }
@@ -55,133 +58,138 @@ struct FullChatHistoryView: View {
         case .all:
             break
         }
-        
+
         return messages
     }
-    
-    // 日付別にグループ化されたメッセージ
-    private var groupedMessages: [(String, [Message])] {
-        let grouped = Dictionary(grouping: filteredMessages) { message in
-            DateFormatter.dayFormatter.string(from: message.timestamp)
-        }
-        
-        return grouped.sorted { first, second in
-            guard let firstDate = DateFormatter.dayFormatter.date(from: first.key),
-                  let secondDate = DateFormatter.dayFormatter.date(from: second.key) else {
-                return false
-            }
-            return firstDate > secondDate
-        }
+
+    // MARK: - Grouping (Dateキーでグループ化して型推論負荷を軽減)
+    private struct DayGroup: Identifiable {
+        let day: Date
+        let messages: [Message]
+        var id: Date { day }
+        var title: String { DateFormatter.dayFormatter.string(from: day) }
     }
-    
+
+    private var groupedDays: [DayGroup] {
+        let grouped = Dictionary(grouping: filteredMessages) { message in
+            Calendar.current.startOfDay(for: message.timestamp)
+        }
+
+        return grouped
+            .map { DayGroup(day: $0.key, messages: $0.value) }
+            .sorted { $0.day > $1.day }
+    }
+
     var body: some View {
         NavigationView {
-            GeometryReader { geometry in
-                ZStack {
-                    // Enhanced Background
-                    backgroundView
-                    
-                    VStack(spacing: 0) {
-                        // Enhanced Search and Filter Section (条件付きで表示)
-                        if isSearchSectionVisible {
-                            searchAndFilterSection
-                                .transition(.move(edge: .top).combined(with: .opacity))
-                        }
-                        
-                        // Message List with improved animations
-                        messageListView
+            ZStack {
+                // Background
+                backgroundView
+
+                VStack(spacing: 0) {
+                    // Search & Filter Section
+                    if isSearchSectionVisible {
+                        searchAndFilterSection
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .top).combined(with: .opacity),
+                                removal: .move(edge: .top).combined(with: .opacity)
+                            ))
                     }
+
+                    // Message List
+                    messageListView
                 }
             }
             .navigationTitle("会話履歴")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "xmark.circle.fill")
-                            Text("閉じる")
-                        }
-                        .foregroundStyle(primaryGradient)
-                        .font(.system(.body, design: .rounded, weight: .medium))
-                    }
-                }
-                
-                // 検索・フィルターセクションの表示/非表示切り替えボタン
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                            isSearchSectionVisible.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: isSearchSectionVisible ? "slider.horizontal.3" : "magnifyingglass")
-                                .font(.system(.body, weight: .medium))
-                            
-                            Text(isSearchSectionVisible ? "非表示" : "検索")
-                                .font(.system(.body, design: .rounded, weight: .medium))
-                        }
-                        .foregroundStyle(primaryGradient)
-                        .scaleEffect(isSearchSectionVisible ? 1.05 : 1.0)
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSearchSectionVisible)
-                }
+                navToolbar
+            }
+            .onAppear {
+                startAnimations()
             }
         }
         .sheet(isPresented: $showingSearchFilter) {
-            SearchFilterView(selectedFilter: $selectedDateFilter)
-                .presentationDetents([.height(300)])
+            ModernSearchFilterSheet(selectedFilter: $selectedDateFilter)
+                .presentationDetents([.height(350)])
                 .presentationDragIndicator(.visible)
         }
     }
-    
-    // MARK: - Enhanced Background View
+
+    // MARK: - Toolbar (分離してビルダーの型推論負荷を軽減)
+    @ToolbarContentBuilder
+    private var navToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button {
+                hapticFeedback(.light)
+                dismiss()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                    Text("閉じる")
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                }
+                .foregroundStyle(primaryGradient)
+            }
+        }
+
+        ToolbarItem(placement: .navigationBarTrailing) {
+            Button {
+                hapticFeedback(.light)
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                    isSearchSectionVisible.toggle()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isSearchSectionVisible
+                          ? "line.3.horizontal.decrease.circle.fill"
+                          : "magnifyingglass.circle.fill")
+                        .font(.title3)
+                    Text(isSearchSectionVisible ? "非表示" : "検索")
+                        .font(.system(.body, design: .rounded, weight: .medium))
+                }
+                .foregroundStyle(primaryGradient)
+            }
+        }
+    }
+
+    // MARK: - Background View
     private var backgroundView: some View {
         ZStack {
-            // Base gradient
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground),
-                    Color(.systemBlue).opacity(0.03),
-                    Color(.systemPurple).opacity(0.05)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            
-            // Floating orbs for visual interest
+            // Base
+            (colorScheme == .dark ? Color(hex: "0D0D0D") : Color(hex: "F8F9FA"))
+                .ignoresSafeArea()
+
+            // Gradient orbs
             Circle()
-                .fill(Color(.systemBlue).opacity(0.1))
-                .frame(width: 200, height: 200)
+                .fill(Color(hex: "667EEA").opacity(0.08))
+                .frame(width: 300, height: 300)
+                .blur(radius: 80)
                 .offset(x: -100, y: -200)
-                .blur(radius: 60)
-            
+
             Circle()
-                .fill(Color(.systemPurple).opacity(0.08))
-                .frame(width: 150, height: 150)
+                .fill(Color(hex: "F093FB").opacity(0.06))
+                .frame(width: 250, height: 250)
+                .blur(radius: 70)
                 .offset(x: 100, y: 300)
-                .blur(radius: 40)
         }
-        .ignoresSafeArea()
     }
-    
-    // MARK: - Enhanced Search and Filter Section
+
+    // MARK: - Search and Filter Section
     private var searchAndFilterSection: some View {
         VStack(spacing: 20) {
-            // Modern Search Bar
-            HStack(spacing: 16) {
+            // Search Bar
+            HStack(spacing: 14) {
                 Image(systemName: "magnifyingglass")
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(primaryGradient)
-                    .font(.system(.title3, weight: .medium))
-                    .scaleEffect(isSearchFocused ? 1.1 : 1.0)
+                    .scaleEffect(isSearchFocused ? 1.15 : 1.0)
                     .animation(.spring(response: 0.3), value: isSearchFocused)
-                
+
                 TextField("メッセージを検索...", text: $searchText)
-                    .textFieldStyle(PlainTextFieldStyle())
                     .font(.system(.body, design: .rounded))
+                    .textFieldStyle(PlainTextFieldStyle())
                     .onTapGesture {
                         withAnimation(.spring(response: 0.3)) {
                             isSearchFocused = true
@@ -192,16 +200,17 @@ struct FullChatHistoryView: View {
                             isSearchFocused = false
                         }
                     }
-                
+
                 if !searchText.isEmpty {
                     Button {
+                        hapticFeedback(.light)
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             searchText = ""
                         }
                     } label: {
                         Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(.secondary)
                             .font(.title3)
+                            .foregroundColor(.secondary)
                     }
                     .transition(.scale.combined(with: .opacity))
                 }
@@ -209,260 +218,256 @@ struct FullChatHistoryView: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
             .background(
-                Group {
-                    if #available(iOS 17.0, *) {
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(.ultraThickMaterial)
-                            .stroke(primaryGradient, lineWidth: 2)
-                    } else {
-                        // iOS16では material を fill/stroke に直接使えない
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.clear)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                            )
-                    }
-                }
-                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(colorScheme == .dark ? Color(hex: "1C1C1E") : Color.white)
+                    .shadow(
+                        color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08),
+                        radius: isSearchFocused ? 16 : 10,
+                        x: 0,
+                        y: isSearchFocused ? 8 : 4
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(
+                        isSearchFocused ? primaryGradient : LinearGradient(colors: [Color.clear], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 2
+                    )
             )
             .scaleEffect(isSearchFocused ? 1.02 : 1.0)
             .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isSearchFocused)
-            .padding(.horizontal)
-            
-            // Enhanced Date Filter Pills
+            .padding(.horizontal, 20)
+
+            // Date Filter Pills
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(DateFilter.allCases, id: \.self) { filter in
                         ModernFilterPill(
                             filter: filter,
                             isSelected: selectedDateFilter == filter,
-                            action: {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-                                    selectedDateFilter = filter
-                                }
+                            primaryGradient: primaryGradient
+                        ) {
+                            hapticFeedback(.light)
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                selectedDateFilter = filter
                             }
-                        )
-                        .padding(.vertical, 10)
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
+                .padding(.vertical, 4)
             }
-            
-            // Enhanced Statistics with animations
+
+            // Statistics
             if !filteredMessages.isEmpty {
-                HStack(spacing: 24) {
-                    EnhancedStatisticItem(
-                        icon: "bubble.left.and.bubble.right.fill",
-                        title: "総メッセージ",
-                        value: filteredMessages.count,
-                        color: .blue,
-                        gradient: primaryGradient
-                    )
-                    
-                    EnhancedStatisticItem(
-                        icon: "person.crop.circle.fill",
-                        title: "あなた",
-                        value: filteredMessages.filter { $0.isFromUser }.count,
-                        color: .green,
-                        gradient: LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    )
-                    
-                    EnhancedStatisticItem(
-                        icon: "heart.circle.fill",
-                        title: "パートナー",
-                        value: filteredMessages.filter { !$0.isFromUser }.count,
-                        color: .pink,
-                        gradient: accentGradient
-                    )
-                }
-                .padding(.horizontal, 20)
-                .transition(.scale.combined(with: .opacity))
+                statisticsView
+                    .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.vertical, 24)
+        .padding(.vertical, 20)
         .background(
-            .ultraThinMaterial,
-            in: RoundedRectangle(cornerRadius: 0)
+            Rectangle()
+                .fill(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .top)
         )
     }
-    
-    // MARK: - Enhanced Message List View
+
+    // MARK: - Statistics View
+    private var statisticsView: some View {
+        HStack(spacing: 0) {
+            StatisticCard(
+                icon: "bubble.left.and.bubble.right.fill",
+                title: "総数",
+                value: filteredMessages.count,
+                gradient: primaryGradient
+            )
+
+            Divider()
+                .frame(height: 40)
+                .padding(.horizontal, 8)
+
+            StatisticCard(
+                icon: "person.fill",
+                title: "あなた",
+                value: filteredMessages.filter { $0.isFromUser }.count,
+                gradient: LinearGradient(
+                    colors: [Color(hex: "11998E"), Color(hex: "38EF7D")],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+
+            Divider()
+                .frame(height: 40)
+                .padding(.horizontal, 8)
+
+            StatisticCard(
+                icon: "heart.fill",
+                title: "パートナー",
+                value: filteredMessages.filter { !$0.isFromUser }.count,
+                gradient: accentGradient
+            )
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Message List View
     private var messageListView: some View {
         ScrollView {
-            LazyVStack(spacing: 24) {
+            LazyVStack(spacing: 28) {
                 if filteredMessages.isEmpty {
-                    enhancedEmptyStateView
+                    emptyStateView
                         .transition(.scale.combined(with: .opacity))
                 } else {
-                    ForEach(groupedMessages, id: \.0) { dateString, messages in
-                       
-                        
+                    ForEach(Array(groupedDays.enumerated()), id: \.element.id) { index, group in
                         VStack(spacing: 16) {
-                            // Enhanced Date Header
-                            HStack {
-                                HStack(spacing: 8) {
-                                    Image(systemName: "calendar.circle.fill")
-                                        .foregroundStyle(primaryGradient)
-                                        .font(.title3)
-                                    
-                                    Text(dateString)
-                                        .font(.system(.headline, design: .rounded, weight: .bold))
-                                        .foregroundColor(.primary)
-                                }
-                                
-                                Spacer()
-                                
-                                Text("\(messages.count)")
-                                    .font(.system(.caption, design: .rounded, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule()
-                                            .fill(primaryGradient)
-                                            .shadow(color: Color.blue.opacity(0.3), radius: 4, x: 0, y: 2)
-                                    )
-                            }
-                            .padding(.horizontal, 20)
-                            
-                            // Enhanced Messages for this date
-                            let sorted = messages.sorted { $0.timestamp < $1.timestamp }
-                            ForEach(sorted, id: \.id) { message in
-                                EnhancedHistoryMessageBubble(message: message)
+                            // Date Header
+                            dateHeaderView(dateString: group.title, messageCount: group.messages.count)
+
+                            // Messages
+                            ForEach(group.messages.sorted { $0.timestamp < $1.timestamp }) { message in
+                                HistoryMessageBubble(message: message)
                                     .padding(.horizontal, 20)
                             }
                         }
-                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: groupedMessages.map(\.0))
+                        .opacity(contentAppeared ? 1 : 0)
+                        .offset(y: contentAppeared ? 0 : 30)
+                        .animation(
+                            .spring(response: 0.6, dampingFraction: 0.8)
+                                .delay(Double(index) * 0.05),
+                            value: contentAppeared
+                        )
                     }
                 }
             }
-            .padding(.vertical, 20)
+            .padding(.vertical, 24)
         }
     }
-    
-    // MARK: - Enhanced Empty State View
-    private var enhancedEmptyStateView: some View {
-        VStack(spacing: 24) {
+
+    // MARK: - Date Header View
+    private func dateHeaderView(dateString: String, messageCount: Int) -> some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "calendar.circle.fill")
+                    .font(.title3)
+                    .foregroundStyle(primaryGradient)
+
+                Text(dateString)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .foregroundColor(.primary)
+            }
+
+            Spacer()
+
+            Text("\(messageCount)")
+                .font(.system(.caption, design: .rounded, weight: .bold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(primaryGradient)
+                        .shadow(color: Color(hex: "667EEA").opacity(0.3), radius: 6, x: 0, y: 3)
+                )
+        }
+        .padding(.horizontal, 20)
+    }
+
+    // MARK: - Empty State View
+    private var emptyStateView: some View {
+        VStack(spacing: 28) {
             ZStack {
                 Circle()
                     .fill(primaryGradient.opacity(0.1))
                     .frame(width: 120, height: 120)
-                
+
                 Image(systemName: "bubble.left.and.bubble.right")
-                    .font(.system(size: 40, weight: .light))
+                    .font(.system(size: 44, weight: .light))
                     .foregroundStyle(primaryGradient)
             }
-            
-            VStack(spacing: 12) {
+
+            VStack(spacing: 14) {
                 Text("メッセージが見つかりません")
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundColor(.primary)
-                
-                Text(searchText.isEmpty ? "フィルター条件を変更してみてください" : "「\(searchText)」に一致するメッセージはありません")
+
+                Text(searchText.isEmpty
+                     ? "フィルター条件を変更してみてください"
+                     : "「\(searchText)」に一致するメッセージはありません")
                     .font(.system(.subheadline, design: .rounded))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, 40)
             }
-            
+
             Button {
+                hapticFeedback(.light)
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                     searchText = ""
                     selectedDateFilter = .all
                 }
             } label: {
                 Text("フィルターをリセット")
-                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .font(.system(.body, design: .rounded, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, 28)
+                    .padding(.vertical, 14)
                     .background(
                         Capsule()
                             .fill(primaryGradient)
-                            .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                            .shadow(color: Color(hex: "667EEA").opacity(0.35), radius: 12, x: 0, y: 6)
                     )
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
     }
-}
 
-// MARK: - Enhanced Supporting Views
-
-struct ModernFilterPill: View {
-    let filter: DateFilter
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: filter.icon)
-                    .font(.caption)
-                
-                Text(filter.displayName)
-                    .font(.system(.subheadline, design: .rounded, weight: .medium))
-            }
-            .foregroundColor(isSelected ? .white : .primary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                Capsule()
-                    .fill(isSelected ?
-                          LinearGradient(colors: [.blue, .indigo], startPoint: .leading, endPoint: .trailing) :
-                          LinearGradient(colors: [.clear], startPoint: .leading, endPoint: .trailing)
-                    )
-                    .overlay(
-                        Capsule()
-                            .stroke(.ultraThickMaterial, lineWidth: isSelected ? 0 : 1)
-                    )
-                    .shadow(color: isSelected ? Color.blue.opacity(0.3) : .clear, radius: 8, x: 0, y: 4)
-            )
-            .scaleEffect(isSelected ? 1.05 : 1.0)
+    // MARK: - Actions
+    private func startAnimations() {
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+            headerAppeared = true
         }
-        .buttonStyle(PlainButtonStyle())
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isSelected)
+
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2)) {
+            contentAppeared = true
+        }
+    }
+
+    private func hapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 }
 
-struct EnhancedStatisticItem: View {
+// MARK: - Statistic Card
+struct StatisticCard: View {
     let icon: String
     let title: String
     let value: Int
-    let color: Color
     let gradient: LinearGradient
-    
+
     @State private var animatedValue = 0
-    
+
     var body: some View {
-        VStack(spacing: 8) {
-            HStack{
-                ZStack {
-                    Circle()
-                        .fill(gradient.opacity(0.1))
-                        .frame(width: 30, height: 30)
-                    
-                    Image(systemName: icon)
-                        .font(.title2)
-                        .foregroundStyle(gradient)
-                }
-                
+        VStack(spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(gradient)
+
                 Text("\(animatedValue)")
-                    .font(.system(.title, design: .rounded, weight: .bold))
+                    .font(.system(.title2, design: .rounded, weight: .bold))
                     .foregroundColor(.primary)
                     .contentTransition(.numericText())
             }
+
             Text(title)
-                .font(.system(.caption, design: .rounded, weight: .medium))
+                .font(.system(.caption2, design: .rounded, weight: .medium))
                 .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .onAppear {
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.2)) {
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.8).delay(0.3)) {
                 animatedValue = value
             }
         }
@@ -474,94 +479,170 @@ struct EnhancedStatisticItem: View {
     }
 }
 
-struct EnhancedHistoryMessageBubble: View {
-    let message: Message
+// MARK: - Modern Filter Pill
+struct ModernFilterPill: View {
+    let filter: DateFilter
+    let isSelected: Bool
+    let primaryGradient: LinearGradient
+    let action: () -> Void
+
     @Environment(\.colorScheme) private var colorScheme
-    
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: 12) {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: filter.icon)
+                    .font(.system(size: 12, weight: .medium))
+
+                Text(filter.displayName)
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            }
+            .foregroundColor(isSelected ? .white : .primary)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                Capsule()
+                    .fill(isSelected
+                          ? AnyShapeStyle(primaryGradient)
+                          : AnyShapeStyle(colorScheme == .dark ? Color(hex: "2C2C2E") : Color.white))
+                    .shadow(
+                        color: isSelected
+                            ? Color(hex: "667EEA").opacity(0.35)
+                            : Color.black.opacity(colorScheme == .dark ? 0.2 : 0.06),
+                        radius: isSelected ? 10 : 6,
+                        x: 0,
+                        y: isSelected ? 5 : 3
+                    )
+            )
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isSelected)
+    }
+}
+
+// MARK: - History Message Bubble
+struct HistoryMessageBubble: View {
+    let message: Message
+
+    @State private var appeared = false
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var userGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: "667EEA"), Color(hex: "764BA2")],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        HStack(alignment: .bottom, spacing: 10) {
             if message.isFromUser {
                 Spacer(minLength: 60)
-                userMessageView
+                userBubble
             } else {
-                aiMessageView
+                aiBubble
                 Spacer(minLength: 60)
             }
         }
+        .opacity(appeared ? 1 : 0)
+        .offset(x: appeared ? 0 : (message.isFromUser ? 20 : -20))
+        .onAppear {
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.05)) {
+                appeared = true
+            }
+        }
     }
-    
-    private var userMessageView: some View {
-        VStack(alignment: .trailing, spacing: 6) {
+
+    private var userBubble: some View {
+        VStack(alignment: .trailing, spacing: 8) {
             Text(message.text)
-                .font(.system(.body, design: .default))
+                .font(.system(.body, design: .rounded))
+                .foregroundColor(.white)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.blue, Color.indigo],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .shadow(color: Color.blue.opacity(0.3), radius: 8, x: 0, y: 4)
+                        .fill(userGradient)
+                        .shadow(color: Color(hex: "667EEA").opacity(0.3), radius: 10, x: 0, y: 5)
                 )
-                .foregroundColor(.white)
-            
+
             HStack(spacing: 8) {
                 if let location = message.dateLocation {
-                    Label {
-                        Text(location)
-                            .font(.system(.caption2, design: .rounded))
-                    } icon: {
-                        Image(systemName: "location.fill")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.secondary)
+                    locationLabel(location)
                 }
-                
-                Text(timeString(from: message.timestamp))
-                    .font(.system(.caption2, design: .rounded))
-                    .foregroundColor(.secondary)
+                timeLabel(message.timestamp)
             }
         }
         .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .trailing)
     }
-    
-    private var aiMessageView: some View {
-        VStack(alignment: .leading, spacing: 6) {
+
+    private var aiBubble: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text(message.text)
-                .font(.system(.body, design: .default))
+                .font(.system(.body, design: .rounded))
+                .foregroundColor(.primary)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 14)
                 .background(
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(.ultraThickMaterial)
-                        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
+                        .fill(colorScheme == .dark ? Color(hex: "2C2C2E") : Color.white)
+                        .shadow(
+                            color: Color.black.opacity(colorScheme == .dark ? 0.3 : 0.08),
+                            radius: 10,
+                            x: 0,
+                            y: 5
+                        )
                 )
-                .foregroundColor(.primary)
-            
+
             HStack(spacing: 8) {
-                Text(timeString(from: message.timestamp))
-                    .font(.system(.caption2, design: .rounded))
-                    .foregroundColor(.secondary)
-                
+                timeLabel(message.timestamp)
+
                 if let location = message.dateLocation {
-                    Label {
-                        Text(location)
-                            .font(.system(.caption2, design: .rounded))
-                    } icon: {
-                        Image(systemName: "location.fill")
-                            .font(.caption2)
-                    }
-                    .foregroundColor(.secondary)
+                    locationLabel(location)
+                }
+
+                if message.intimacyGained > 0 {
+                    intimacyLabel(message.intimacyGained)
                 }
             }
         }
         .frame(maxWidth: UIScreen.main.bounds.width * 0.75, alignment: .leading)
     }
-    
+
+    private func locationLabel(_ location: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "location.fill")
+                .font(.system(size: 9))
+            Text(location)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+        }
+        .foregroundColor(.secondary)
+    }
+
+    private func timeLabel(_ date: Date) -> some View {
+        Text(timeString(from: date))
+            .font(.system(size: 11, weight: .medium, design: .rounded))
+            .foregroundColor(.secondary)
+    }
+
+    private func intimacyLabel(_ value: Int) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 9))
+            Text("+\(value)")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+        }
+        .foregroundColor(Color(hex: "F093FB"))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(Color(hex: "F093FB").opacity(0.12))
+        )
+    }
+
     private func timeString(from date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
@@ -570,86 +651,136 @@ struct EnhancedHistoryMessageBubble: View {
     }
 }
 
-struct SearchFilterView: View {
+// MARK: - Modern Search Filter Sheet
+struct ModernSearchFilterSheet: View {
     @Binding var selectedFilter: DateFilter
     @Environment(\.dismiss) private var dismiss
-    
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var primaryGradient: LinearGradient {
+        LinearGradient(
+            colors: [Color(hex: "667EEA"), Color(hex: "764BA2")],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                // Header
-                VStack(spacing: 8) {
+        VStack(spacing: 28) {
+            // Header
+            VStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(primaryGradient.opacity(0.15))
+                        .frame(width: 70, height: 70)
+
                     Image(systemName: "calendar.badge.clock")
-                        .font(.largeTitle)
-                        .foregroundStyle(
-                            LinearGradient(colors: [.blue, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
-                    
-                    Text("期間を選択")
-                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .font(.system(size: 30, weight: .medium))
+                        .foregroundStyle(primaryGradient)
                 }
-                .padding(.top, 20)
-                
-                // Filter Options
-                LazyVStack(spacing: 12) {
-                    ForEach(DateFilter.allCases, id: \.self) { filter in
-                        HStack(spacing: 16) {
-                            Image(systemName: filter.icon)
-                                .font(.title3)
-                                .foregroundStyle(selectedFilter == filter ?
-                                    LinearGradient(colors: [.blue, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing) :
-                                    LinearGradient(colors: [.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                )
-                                .frame(width: 24)
-                            
-                            Text(filter.displayName)
-                                .font(.system(.body, design: .rounded, weight: .medium))
-                                .foregroundColor(.primary)
-                            
-                            Spacer()
-                            
-                            if selectedFilter == filter {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(
-                                        LinearGradient(colors: [.blue, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                    )
-                                    .font(.title3)
-                            }
+
+                Text("期間を選択")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundColor(.primary)
+            }
+            .padding(.top, 24)
+
+            // Filter Options
+            VStack(spacing: 12) {
+                ForEach(DateFilter.allCases, id: \.self) { filter in
+                    FilterOptionRow(
+                        filter: filter,
+                        isSelected: selectedFilter == filter,
+                        primaryGradient: primaryGradient
+                    ) {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                            selectedFilter = filter
                         }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 16)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                selectedFilter = filter
-                            }
-                            
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                dismiss()
-                            }
+
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                            dismiss()
                         }
-                        .scaleEffect(selectedFilter == filter ? 1.02 : 1.0)
-                        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedFilter)
                     }
                 }
-                .padding(.horizontal, 20)
-                
-                Spacer()
             }
-            .navigationTitle("")
-            .navigationBarHidden(true)
+            .padding(.horizontal, 24)
+
+            Spacer()
         }
+        .background(colorScheme == .dark ? Color(hex: "1C1C1E") : Color.white)
     }
 }
 
-// MARK: - Enhanced Supporting Types
+// MARK: - Filter Option Row
+struct FilterOptionRow: View {
+    let filter: DateFilter
+    let isSelected: Bool
+    let primaryGradient: LinearGradient
+    let action: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    
+    private var iconStyle: AnyShapeStyle {
+        isSelected ? AnyShapeStyle(primaryGradient) : AnyShapeStyle(Color.secondary)
+    }
+
+    private var rowFill: AnyShapeStyle {
+        if isSelected {
+            return AnyShapeStyle(colorScheme == .dark ? Color(hex: "2C2C2E") : Color(hex: "F0F4FF"))
+        } else {
+            return AnyShapeStyle(Color.clear)
+        }
+    }
+
+    private var rowStroke: AnyShapeStyle {
+        isSelected ? AnyShapeStyle(primaryGradient.opacity(0.3)) : AnyShapeStyle(Color.clear)
+    }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 16) {
+                Image(systemName: filter.icon)
+                    .font(.title3)
+                    .foregroundStyle(iconStyle)
+                    .frame(width: 28)
+
+                Text(filter.displayName)
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .foregroundColor(.primary)
+
+                Spacer()
+
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(primaryGradient)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(rowFill)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(rowStroke, lineWidth: 1)
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+        .scaleEffect(isSelected ? 1.02 : 1.0)
+        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: isSelected)
+    }
+}
+
+// MARK: - DateFilter Enum
 enum DateFilter: CaseIterable {
     case all
     case today
     case thisWeek
     case thisMonth
-    
+
     var displayName: String {
         switch self {
         case .all: return "すべて"
@@ -658,7 +789,7 @@ enum DateFilter: CaseIterable {
         case .thisMonth: return "今月"
         }
     }
-    
+
     var icon: String {
         switch self {
         case .all: return "infinity.circle.fill"
@@ -670,7 +801,6 @@ enum DateFilter: CaseIterable {
 }
 
 // MARK: - DateFormatter Extension
-
 extension DateFormatter {
     static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()

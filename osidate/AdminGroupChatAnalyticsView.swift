@@ -138,21 +138,21 @@ struct AdminGroupChatAnalyticsView: View {
     private var groupStatisticsView: some View {
         VStack(spacing: 12) {
             HStack(spacing: 20) {
-                StatisticCard(
+                StatisticCard1(
                     title: "総グループ数",
                     value: "\(groupChats.count)",
                     icon: "person.3.sequence.fill",
                     color: .blue
                 )
                 
-                StatisticCard(
+                StatisticCard1(
                     title: "アクティブグループ",
                     value: "\(activeGroupsCount)",
                     icon: "message.fill",
                     color: .green
                 )
                 
-                StatisticCard(
+                StatisticCard1(
                     title: "総メンバー数",
                     value: "\(totalMembersCount)",
                     icon: "person.2.fill",
@@ -161,21 +161,21 @@ struct AdminGroupChatAnalyticsView: View {
             }
             
             HStack(spacing: 20) {
-                StatisticCard(
+                StatisticCard1(
                     title: "今日のメッセージ",
                     value: "\(todayMessagesCount)",
                     icon: "clock.fill",
                     color: .orange
                 )
                 
-                StatisticCard(
+                StatisticCard1(
                     title: "平均メンバー数",
                     value: String(format: "%.1f", averageMembersPerGroup),
                     icon: "chart.bar.fill",
                     color: .red
                 )
                 
-                StatisticCard(
+                StatisticCard1(
                     title: "非アクティブ",
                     value: "\(inactiveGroupsCount)",
                     icon: "pause.fill",
