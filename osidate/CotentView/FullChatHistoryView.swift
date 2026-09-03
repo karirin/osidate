@@ -106,6 +106,7 @@ struct FullChatHistoryView: View {
                 navToolbar
             }
             .onAppear {
+                viewModel.loadMoreMessages()
                 startAnimations()
             }
         }

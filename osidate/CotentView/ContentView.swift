@@ -782,7 +782,6 @@ struct ContentView: View {
     // MARK: - 🌟 拡張された親密度ステータス表示
     private var modernIntimacyStatusView: some View {
         HStack(spacing: 12) {
-            // 親密度レベルアイコン
             ZStack {
                 Circle()
                     .fill(viewModel.character.intimacyStage.color.opacity(0.2))
@@ -806,7 +805,6 @@ struct ContentView: View {
                         .foregroundColor(.primary)
                 }
                 
-                // プログレスバー（コンパクト版）
                 if viewModel.character.intimacyToNextLevel > 0 {
                     HStack(spacing: 4) {
                         ProgressView(value: viewModel.character.intimacyProgress)
@@ -1025,13 +1023,16 @@ struct ContentView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    if viewModel.messages.count > 4 { // 5 -> 4 に変更
+                    if viewModel.hasMoreMessages || viewModel.messages.count > 4 { // 5 -> 4 に変更
                         VStack(spacing: 12) {
-                            Text("\(viewModel.messages.count - 4)件の過去のメッセージがあります") // 5 -> 4 に変更
+                            Text(viewModel.hasMoreMessages ? "過去のメッセージがあります" : "\(max(viewModel.messages.count - 4, 0))件の過去のメッセージがあります") // 5 -> 4 に変更
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                             
                             Button(action: {
+                                if viewModel.hasMoreMessages {
+                                    viewModel.loadMoreMessages()
+                                }
                                 showingFullChatHistory = true
                             }) {
                                 HStack(spacing: 8) {

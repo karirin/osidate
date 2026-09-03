@@ -24,6 +24,8 @@ class Character: ObservableObject, Codable, Identifiable {
     @Published var unlockedInfiniteMode: Bool = false
     @Published var userNickname: String = ""
     @Published var useNickname: Bool = false
+    @Published var favoriteTopics: [String] = []
+    @Published var sharedMemories: [String] = []
     
     // ✅ 修正：完全に空の初期化（自動作成を防ぐ）
     init() {
@@ -42,6 +44,8 @@ class Character: ObservableObject, Codable, Identifiable {
         self.unlockedInfiniteMode = false
         self.userNickname = ""
         self.useNickname = false
+        self.favoriteTopics = []
+        self.sharedMemories = []
     }
     
     // ✅ 明示的な作成用イニシャライザー（ユーザーが意図的に作成する場合のみ）
@@ -61,6 +65,8 @@ class Character: ObservableObject, Codable, Identifiable {
         self.unlockedInfiniteMode = false
         self.userNickname = ""
         self.useNickname = false
+        self.favoriteTopics = []
+        self.sharedMemories = []
     }
     
     // ✅ キャラクターが有効かどうかをチェック
@@ -99,7 +105,33 @@ class Character: ObservableObject, Codable, Identifiable {
         }
         return "あなた"
     }
-    
+
+    var prefersNoEmoji: Bool {
+        let combinedSettings = "\(personality)\n\(speakingStyle)"
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
+
+        let noEmojiKeywords = [
+            "絵文字使うな",
+            "絵文字を使うな",
+            "絵文字なし",
+            "絵文字禁止",
+            "絵文字不要",
+            "絵文字は使わない",
+            "絵文字を使わない",
+            "絵文字入れない",
+            "絵文字を入れない",
+            "emojiなし",
+            "noemoji",
+            "donotuseemoji",
+            "don'tuseemoji",
+            "withoutemoji"
+        ]
+
+        return noEmojiKeywords.contains { combinedSettings.contains($0) }
+    }
+
     // 🔧 修正：無限の愛ステージを削除
     var intimacyStage: IntimacyStage {
         switch intimacyLevel {
@@ -152,7 +184,7 @@ class Character: ObservableObject, Codable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, name, personality, speakingStyle, intimacyLevel, birthday, anniversaryDate
         case iconURL, iconName, backgroundName, backgroundURL, totalDateCount, unlockedInfiniteMode
-        case userNickname, useNickname
+        case userNickname, useNickname, favoriteTopics, sharedMemories
     }
     
     required init(from decoder: Decoder) throws {
@@ -172,6 +204,8 @@ class Character: ObservableObject, Codable, Identifiable {
         unlockedInfiniteMode = try container.decodeIfPresent(Bool.self, forKey: .unlockedInfiniteMode) ?? false
         userNickname = try container.decodeIfPresent(String.self, forKey: .userNickname) ?? ""
         useNickname = try container.decodeIfPresent(Bool.self, forKey: .useNickname) ?? false
+        favoriteTopics = try container.decodeIfPresent([String].self, forKey: .favoriteTopics) ?? []
+        sharedMemories = try container.decodeIfPresent([String].self, forKey: .sharedMemories) ?? []
     }
     
     func encode(to encoder: Encoder) throws {
@@ -191,6 +225,28 @@ class Character: ObservableObject, Codable, Identifiable {
         try container.encode(unlockedInfiniteMode, forKey: .unlockedInfiniteMode)
         try container.encode(userNickname, forKey: .userNickname)
         try container.encode(useNickname, forKey: .useNickname)
+        try container.encode(favoriteTopics, forKey: .favoriteTopics)
+        try container.encode(sharedMemories, forKey: .sharedMemories)
+    }
+}
+
+extension String {
+    func removingEmojiCharacters() -> String {
+        let filteredScalars = unicodeScalars.filter { scalar in
+            switch scalar.value {
+            case 0x1F000...0x1FAFF,
+                 0x2600...0x27BF,
+                 0xFE00...0xFE0F,
+                 0x200D:
+                return false
+            default:
+                return true
+            }
+        }
+
+        return String(String.UnicodeScalarView(filteredScalars))
+            .replacingOccurrences(of: "  ", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
@@ -482,4 +538,12 @@ extension DateLocation {
         
         return messages.randomElement()
     }
+}
+
+extension DateFormatter {
+    static let eventDayKey: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
 }

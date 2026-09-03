@@ -28,7 +28,7 @@ struct LoginBonusView: View {
     private var displayBonus: LoginBonus? {
         if let availableBonus = loginBonusManager.availableBonus {
             return availableBonus
-        } else if let lastBonus = loginBonusManager.loginHistory.first {
+        } else if let lastBonus = loginBonusManager.loginHistory.last {
             return lastBonus
         }
         return nil

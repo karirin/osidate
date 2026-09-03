@@ -36,10 +36,15 @@ class CharacterRegistry: ObservableObject {
     
     // Combine用
     private var cancellables = Set<AnyCancellable>()
+    private var authStateListener: AuthStateDidChangeListenerHandle?
+    private var characterListHandle: DatabaseHandle?
+    private var activeCharacterHandle: DatabaseHandle?
+    private var characterDetailHandles: [String: DatabaseHandle] = [:]
+    private var observedUserId: String?
     
     init() {
-        loadCharacters()
         setupSubscriptionObserver()
+        setupAuthStateListener()
     }
     
     // MARK: - 🌟 サブスクリプション状態監視
@@ -143,21 +148,8 @@ class CharacterRegistry: ObservableObject {
     }
     
     func updateCharacter(_ character: Character) {
-        guard let userId = userId else { return }
-        
-        let characterData: [String: Any] = [
-            "id": character.id,
-            "name": character.name,
-            "personality": character.personality,
-            "speakingStyle": character.speakingStyle,
-            "iconName": character.iconName,
-            "iconURL": character.iconURL as Any,
-            "backgroundName": character.backgroundName,
-            "backgroundURL": character.backgroundURL as Any,
-            "updatedAt": Date().timeIntervalSince1970
-        ]
-        
-        database.child("characters").child(character.id).updateChildValues(characterData)
+        guard userId != nil else { return }
+        database.child("characters").child(character.id).updateChildValues(serializeCharacter(character))
     }
     
     /// キャラクターを削除
@@ -182,6 +174,7 @@ class CharacterRegistry: ObservableObject {
     
     /// アクティブキャラクターを設定
     func setActiveCharacter(_ characterId: String) {
+        guard characters.contains(where: { $0.id == characterId }) else { return }
         activeCharacterId = characterId
         saveActiveCharacterId()
     }
@@ -193,85 +186,141 @@ class CharacterRegistry: ObservableObject {
     
     // MARK: - Firebase Operations (既存のメソッドはそのまま維持)
     
-    private func loadCharacters() {
-        guard let userId = userId else { return }
-        
-        isLoading = true
-        
-        database.child("users").child(userId).child("characters").observe(.value) { [weak self] snapshot in
-            guard let self = self else { return }
-            
-            var characterIds: [String] = []
-            
-            if let charactersData = snapshot.value as? [String: Bool] {
-                characterIds = Array(charactersData.keys)
+    private func setupAuthStateListener() {
+        authStateListener = Auth.auth().addStateDidChangeListener { [weak self] _, user in
+            guard let self else { return }
+            Task { @MainActor in
+                self.handleAuthStateChanged(user: user)
             }
-            
-            // 各キャラクターの詳細データを読み込み
-            self.loadCharacterDetails(characterIds: characterIds)
         }
     }
     
-    private func loadCharacterDetails(characterIds: [String]) {
-        let group = DispatchGroup()
-        var loadedCharacters: [Character] = []
+    private func handleAuthStateChanged(user: User?) {
+        removeAllObservers()
         
-        for characterId in characterIds {
-            group.enter()
-            database.child("characters").child(characterId).observeSingleEvent(of: .value) { snapshot in
-                if let characterData = snapshot.value as? [String: Any],
-                   let character = self.characterFromFirebaseData(characterData, id: characterId) {
-                    loadedCharacters.append(character)
+        guard let user else {
+            characters = []
+            activeCharacterId = ""
+            isLoading = false
+            return
+        }
+        
+        startCharacterObservers(for: user.uid)
+    }
+    
+    private func startCharacterObservers(for userId: String) {
+        observedUserId = userId
+        isLoading = true
+        
+        characterListHandle = database.child("users").child(userId).child("characters").observe(.value) { [weak self] snapshot in
+            guard let self else { return }
+            
+            let rawIds = (snapshot.value as? [String: Bool])?
+                .filter { $0.value }
+                .map(\.key) ?? []
+            let characterIds = Array(Set(rawIds)).sorted()
+            
+            self.syncCharacterDetailObservers(characterIds: characterIds)
+            self.startActiveCharacterObserver(for: userId)
+            
+            if characterIds.isEmpty {
+                DispatchQueue.main.async {
+                    self.characters = []
+                    self.activeCharacterId = ""
+                    self.isLoading = false
                 }
-                group.leave()
+            }
+        }
+    }
+    
+    private func startActiveCharacterObserver(for userId: String) {
+        guard activeCharacterHandle == nil else { return }
+        
+        activeCharacterHandle = database.child("users").child(userId).child("activeCharacterId").observe(.value) { [weak self] snapshot in
+            guard let self else { return }
+            
+            let remoteActiveId = snapshot.value as? String
+            DispatchQueue.main.async {
+                if let remoteActiveId, self.characters.contains(where: { $0.id == remoteActiveId }) {
+                    self.activeCharacterId = remoteActiveId
+                } else if let firstCharacter = self.characters.first {
+                    self.activeCharacterId = firstCharacter.id
+                    self.saveActiveCharacterId()
+                } else {
+                    self.activeCharacterId = ""
+                }
+            }
+        }
+    }
+    
+    private func syncCharacterDetailObservers(characterIds: [String]) {
+        let incomingIds = Set(characterIds)
+        let existingIds = Set(characterDetailHandles.keys)
+        
+        for removedId in existingIds.subtracting(incomingIds) {
+            if let handle = characterDetailHandles.removeValue(forKey: removedId) {
+                database.child("characters").child(removedId).removeObserver(withHandle: handle)
             }
         }
         
-        group.notify(queue: .main) {
-            self.characters = loadedCharacters.sorted { $0.name < $1.name }
-            self.loadActiveCharacterId()
-            self.isLoading = false
-            
-            print("📥 キャラクター読み込み完了: \(self.characters.count)人")
+        for characterId in incomingIds.subtracting(existingIds) {
+            let handle = database.child("characters").child(characterId).observe(.value) { [weak self] snapshot in
+                guard let self else { return }
+                
+                DispatchQueue.main.async {
+                    self.mergeCharacterSnapshot(snapshot, characterId: characterId)
+                    self.isLoading = false
+                }
+            }
+            characterDetailHandles[characterId] = handle
         }
+        
+        if incomingIds.isEmpty {
+            isLoading = false
+        }
+    }
+    
+    private func mergeCharacterSnapshot(_ snapshot: DataSnapshot, characterId: String) {
+        if let characterData = snapshot.value as? [String: Any],
+           let character = characterFromFirebaseData(characterData, id: characterId) {
+            if let index = characters.firstIndex(where: { $0.id == characterId }) {
+                characters[index] = character
+            } else {
+                characters.append(character)
+            }
+        } else {
+            characters.removeAll { $0.id == characterId }
+        }
+        
+        characters = deduplicatedCharacters(characters).sorted {
+            if $0.name == $1.name {
+                return $0.id < $1.id
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        
+        if !activeCharacterId.isEmpty, !characters.contains(where: { $0.id == activeCharacterId }) {
+            activeCharacterId = characters.first?.id ?? ""
+            if !activeCharacterId.isEmpty {
+                saveActiveCharacterId()
+            }
+        } else if activeCharacterId.isEmpty, let firstCharacter = characters.first {
+            activeCharacterId = firstCharacter.id
+            saveActiveCharacterId()
+        }
+        
+        print("📥 キャラクター同期完了: \(characters.count)人")
     }
     
     private func saveCharacter(_ character: Character) {
         guard let userId = userId else { return }
+        var characterData = serializeCharacter(character, includeNullDeletions: false)
+        characterData["createdAt"] = Date().timeIntervalSince1970
         
-        let characterData: [String: Any] = [
-            "id": character.id,
-            "name": character.name,
-            "personality": character.personality,
-            "speakingStyle": character.speakingStyle,
-            "iconName": character.iconName,
-            "iconURL": character.iconURL as Any,
-            "backgroundName": character.backgroundName,
-            "backgroundURL": character.backgroundURL as Any,
-            "createdAt": Date().timeIntervalSince1970,
-            "updatedAt": Date().timeIntervalSince1970
-        ]
-        
-        // キャラクター詳細を保存
         database.child("characters").child(character.id).setValue(characterData)
         
         // ユーザーのキャラクターリストに追加
         database.child("users").child(userId).child("characters").child(character.id).setValue(true)
-    }
-    
-    private func loadActiveCharacterId() {
-        guard let userId = userId else { return }
-        
-        database.child("users").child(userId).child("activeCharacterId").observeSingleEvent(of: .value) { [weak self] snapshot in
-            if let characterId = snapshot.value as? String,
-               let self = self,
-               self.characters.contains(where: { $0.id == characterId }) {
-                self.activeCharacterId = characterId
-            } else if let firstCharacter = self?.characters.first {
-                self?.activeCharacterId = firstCharacter.id
-                self?.saveActiveCharacterId()
-            }
-        }
     }
     
     private func saveActiveCharacterId() {
@@ -297,8 +346,89 @@ class CharacterRegistry: ObservableObject {
         character.backgroundName = backgroundName
         character.iconURL = data["iconURL"] as? String
         character.backgroundURL = data["backgroundURL"] as? String
+        character.intimacyLevel = data["intimacyLevel"] as? Int ?? 0
+        character.totalDateCount = data["totalDateCount"] as? Int ?? 0
+        character.unlockedInfiniteMode = data["unlockedInfiniteMode"] as? Bool ?? false
+        character.userNickname = data["userNickname"] as? String ?? ""
+        character.useNickname = data["useNickname"] as? Bool ?? false
+        character.favoriteTopics = data["favoriteTopics"] as? [String] ?? []
+        character.sharedMemories = data["sharedMemories"] as? [String] ?? []
+        if let birthday = data["birthday"] as? TimeInterval {
+            character.birthday = Date(timeIntervalSince1970: birthday)
+        }
+        if let anniversaryDate = data["anniversaryDate"] as? TimeInterval {
+            character.anniversaryDate = Date(timeIntervalSince1970: anniversaryDate)
+        }
         
         return character
+    }
+    
+    private func serializeCharacter(_ character: Character, includeNullDeletions: Bool = true) -> [String: Any] {
+        var characterData: [String: Any] = [
+            "id": character.id,
+            "name": character.name,
+            "personality": character.personality,
+            "speakingStyle": character.speakingStyle,
+            "iconName": character.iconName,
+            "backgroundName": character.backgroundName,
+            "intimacyLevel": character.intimacyLevel,
+            "totalDateCount": character.totalDateCount,
+            "unlockedInfiniteMode": character.unlockedInfiniteMode,
+            "userNickname": character.userNickname,
+            "useNickname": character.useNickname,
+            "favoriteTopics": character.favoriteTopics,
+            "sharedMemories": character.sharedMemories,
+            "updatedAt": Date().timeIntervalSince1970
+        ]
+        
+        if let iconURL = character.iconURL, !iconURL.isEmpty {
+            characterData["iconURL"] = iconURL
+        } else if includeNullDeletions {
+            characterData["iconURL"] = NSNull()
+        }
+
+        if let backgroundURL = character.backgroundURL, !backgroundURL.isEmpty {
+            characterData["backgroundURL"] = backgroundURL
+        } else if includeNullDeletions {
+            characterData["backgroundURL"] = NSNull()
+        }
+
+        if let birthday = character.birthday {
+            characterData["birthday"] = birthday.timeIntervalSince1970
+        } else if includeNullDeletions {
+            characterData["birthday"] = NSNull()
+        }
+
+        if let anniversaryDate = character.anniversaryDate {
+            characterData["anniversaryDate"] = anniversaryDate.timeIntervalSince1970
+        } else if includeNullDeletions {
+            characterData["anniversaryDate"] = NSNull()
+        }
+        
+        return characterData
+    }
+    
+    private func deduplicatedCharacters(_ characters: [Character]) -> [Character] {
+        var seenIds = Set<String>()
+        return characters.filter { character in
+            seenIds.insert(character.id).inserted
+        }
+    }
+    
+    private func removeAllObservers() {
+        if let observedUserId, let characterListHandle {
+            database.child("users").child(observedUserId).child("characters").removeObserver(withHandle: characterListHandle)
+        }
+        if let observedUserId, let activeCharacterHandle {
+            database.child("users").child(observedUserId).child("activeCharacterId").removeObserver(withHandle: activeCharacterHandle)
+        }
+        for (characterId, handle) in characterDetailHandles {
+            database.child("characters").child(characterId).removeObserver(withHandle: handle)
+        }
+        characterListHandle = nil
+        activeCharacterHandle = nil
+        characterDetailHandles.removeAll()
+        observedUserId = nil
     }
 }
 

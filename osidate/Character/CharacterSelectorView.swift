@@ -2080,10 +2080,7 @@ struct AddCharacterView: View {
             // アイコンURLが設定されている場合は適用
             if let iconURL = iconUploadURL {
                 newCharacter.iconURL = iconURL
-                // CharacterRegistryにupdateCharacterメソッドがある場合
-                if let index = characterRegistry.characters.firstIndex(where: { $0.id == newCharacter.id }) {
-                    characterRegistry.characters[index].iconURL = iconURL
-                }
+                characterRegistry.updateCharacter(newCharacter)
             }
             
             characterRegistry.setActiveCharacter(newCharacter.id)
@@ -2115,8 +2112,8 @@ struct AddCharacterView: View {
         }
         
         // 仮のユーザーIDを生成（実際のアプリではFirebase認証のUIDを使用）
-        let tempUserId = UUID().uuidString
-        let imagePath = "character_icons/\(tempUserId)_\(UUID().uuidString)_\(Date().timeIntervalSince1970).jpg"
+        let ownerId = Auth.auth().currentUser?.uid ?? UUID().uuidString
+        let imagePath = "character_icons/\(ownerId)_\(UUID().uuidString)_\(Date().timeIntervalSince1970).jpg"
         
         // 🔧 修正: weak selfを削除し、直接Binding経由で状態を更新
         imageManager.uploadImage(image, path: imagePath) { result in

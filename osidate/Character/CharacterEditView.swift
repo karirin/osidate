@@ -252,9 +252,7 @@ struct CharacterEditView: View {
         viewModel.character.anniversaryDate = tempAnniversaryDate
         
         // 🔧 アイコンURLも保存
-        if let tempIconURL = tempIconURL {
-            viewModel.character.iconURL = tempIconURL
-        }
+        viewModel.character.iconURL = tempIconURL
         
         // ViewModelの更新メソッドを呼び出し
         viewModel.updateCharacterSettings()
