@@ -19,6 +19,11 @@ struct SplashScreenView: View {
     @State private var floatingOffset: CGFloat = 50
     @State private var shimmerOffset: CGFloat = -300
     @State private var rotationAngle: Double = 0
+    @State private var hasCompleted = false
+    
+    // 初回起動のみ演出を見せ、2回目以降は短く切り上げる
+    private static let hasShownSplashKey = "hasShownSplashBefore"
+    private let isFirstLaunch = !UserDefaults.standard.bool(forKey: SplashScreenView.hasShownSplashKey)
     
     // 完了コールバック
     let onSplashComplete: () -> Void
@@ -225,6 +230,10 @@ struct SplashScreenView: View {
             }
             .padding(.horizontal, 40)
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            completeSplash()
+        }
         .onAppear {
             startSplashAnimation()
         }
@@ -289,8 +298,8 @@ struct SplashScreenView: View {
             startEmojiSequence()
         }
         
-        // Phase 10: スプラッシュ完了 (5秒後)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+        // Phase 10: スプラッシュ完了 (初回3秒 / 2回目以降1.2秒、タップでスキップ可)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (isFirstLaunch ? 3.0 : 1.2)) {
             completeSplash()
         }
     }
@@ -306,7 +315,11 @@ struct SplashScreenView: View {
     }
     
     private func completeSplash() {
-        withAnimation(.easeInOut(duration: 0.8)) {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+        UserDefaults.standard.set(true, forKey: SplashScreenView.hasShownSplashKey)
+        
+        withAnimation(.easeInOut(duration: 0.4)) {
             // フェードアウト効果
             backgroundOpacity = 0
             textOpacity = 0
@@ -315,7 +328,7 @@ struct SplashScreenView: View {
         }
         
         // アニメーション完了後にコールバック実行
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
             onSplashComplete()
         }
     }

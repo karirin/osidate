@@ -280,6 +280,8 @@ struct SettingsView: View {
                     if isAdmin {
                         adminFunctionsSection
                     }
+                    NotificationSettingsCard()
+                    
                     VStack(spacing: 10) {
                         
                         subscriptionSection
@@ -569,7 +571,7 @@ struct SettingsView: View {
             )
         }
         .fullScreenCover(isPresented: $showingSubscriptionView) {
-            SubscriptionView()
+            SubscriptionView(source: .settings)
         }
     }
     

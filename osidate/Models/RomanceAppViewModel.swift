@@ -65,6 +65,8 @@ class RomanceAppViewModel: ObservableObject {
 
     @Published var hasValidCharacter = false
     @Published var subscriptionManager = SubscriptionManager.shared
+    /// 表示待ちのペイウォール（TopViewがシートとして表示する）
+    @Published var paywallRequest: PaywallRequest?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -551,6 +553,8 @@ class RomanceAppViewModel: ObservableObject {
 
     // チャット回数を増加させてインタースティシャル表示をチェック
     private func incrementChatCountAndCheckAd() {
+        if subscriptionManager.isPremiumUser { return }
+
         let currentCount = getCurrentChatCount()
         let newCount = currentCount + 1
 
@@ -565,8 +569,37 @@ class RomanceAppViewModel: ObservableObject {
 
             // 少し遅延させて自然なタイミングで表示
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                self.interstitialAdManager.onAdDismissed = { [weak self] in
+                    Task { @MainActor in self?.handleInterstitialDismissed() }
+                }
                 self.interstitialAdManager.showInterstitialAd()
             }
+        }
+    }
+
+    // MARK: - ペイウォール表示
+
+    func presentPaywall(source: PaywallSource) {
+        guard !subscriptionManager.isPremiumUser, paywallRequest == nil else { return }
+        paywallRequest = PaywallRequest(source: source)
+    }
+
+    /// 広告を見た直後は「広告なし」の価値が最も伝わるため、3回に1回（1日1回まで）ペイウォールを出す
+    private func handleInterstitialDismissed() {
+        let countKey = "interstitial_dismiss_count"
+        let lastShownKey = "interstitial_paywall_last_shown"
+        let count = UserDefaults.standard.integer(forKey: countKey) + 1
+        UserDefaults.standard.set(count, forKey: countKey)
+
+        guard count % 3 == 0 else { return }
+        if let lastShown = UserDefaults.standard.object(forKey: lastShownKey) as? Date,
+           Calendar.current.isDateInToday(lastShown) {
+            return
+        }
+        UserDefaults.standard.set(Date(), forKey: lastShownKey)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.presentPaywall(source: .interstitial)
         }
     }
 
@@ -691,6 +724,7 @@ class RomanceAppViewModel: ObservableObject {
                 self.userId = u.uid
                 self.isAuthenticated = true
                 self.isLoading = false
+                AnalyticsManager.setUserId(u.uid)
 
                 print("🔐 認証完了: \(u.uid)")
 
@@ -817,6 +851,7 @@ class RomanceAppViewModel: ObservableObject {
 
             self.character = newCharacter
             self.currentDateSession = nil
+            AnalyticsManager.setIntimacyStage(newCharacter.intimacyStage)
             self.objectWillChange.send()
 
             // 新しいキャラクターのデータを読み込み（最新4件のみ）
@@ -1524,6 +1559,7 @@ class RomanceAppViewModel: ObservableObject {
             startTime: Date(),
             characterName: character.name
         )
+        AnalyticsManager.logDateStart(location: location)
 
         DispatchQueue.main.async { [weak self] in
             self?.currentDateSession = session
@@ -1576,6 +1612,7 @@ class RomanceAppViewModel: ObservableObject {
 
         let endTime = Date()
         let duration = Int(endTime.timeIntervalSince(session.startTime))
+        AnalyticsManager.logDateEnd(location: session.location, durationSeconds: duration, messages: session.messagesExchanged)
 
         let endMessage = Message(
             text: textRespectingCharacterStyle(session.location.getEndMessage(
@@ -1630,6 +1667,8 @@ class RomanceAppViewModel: ObservableObject {
             print("❌ 認証またはキャラクター無効")
             return
         }
+
+        AnalyticsManager.logMessageSend(intimacyStage: character.intimacyStage, inDate: currentDateSession != nil)
 
         // ★ これを呼ぶ
         processSendMessage(text, with: currentDateSession)
@@ -1711,6 +1750,9 @@ class RomanceAppViewModel: ObservableObject {
             increaseIntimacy(by: responseBonus, reason: "AI応答")
             updateMemory(fromUserMessage: nil, aiMessage: responseText)
 
+            // 推しから初めて返事が届いたタイミングで通知許可を求める
+            OshiNotificationManager.shared.requestAuthorizationOnFirstReplyIfNeeded(character: character)
+
         case .failure(let error):
             let errorMessage = Message(
                 text: friendlyOpenAIErrorMessage(for: error),
@@ -1720,25 +1762,26 @@ class RomanceAppViewModel: ObservableObject {
                 intimacyGained: 0
             )
 
+            // エラーは一時表示のみ（会話履歴としてFirebaseに保存しない）
             messages.append(errorMessage)
-            saveMessage(errorMessage)
+            AnalyticsManager.logAIReplyFailed()
             print("❌ AI応答失敗: \(error.localizedDescription)")
         }
     }
 
+    /// ユーザー向けのエラーメッセージ（技術的な詳細はログのみに出す）
     private func friendlyOpenAIErrorMessage(for error: Error) -> String {
-        if let openAIError = error as? OpenAIError {
-            switch openAIError {
-            case .missingAPIKey:
-                return "APIキーが未設定です。Config.plist または設定画面のAPIキーを確認してください。"
-            case .apiError(let message):
-                return "OpenAI APIでエラーが発生しました。モデル名・APIキー・利用制限を確認してください。\n\(message)"
-            case .invalidURL, .noData, .noResponse:
-                return "応答の取得に失敗しました。通信環境を確認して、もう一度お試しください。"
-            }
+        print("❌ AI応答エラー詳細: \(error)")
+
+        if error is URLError {
+            return "ごめんね、うまく聞き取れなかったみたい…📶 通信環境を確認して、もう一度送ってくれる？"
         }
 
-        return "応答の取得に失敗しました。通信環境またはAPI設定を確認してください。\n\(error.localizedDescription)"
+        if case .apiError(let message)? = error as? OpenAIError, message.hasPrefix("HTTP 429") {
+            return "ごめんね、今ちょっと混み合ってるみたい…💦 少し時間をおいてから、また話しかけてね。"
+        }
+
+        return "ごめんね、今うまくお返事できなかったみたい…🙏 少し時間をおいて、もう一度送ってみてね。"
     }
 
     func sendSystemMessage(_ text: String) {
@@ -2173,6 +2216,7 @@ class RomanceAppViewModel: ObservableObject {
     /// 親密度レベルアップ処理
     private func handleIntimacyLevelUp(from oldStage: IntimacyStage, to newStage: IntimacyStage, gainedIntimacy: Int) {
         print("🎉 レベルアップ! \(oldStage.displayName) -> \(newStage.displayName)")
+        AnalyticsManager.logIntimacyLevelUp(to: newStage)
 
         // 🌟 特定ユーザーの場合はレベルアップメッセージを表示しない
         if let userID = Auth.auth().currentUser?.uid,

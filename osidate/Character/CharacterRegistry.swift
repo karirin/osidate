@@ -105,6 +105,8 @@ class CharacterRegistry: ObservableObject {
         characters.append(character)
         saveCharacter(character)
         
+        AnalyticsManager.logCharacterCreate(totalCount: characters.count)
+        AnalyticsManager.setCharacterCount(characters.count)
         print("✅ キャラクター作成成功: \(name) (総数: \(characters.count))")
         return character
     }

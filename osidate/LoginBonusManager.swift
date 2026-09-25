@@ -384,6 +384,7 @@ class LoginBonusManager: ObservableObject {
          
          // ボーナスを履歴に追加
          loginHistory.append(bonus)
+         AnalyticsManager.logLoginBonusClaim(day: bonus.day, intimacyBonus: bonus.intimacyBonus)
          
          // 親密度増加のコールバック
          onIntimacyIncrease(bonus.intimacyBonus, "ログインボーナス(\(bonus.day)日目)")

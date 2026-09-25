@@ -704,6 +704,9 @@ class TutorialManager: ObservableObject {
     }
     
     func completeTutorial() {
+        if shouldShowTutorial {
+            AnalyticsManager.logTutorialComplete()
+        }
         UserDefaults.standard.set(true, forKey: "tutorial_completed")
         UserDefaults.standard.synchronize()
         shouldShowTutorial = false

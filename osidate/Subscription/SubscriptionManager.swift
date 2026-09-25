@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import UIKit
 import StoreKit
 import Combine
 
@@ -13,7 +14,19 @@ import Combine
 class SubscriptionManager: ObservableObject {
     static let shared = SubscriptionManager()
     
-    @Published var isSubscribed: Bool = false
+    @Published var isSubscribed: Bool = SubscriptionManager.cachedIsSubscribed {
+        didSet {
+            AnalyticsManager.setSubscribed(isSubscribed)
+            UserDefaults.standard.set(isSubscribed, forKey: SubscriptionManager.cachedIsSubscribedKey)
+        }
+    }
+
+    private nonisolated static let cachedIsSubscribedKey = "subscription_isSubscribed_cache"
+
+    /// メインアクター外（広告マネージャーなど）から参照できる直近のサブスク状態
+    nonisolated static var cachedIsSubscribed: Bool {
+        UserDefaults.standard.bool(forKey: cachedIsSubscribedKey)
+    }
     @Published var currentSubscription: Product?
     @Published var availableSubscriptions: [Product] = []
     @Published var isLoading: Bool = false
@@ -32,9 +45,16 @@ class SubscriptionManager: ObservableObject {
         // アプリ起動時にサブスクリプション状態をチェック
         updateListenerTask = listenForTransactions()
         Task {
-            await refreshSubscriptionStatus()
             await loadAvailableProducts()
+            await refreshSubscriptionStatus()
         }
+        
+        // フォアグラウンド復帰時に期限切れ・更新を反映
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)
+            .sink { [weak self] _ in
+                Task { await self?.refreshSubscriptionStatus() }
+            }
+            .store(in: &cancellables)
     }
     
     deinit {
@@ -53,7 +73,7 @@ class SubscriptionManager: ObservableObject {
             guard let result = try await Transaction.currentEntitlements.first(where: { transaction in
                 switch transaction {
                 case .verified(let transaction):
-                    return subscriptionProductIDs.contains(transaction.productID) && !transaction.isUpgraded
+                    return subscriptionProductIDs.contains(transaction.productID) && isActive(transaction)
                 case .unverified:
                     return false
                 }
@@ -77,9 +97,8 @@ class SubscriptionManager: ObservableObject {
                 currentSubscription = nil
             }
         } catch {
+            // 取得エラー時は現在の状態を維持する（一時的な失敗で有料会員を無料扱いにしない）
             print("❌ SubscriptionManager: サブスクリプション状態の取得エラー - \(error)")
-            isSubscribed = false
-            currentSubscription = nil
         }
     }
     
@@ -119,7 +138,7 @@ class SubscriptionManager: ObservableObject {
     }
     
     /// 購入処理
-    func purchase(_ product: Product) async throws -> Bool {
+    func purchase(_ product: Product) async throws -> PurchaseOutcome {
         let result = try await product.purchase()
         
         switch result {
@@ -127,9 +146,10 @@ class SubscriptionManager: ObservableObject {
             switch verification {
             case .verified(let transaction):
                 await updateSubscriptionStatus(for: transaction)
+                AnalyticsManager.logSubscriptionPurchase(transaction)
                 await transaction.finish()
                 print("🎉 SubscriptionManager: 購入成功 - \(transaction.productID)")
-                return true
+                return .success
                 
             case .unverified(_, let error):
                 print("❌ SubscriptionManager: 未検証の取引 - \(error)")
@@ -138,15 +158,15 @@ class SubscriptionManager: ObservableObject {
             
         case .userCancelled:
             print("⚠️ SubscriptionManager: ユーザーがキャンセル")
-            return false
+            return .cancelled
             
         case .pending:
             print("⏳ SubscriptionManager: 購入保留中")
-            return false
+            return .pending
             
         @unknown default:
             print("❓ SubscriptionManager: 不明な結果")
-            return false
+            return .cancelled
         }
     }
     
@@ -163,23 +183,32 @@ class SubscriptionManager: ObservableObject {
     
     // MARK: - Private Methods
     
+    /// 取り消し・アップグレード済み・期限切れでない有効な取引か
+    nonisolated private func isActive(_ transaction: Transaction) -> Bool {
+        if transaction.revocationDate != nil || transaction.isUpgraded {
+            return false
+        }
+        if let expirationDate = transaction.expirationDate, expirationDate < Date() {
+            return false
+        }
+        return true
+    }
+    
     private func updateSubscriptionStatus(for transaction: Transaction) async {
-        // 商品情報を取得
-        guard let product = availableSubscriptions.first(where: { $0.id == transaction.productID }) else {
-            // 商品情報がない場合は再読み込み
-            await loadAvailableProducts()
-            guard let product = availableSubscriptions.first(where: { $0.id == transaction.productID }) else {
-                isSubscribed = false
-                currentSubscription = nil
-                return
-            }
-            currentSubscription = product
-            isSubscribed = true
+        guard subscriptionProductIDs.contains(transaction.productID), isActive(transaction) else {
+            // 返金・取り消し・期限切れなどは有効な権利を再確認する
+            await refreshSubscriptionStatus()
             return
         }
         
-        currentSubscription = product
+        // 権利の判定は取引だけで確定させる（商品情報の取得失敗で有料会員を無料扱いにしない）
         isSubscribed = true
+        
+        // 表示用の商品情報は取得できた場合のみ設定
+        if availableSubscriptions.isEmpty {
+            await loadAvailableProducts()
+        }
+        currentSubscription = availableSubscriptions.first(where: { $0.id == transaction.productID })
     }
     
     private func listenForTransactions() -> Task<Void, Error> {
@@ -208,6 +237,12 @@ class SubscriptionManager: ObservableObject {
 }
 
 // MARK: - Supporting Types
+
+enum PurchaseOutcome: String {
+    case success
+    case cancelled
+    case pending
+}
 
 enum SubscriptionError: LocalizedError {
     case verificationFailed
@@ -245,11 +280,12 @@ extension SubscriptionManager {
     var currentPlanType: PlanType? {
         guard let productId = currentSubscription?.id else { return nil }
         
-        if productId.contains("weekly") {
+        let lowercasedId = productId.lowercased()
+        if lowercasedId.contains("weekly") {
             return .weekly
-        } else if productId.contains("monthly") {
+        } else if lowercasedId.contains("monthly") {
             return .monthly
-        } else if productId.contains("yearly") {
+        } else if lowercasedId.contains("yearly") {
             return .yearly
         }
         return nil

@@ -107,7 +107,7 @@ struct CharacterSelectorView: View {
              }
              // 🌟 サブスクリプション画面
              .sheet(isPresented: $showingSubscriptionView) {
-                 SubscriptionView()
+                 SubscriptionView(source: .characterLimit)
              }
              // 🌟 制限アラート
              .alert("キャラクター数制限", isPresented: $characterRegistry.showingCharacterLimitAlert) {

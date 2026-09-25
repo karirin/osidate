@@ -1517,6 +1517,7 @@ struct DateDetailView: View {
     @State private var isWatchingAd = false
     @State private var showAdFailedAlert = false
     @State private var showAdNotAvailableAlert = false
+    @State private var showingPaywall = false
     
     private var primaryColor: Color {
         location.type.color
@@ -1586,6 +1587,11 @@ struct DateDetailView: View {
             // 🌟 広告視聴確認ダイアログ
             .alert("デート開始には広告の視聴が必要です", isPresented: $showAdRequiredConfirmation) {
                 Button("キャンセル", role: .cancel) { }
+                Button("プレミアムで広告なし") {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                        showingPaywall = true
+                    }
+                }
                 Button("広告を見る") {
                     // アラートを閉じ切るまで少し待ってから表示
                     showAdRequiredConfirmation = false
@@ -1595,6 +1601,9 @@ struct DateDetailView: View {
                 }
             } message: {
                 Text("\(location.name)でのデートを開始するには、短い広告をご視聴ください。\n\n広告視聴後、素敵なデートが始まります！✨")
+            }
+            .sheet(isPresented: $showingPaywall) {
+                SubscriptionView(source: .dateAd)
             }
             // 🌟 広告視聴失敗アラート
             .alert("広告の視聴に失敗しました", isPresented: $showAdFailedAlert) {
@@ -1626,16 +1635,18 @@ struct DateDetailView: View {
                 if let userID = Auth.auth().currentUser?.uid,
                    ["vVceNdjseGTBMYP7rMV9NKZuBaz1", "ol3GjtaeiMhZwprk7E3zrFOh2VJ2"].contains(userID) {
                     viewModel.startDate(at: location)
+                } else if viewModel.isPremiumUser {
+                    watchAdAndStartDate()
                 } else {
                     showAdRequiredConfirmation = true
                 }
             }) {
                 HStack(spacing: 12) {
-                    Image(systemName: "tv.fill")
+                    Image(systemName: viewModel.isPremiumUser ? "crown.fill" : "tv.fill")
                         .font(.system(size: 18, weight: .medium))
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("広告を見てデート開始")
+                        Text(viewModel.isPremiumUser ? "デート開始" : "広告を見てデート開始")
                             .font(.headline)
                             .fontWeight(.bold)
                         
@@ -1682,6 +1693,7 @@ struct DateDetailView: View {
             }
             
             // 🔧 修正：補足説明から親密度ボーナスの言及を削除
+            if !viewModel.isPremiumUser {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     Image(systemName: "info.circle.fill")
@@ -1702,6 +1714,7 @@ struct DateDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
+            }
             }
         }
     }

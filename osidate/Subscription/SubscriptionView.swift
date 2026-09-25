@@ -12,7 +12,13 @@ struct SubscriptionView: View {
     @StateObject private var subscriptionManager = SubscriptionManager.shared
     @Environment(\.dismiss) private var dismiss
     
+    /// どこから開かれたか（source ごとの成約率計測用）
+    var source: PaywallSource = .unknown
+    
     @State private var selectedProductId: String?
+    /// 無料トライアルの対象になっている商品ID → トライアル期間
+    @State private var eligibleTrialPeriods: [String: Product.SubscriptionPeriod] = [:]
+    @State private var didPurchase = false
     @State private var isPurchasing = false
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -95,8 +101,12 @@ struct SubscriptionView: View {
             Text("プレミアムプランの購入が完了しました！\n推しとの特別な時間をお楽しみください💕")
         }
         .onAppear {
+            AnalyticsManager.logPaywallView(source: source.rawValue)
             setupInitialState()
             animateOnAppear()
+        }
+        .onDisappear {
+            AnalyticsManager.logPaywallClose(source: source.rawValue, purchased: didPurchase)
         }
     }
     
@@ -230,10 +240,12 @@ struct SubscriptionView: View {
                         product: product,
                         isSelected: selectedProductId == product.id,
                         accentGold: accentGold,
+                        trialPeriodText: eligibleTrialPeriods[product.id]?.japaneseText,
                         onSelect: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 selectedProductId = product.id
                             }
+                            AnalyticsManager.logPaywallPlanSelect(source: source.rawValue, productId: product.id)
                             generateHapticFeedback()
                         }
                     )
@@ -258,7 +270,7 @@ struct SubscriptionView: View {
                     } else {
                         Image(systemName: "heart.fill")
                             .font(.system(size: 16, weight: .semibold))
-                        Text("プレミアムを始める")
+                        Text(selectedTrialPeriodText.map { "\($0)無料で試す" } ?? "プレミアムを始める")
                             .font(.system(size: 17, weight: .bold, design: .rounded))
                     }
                 }
@@ -300,6 +312,15 @@ struct SubscriptionView: View {
             .disabled(selectedProductId == nil || isPurchasing || subscriptionManager.availableSubscriptions.isEmpty)
             .scaleEffect(isPurchasing ? 0.97 : 1.0)
             .animation(.easeInOut(duration: 0.2), value: isPurchasing)
+            
+            // トライアル後の料金を明示（App Store審査ガイドライン 3.1.2 対応）
+            if let trialText = selectedTrialPeriodText, let product = selectedProduct {
+                Text("\(trialText)無料、その後 \(product.displayPrice)\(planPeriodText(for: product))で自動更新。\n無料期間中に解約すれば料金はかかりません。")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+            }
             
             // 復元ボタン
             Button("購入履歴を復元") {
@@ -402,9 +423,38 @@ struct SubscriptionView: View {
     
     // MARK: - Private Methods
     
+    private var selectedProduct: Product? {
+        subscriptionManager.availableSubscriptions.first(where: { $0.id == selectedProductId })
+    }
+    
+    private var selectedTrialPeriodText: String? {
+        guard let productId = selectedProductId else { return nil }
+        return eligibleTrialPeriods[productId]?.japaneseText
+    }
+    
+    private func planPeriodText(for product: Product) -> String {
+        if product.id.contains("Weekly") { return PlanType.weekly.periodText }
+        if product.id.contains("Yearly") { return PlanType.yearly.periodText }
+        return PlanType.monthly.periodText
+    }
+    
+    /// App Store Connect で無料トライアルが設定され、かつユーザーが対象の商品を調べる
+    private func loadTrialEligibility() async {
+        var periods: [String: Product.SubscriptionPeriod] = [:]
+        for product in subscriptionManager.availableSubscriptions {
+            guard let subscription = product.subscription,
+                  let offer = subscription.introductoryOffer,
+                  offer.paymentMode == .freeTrial,
+                  await subscription.isEligibleForIntroOffer else { continue }
+            periods[product.id] = offer.period
+        }
+        eligibleTrialPeriods = periods
+    }
+    
     private func setupInitialState() {
         Task {
             await subscriptionManager.loadAvailableProducts()
+            await loadTrialEligibility()
             
             if selectedProductId == nil {
                 selectedProductId = subscriptionManager.availableSubscriptions.first(where: {
@@ -430,20 +480,28 @@ struct SubscriptionView: View {
         
         isPurchasing = true
         generateHapticFeedback()
+        AnalyticsManager.logPurchaseStart(
+            source: source.rawValue,
+            productId: product.id,
+            hasTrial: eligibleTrialPeriods[product.id] != nil
+        )
         
         Task {
             do {
-                let success = try await subscriptionManager.purchase(product)
+                let outcome = try await subscriptionManager.purchase(product)
+                AnalyticsManager.logPurchaseResult(source: source.rawValue, productId: product.id, result: outcome.rawValue)
                 
                 await MainActor.run {
                     isPurchasing = false
                     
-                    if success {
+                    if outcome == .success {
+                        didPurchase = true
                         showingSuccess = true
                         generateHapticFeedback()
                     }
                 }
             } catch {
+                AnalyticsManager.logPurchaseResult(source: source.rawValue, productId: product.id, result: "failed")
                 await MainActor.run {
                     isPurchasing = false
                     errorMessage = "購入に失敗しました: \(error.localizedDescription)"
@@ -506,6 +564,7 @@ struct CompactPlanCard: View {
     let product: Product
     let isSelected: Bool
     let accentGold: Color
+    var trialPeriodText: String? = nil
     let onSelect: () -> Void
     
     private var planType: PlanType {
@@ -520,6 +579,9 @@ struct CompactPlanCard: View {
     }
     
     private var badgeInfo: (text: String, color: LinearGradient)? {
+        if let trialPeriodText {
+            return ("\(trialPeriodText)無料", LinearGradient(colors: [Color.green, Color.teal], startPoint: .leading, endPoint: .trailing))
+        }
         switch planType {
         case .weekly:
             return nil
@@ -568,7 +630,7 @@ struct CompactPlanCard: View {
                         }
                     }
                     
-                    Text(planDescription)
+                    Text(trialPeriodText.map { "\($0)無料トライアル付き" } ?? planDescription)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundColor(.white.opacity(0.55))
                 }
@@ -635,6 +697,36 @@ struct CompactPlanCard: View {
 }
 
 // MARK: - Supporting Types
+
+/// ペイウォールを開いた導線
+enum PaywallSource: String {
+    case launch
+    case onboarding
+    case interstitial
+    case dateAd = "date_ad"
+    case characterLimit = "character_limit"
+    case settings
+    case unknown
+}
+
+struct PaywallRequest: Identifiable {
+    let id = UUID()
+    let source: PaywallSource
+}
+
+extension Product.SubscriptionPeriod {
+    /// 「3日間」「1週間」などの表示用テキスト
+    var japaneseText: String {
+        switch unit {
+        case .day: return "\(value)日間"
+        // App Store Connect では7日間が「1週間」として返るため、日数で表示する
+        case .week: return "\(value * 7)日間"
+        case .month: return "\(value)ヶ月"
+        case .year: return "\(value)年"
+        @unknown default: return "\(value)日間"
+        }
+    }
+}
 
 enum PlanType {
     case weekly

@@ -63,10 +63,10 @@ class AdMobManager: NSObject, ObservableObject {
             return true
         }
         
-        // サブスクリプション会員チェック（今後の拡張用）
-        // if SubscriptionManager.shared.isSubscribed {
-        //     return true
-        // }
+        // サブスクリプション会員は広告なし
+        if SubscriptionManager.cachedIsSubscribed {
+            return true
+        }
         
         return false
     }

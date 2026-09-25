@@ -10,6 +10,8 @@ import FirebaseAuth
 class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelegate {
     @Published var isLoading = false
     @Published var isPresenting = false
+    /// 広告が閉じられた後に一度だけ呼ばれる
+    var onAdDismissed: (() -> Void)?
     
     private var interstitialAd: InterstitialAd?
     private var hasInitializedAds = false
@@ -59,10 +61,10 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
             return true
         }
         
-        // サブスクリプション会員チェック（今後の拡張用）
-        // if SubscriptionManager.shared.isSubscribed {
-        //     return true
-        // }
+        // サブスクリプション会員は広告なし
+        if SubscriptionManager.cachedIsSubscribed {
+            return true
+        }
         
         return false
     }
@@ -158,6 +160,10 @@ class InterstitialAdManager: NSObject, ObservableObject, FullScreenContentDelega
         print("📱 インタースティシャル広告が閉じられました")
         isPresenting = false
         interstitialAd = nil
+        
+        let onAdDismissed = self.onAdDismissed
+        self.onAdDismissed = nil
+        onAdDismissed?()
         
         // 次の広告を事前読み込み（少し遅延させる）
         DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {

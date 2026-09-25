@@ -17,6 +17,7 @@ struct TopView: View {
     @State private var showingAddCharacter = false
     @State private var showingSplash = true
     @State private var selectedTab = 0
+    @Environment(\.scenePhase) private var scenePhase
     
     var body: some View {
         ZStack {
@@ -38,8 +39,19 @@ struct TopView: View {
         .onChange(of: characterRegistry.activeCharacterId) { newCharacterId in
             handleCharacterChange(newCharacterId: newCharacterId)
         }
-        .onChange(of: characterRegistry.characters.count) { _ in
+        .onChange(of: characterRegistry.characters.count) { count in
             handleCharacterListChange()
+            AnalyticsManager.setCharacterCount(count)
+            openCharacterFromNotificationIfNeeded()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .background {
+                // 最終起動時刻を基準に、毎日・復帰・記念日の通知を組み直す
+                OshiNotificationManager.shared.reschedule(
+                    characters: characterRegistry.characters,
+                    activeCharacter: characterRegistry.getActiveCharacter()
+                )
+            }
         }
         // 🌟 新機能：デート開始監視
         .onChange(of: romanceViewModel.currentDateSession) { dateSession in
@@ -51,15 +63,34 @@ struct TopView: View {
                 initializeApp()
             }
             setupNotificationObservers()
+            openCharacterFromNotificationIfNeeded()
+            AnalyticsManager.logScreen("chat")
         }
         .onDisappear {
             removeNotificationObservers()
         }
-        .sheet(isPresented: $showingTutorial) {
+        .sheet(isPresented: $showingTutorial, onDismiss: showOnboardingPaywallIfNeeded) {
             TutorialView(characterRegistry: characterRegistry, tutorialManager: tutorialManager)
+        }
+        .sheet(item: $romanceViewModel.paywallRequest) { request in
+            SubscriptionView(source: request.source)
         }
         .sheet(isPresented: $showingAddCharacter) {
             AddCharacterView(characterRegistry: characterRegistry)
+        }
+    }
+    
+    // MARK: - オンボーディングのペイウォール
+    /// チュートリアル完了直後に一度だけプレミアムを案内する
+    private func showOnboardingPaywallIfNeeded() {
+        let shownKey = "onboarding_paywall_shown"
+        guard !tutorialManager.shouldShowTutorial,
+              !UserDefaults.standard.bool(forKey: shownKey) else { return }
+        UserDefaults.standard.set(true, forKey: shownKey)
+
+        // チュートリアルのシートが閉じ切ってから表示する
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            romanceViewModel.presentPaywall(source: .onboarding)
         }
     }
     
@@ -344,6 +375,8 @@ struct TopView: View {
         .onChange(of: selectedTab) { newTab in
             let tabNames = ["チャット", "デート", "推し編集", "推し変更", "設定"]
             print("📱 TopView: タブ変更 -> \(tabNames[safe: newTab] ?? "不明")")
+            let screenNames = ["chat", "date", "character_edit", "character_select", "settings"]
+            AnalyticsManager.logScreen(screenNames[safe: newTab] ?? "unknown")
         }
     }
     
@@ -362,6 +395,15 @@ struct TopView: View {
     
     // MARK: - 🌟 Notification Center 処理
     private func setupNotificationObservers() {
+        NotificationCenter.default.addObserver(
+            forName: OshiNotificationManager.openedNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            print("🔔 TopView: 推し通知からの起動を検出")
+            openCharacterFromNotificationIfNeeded()
+        }
+        
         NotificationCenter.default.addObserver(
             forName: NSNotification.Name("SwitchToChatTab"),
             object: nil,
@@ -382,6 +424,20 @@ struct TopView: View {
             withAnimation(.easeInOut(duration: 0.5)) {
                 selectedTab = 1
             }
+        }
+    }
+    
+    /// 通知をタップした推しのチャットを開く（推し一覧の読み込み前なら読み込み後に処理）
+    private func openCharacterFromNotificationIfNeeded() {
+        guard !characterRegistry.characters.isEmpty,
+              let characterId = OshiNotificationManager.shared.consumePendingCharacterId() else { return }
+        
+        if characterRegistry.characters.contains(where: { $0.id == characterId }),
+           characterRegistry.activeCharacterId != characterId {
+            characterRegistry.setActiveCharacter(characterId)
+        }
+        withAnimation(.easeInOut(duration: 0.5)) {
+            selectedTab = 0
         }
     }
     
