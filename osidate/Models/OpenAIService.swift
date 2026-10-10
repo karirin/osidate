@@ -188,7 +188,16 @@ class OpenAIService: ObservableObject {
                 guard (200..<300).contains(httpResponse.statusCode) else {
                     let message = self.extractAPIErrorMessage(from: data)
                     print("❌ OpenAI APIエラー: HTTP \(httpResponse.statusCode) - \(message)")
-                    completion(.failure(OpenAIError.apiError("HTTP \(httpResponse.statusCode): \(message)")))
+                    switch httpResponse.statusCode {
+                    case 401, 403:
+                        completion(.failure(OpenAIError.authenticationFailed))
+                    case 429 where self.extractAPIErrorCode(from: data) == "insufficient_quota":
+                        completion(.failure(OpenAIError.quotaExceeded))
+                    case 429:
+                        completion(.failure(OpenAIError.rateLimited))
+                    default:
+                        completion(.failure(OpenAIError.apiError("HTTP \(httpResponse.statusCode): \(message)")))
+                    }
                     return
                 }
             }
@@ -261,6 +270,12 @@ class OpenAIService: ObservableObject {
         }
 
         return "詳細不明のAPIエラー"
+    }
+
+    private func extractAPIErrorCode(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let error = json["error"] as? [String: Any] else { return nil }
+        return error["code"] as? String
     }
 
     private func createOptimizedSystemPrompt(
@@ -1114,6 +1129,9 @@ enum MessageSentiment {
 
 enum OpenAIError: Error, LocalizedError {
     case missingAPIKey
+    case authenticationFailed
+    case quotaExceeded
+    case rateLimited
     case invalidURL
     case noData
     case noResponse
@@ -1123,6 +1141,12 @@ enum OpenAIError: Error, LocalizedError {
         switch self {
         case .missingAPIKey:
             return "APIキーが設定されていません"
+        case .authenticationFailed:
+            return "APIキーが無効か、アクセス権がありません"
+        case .quotaExceeded:
+            return "APIの利用枠を超えています"
+        case .rateLimited:
+            return "APIのリクエスト制限に達しました"
         case .invalidURL:
             return "無効なURL"
         case .noData:

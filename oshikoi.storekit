@@ -90,7 +90,12 @@
           "familyShareable" : false,
           "groupNumber" : 3,
           "internalID" : "6752509467",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "A4C71D20",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
           "localizations" : [
             {
               "description" : "広告非表示",
@@ -118,7 +123,12 @@
           "familyShareable" : false,
           "groupNumber" : 2,
           "internalID" : "6752509390",
-          "introductoryOffer" : null,
+          "introductoryOffer" : {
+            "internalID" : "A4C71D21",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P3D"
+          },
           "localizations" : [
             {
               "description" : "広告非表示",

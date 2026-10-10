@@ -1777,8 +1777,17 @@ class RomanceAppViewModel: ObservableObject {
             return "ごめんね、うまく聞き取れなかったみたい…📶 通信環境を確認して、もう一度送ってくれる？"
         }
 
-        if case .apiError(let message)? = error as? OpenAIError, message.hasPrefix("HTTP 429") {
-            return "ごめんね、今ちょっと混み合ってるみたい…💦 少し時間をおいてから、また話しかけてね。"
+        if let apiError = error as? OpenAIError {
+            switch apiError {
+            case .missingAPIKey, .authenticationFailed:
+                return "チャットの設定に問題があります。アプリの管理者に連絡してください。"
+            case .quotaExceeded:
+                return "現在チャットを利用できません。アプリの管理者に連絡してください。"
+            case .rateLimited:
+                return "ごめんね、今ちょっと混み合ってるみたい…💦 少し時間をおいてから、また話しかけてね。"
+            default:
+                break
+            }
         }
 
         return "ごめんね、今うまくお返事できなかったみたい…🙏 少し時間をおいて、もう一度送ってみてね。"
